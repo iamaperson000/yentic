@@ -127,7 +127,7 @@ export default function MarketingHome() {
             View the roadmap
           </Link>
           <a
-            href="mailto:hello@yentic.com"
+            href="mailto:hello@yentic.dev"
             className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white/80 transition hover:border-white/40 hover:text-white"
           >
             Request early access

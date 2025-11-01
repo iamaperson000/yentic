@@ -42,16 +42,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
           <div className="mx-auto flex max-w-5xl flex-col gap-2 px-6 text-sm text-white/50">
             <p>© {new Date().getFullYear()} Yentic. Built for developers who want a faster web IDE.</p>
             <p className="text-white/40">
-              Visit{' '}
-              <a
-                className="underline decoration-emerald-400/60 underline-offset-4 hover:text-white"
-                href="https://yentic.com"
-                target="_blank"
-                rel="noreferrer"
-              >
-                yentic.com
-              </a>{' '}
-              to follow the journey.
+              Follow the journey on <a className="underline decoration-emerald-400/60 underline-offset-4 hover:text-white" href="https://twitter.com" target="_blank" rel="noreferrer">Twitter</a> and <a className="underline decoration-emerald-400/60 underline-offset-4 hover:text-white" href="https://github.com" target="_blank" rel="noreferrer">GitHub</a>.
             </p>
           </div>
         </footer>
