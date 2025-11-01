@@ -1,3 +1,5 @@
+import { site } from '@/config/site';
+
 const roadmapPhases = [
   {
     phase: 'Now',
@@ -91,8 +93,8 @@ export default function RoadmapPage() {
         <h2 className="text-2xl font-semibold">Get involved</h2>
         <p className="mt-3 text-sm text-white/70">
           We&apos;re looking for teams who want to dogfood the multiplayer builds. Reach out at{' '}
-          <a className="underline decoration-emerald-400/60 underline-offset-4" href="mailto:hello@yentic.dev">
-            hello@yentic.dev
+          <a className="underline decoration-emerald-400/60 underline-offset-4" href={`mailto:${site.contactEmail}`}>
+            {site.contactEmail}
           </a>{' '}
           to reserve a spot.
         </p>
