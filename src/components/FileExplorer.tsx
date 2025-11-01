@@ -10,7 +10,8 @@ export function FileExplorer({
   onSelect,
   onRename,
   onDelete,
-  onCreate
+  onCreate,
+  placeholder
 }: {
   files: ProjectFileMap;
   activePath: string;
@@ -18,6 +19,7 @@ export function FileExplorer({
   onRename: (oldP: string, newP: string) => void;
   onDelete: (p: string) => void;
   onCreate: (p: string, lang?: SupportedLanguage) => void;
+  placeholder?: string;
 }) {
   const [draft, setDraft] = useState<string>('');
   const entries = Object.values(files).sort((a, b) => a.path.localeCompare(b.path));
@@ -46,7 +48,7 @@ export function FileExplorer({
                 submitDraft();
               }
             }}
-            placeholder="new-file.js"
+            placeholder={placeholder ?? 'new-file.js'}
             className="flex-1 appearance-none bg-transparent text-sm text-white placeholder:text-white/30 focus:outline-none"
           />
           <button

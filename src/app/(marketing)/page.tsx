@@ -5,7 +5,7 @@ import { site } from '@/config/site';
 const highlights = [
   {
     title: 'Instant launch',
-    body: 'Spin up a fresh workspace in seconds with zero config and a familiar Replit-inspired layout.'
+    body: 'Spin up a fresh workspace in seconds with zero config and an interface tuned for builders.'
   },
   {
     title: 'Live preview',
@@ -54,7 +54,7 @@ export default function MarketingHome() {
         <div className="flex flex-col gap-6">
           <span className="text-xs font-semibold uppercase tracking-[0.4em] text-emerald-300/80">Introducing Yentic</span>
           <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
-            A lightweight, fast, and aesthetic web IDE that feels like the classic Replit you loved.
+            A lightweight, fast, and aesthetic web IDE that feels instantly familiar.
           </h1>
           <p className="text-lg text-white/70">
             Edit, preview, and share projects instantly with a minimal interface, multiplayer-ready foundation, and
