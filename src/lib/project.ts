@@ -106,12 +106,12 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
   const app = document.getElementById('app');
   if (!app) return;
 
-  app.innerHTML = [
-    '<h1>Yentic</h1>',
-    '<p>A classic-feeling web IDE without the bloat.</p>',
-    '<button id="btn">Click me</button>',
-    '<pre id="out"></pre>'
-  ].join('');
+  app.innerHTML = `\`
+    <h1>Yentic</h1>
+    <p>A classic-feeling web IDE without the bloat.</p>
+    <button id="btn">Click me</button>
+    <pre id="out"></pre>
+  \``.trim();
 
   const button = document.getElementById('btn');
   const output = document.getElementById('out');
