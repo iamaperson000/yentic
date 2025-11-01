@@ -106,7 +106,12 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
   const app = document.getElementById('app');
   if (!app) return;
 
-  app.innerHTML = '<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id="btn">Click me</button><pre id="out"></pre>';
+  app.innerHTML = [
+    '<h1>Yentic</h1>',
+    '<p>A classic-feeling web IDE without the bloat.</p>',
+    '<button id="btn">Click me</button>',
+    '<pre id="out"></pre>'
+  ].join('');
 
   const button = document.getElementById('btn');
   const output = document.getElementById('out');
@@ -115,7 +120,8 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
 
   button.addEventListener('click', () => {
     const now = new Date().toLocaleTimeString();
-    output.textContent += \`\nClicked at \${now}\`;
+    const prefix = output.textContent ? String.fromCharCode(10) : '';
+    output.textContent += prefix + 'Clicked at ' + now;
   });
 }
 
