@@ -223,7 +223,10 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                   files={sandpackFiles}
                   activePath={`/${activePath}`}
                   template={config.previewTemplate}
+                  mode={config.previewMode}
                   disabledMessage={config.previewMessage}
+                  activeFileCode={code}
+                  activeFileLanguage={lang}
                 />
               </div>
             </div>
