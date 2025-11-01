@@ -24,6 +24,7 @@ export type WorkspaceConfig = {
   defaultActivePath: string;
   newFilePlaceholder: string;
   previewTemplate?: 'vanilla';
+  previewMode?: 'sandpack' | 'code';
   previewMessage?: string;
   starter: ProjectFileMap;
 };
@@ -101,8 +102,28 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
   'index.js': {
     path: 'index.js',
     language: 'javascript',
-    code: `function mount(){const app=document.getElementById('app'); if(!app) return; app.innerHTML='<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id="btn">Click me</button><pre id="out"></pre>'; document.getElementById('btn').addEventListener('click',()=>{const now=new Date().toLocaleTimeString(); document.getElementById('out').textContent += '\nClicked at ' + now;});}
-if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', mount); } else { mount(); }`
+    code: `function mount() {
+  const app = document.getElementById('app');
+  if (!app) return;
+
+  app.innerHTML = '<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id="btn">Click me</button><pre id="out"></pre>';
+
+  const button = document.getElementById('btn');
+  const output = document.getElementById('out');
+
+  if (!button || !output) return;
+
+  button.addEventListener('click', () => {
+    const now = new Date().toLocaleTimeString();
+    output.textContent += \`\nClicked at \${now}\`;
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', mount);
+} else {
+  mount();
+}`
   }
 };
 
@@ -139,6 +160,7 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     defaultActivePath: 'index.html',
     newFilePlaceholder: 'untitled.js',
     previewTemplate: 'vanilla',
+    previewMode: 'sandpack',
     starter: webStarter
   },
   python: {
@@ -148,7 +170,8 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'sky',
     defaultActivePath: 'main.py',
     newFilePlaceholder: 'script.py',
-    previewMessage: 'Preview is coming soon for Python workspaces.',
+    previewMode: 'code',
+    previewMessage: 'Live execution preview is coming soon for Python workspaces.',
     starter: pythonStarter
   },
   c: {
@@ -158,7 +181,8 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'violet',
     defaultActivePath: 'main.c',
     newFilePlaceholder: 'program.c',
-    previewMessage: 'Preview is not available for native languages yet.',
+    previewMode: 'code',
+    previewMessage: 'Live execution preview is not available for C workspaces yet.',
     starter: cStarter
   },
   java: {
@@ -168,7 +192,8 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'amber',
     defaultActivePath: 'Main.java',
     newFilePlaceholder: 'App.java',
-    previewMessage: 'Preview is coming soon for Java workspaces.',
+    previewMode: 'code',
+    previewMessage: 'Live execution preview is coming soon for Java workspaces.',
     starter: javaStarter
   }
 };
@@ -187,7 +212,15 @@ export function getStarterProject(slug: WorkspaceSlug): ProjectFileMap {
 export function loadProject(slug: WorkspaceSlug): ProjectFileMap | null {
   try {
     const raw = localStorage.getItem(`${KEY_PREFIX}:${slug}`);
-    return raw ? (JSON.parse(raw) as ProjectFileMap) : null;
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as ProjectFileMap;
+    const migrated = migrateProject(slug, parsed);
+    if (migrated !== parsed) {
+      saveProject(slug, migrated);
+    }
+    return migrated;
   } catch {
     return null;
   }
@@ -197,4 +230,23 @@ export function saveProject(slug: WorkspaceSlug, files: ProjectFileMap) {
   try {
     localStorage.setItem(`${KEY_PREFIX}:${slug}`, JSON.stringify(files));
   } catch {}
+}
+
+function migrateProject(slug: WorkspaceSlug, files: ProjectFileMap): ProjectFileMap {
+  if (slug !== 'web') {
+    return files;
+  }
+
+  const script = files['index.js'];
+  if (!script) {
+    return files;
+  }
+
+  if (!script.code.includes("document.getElementById('out').textContent += '\\nClicked at ' + now;")) {
+    return files;
+  }
+
+  const next = cloneProject(files);
+  next['index.js'] = { ...next['index.js'], code: webStarter['index.js'].code };
+  return next;
 }

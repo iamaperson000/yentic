@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
@@ -26,11 +26,12 @@ function formatTime(date: Date | null) {
 }
 
 type WorkspacePageProps = {
-  params: { language: string };
+  params: Promise<{ language: string }>;
 };
 
 export default function WorkspacePage({ params }: WorkspacePageProps) {
-  const slug = params.language as WorkspaceSlug;
+  const { language } = use(params);
+  const slug = language as WorkspaceSlug;
   const workspace = workspaceConfigs[slug];
 
   if (!workspace) {
@@ -222,7 +223,10 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                   files={sandpackFiles}
                   activePath={`/${activePath}`}
                   template={config.previewTemplate}
+                  mode={config.previewMode}
                   disabledMessage={config.previewMessage}
+                  activeFileCode={code}
+                  activeFileLanguage={lang}
                 />
               </div>
             </div>
