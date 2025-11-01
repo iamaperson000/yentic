@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import { site } from '@/config/site';
+
 const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/features', label: 'Features' },
@@ -16,7 +18,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
           <nav className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
             <Link href="/" className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.3em] text-white/80">
               <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-              Yentic
+              {site.name}
             </Link>
             <div className="flex items-center gap-6 text-sm text-white/70">
               {navLinks.map(link => (
@@ -40,9 +42,18 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         <main className="mx-auto flex max-w-5xl flex-col gap-24 px-6 py-16">{children}</main>
         <footer className="border-t border-white/10 bg-black/40 py-10">
           <div className="mx-auto flex max-w-5xl flex-col gap-2 px-6 text-sm text-white/50">
-            <p>© {new Date().getFullYear()} Yentic. Built for developers who want a faster web IDE.</p>
+            <p>© {new Date().getFullYear()} {site.name}. Built for developers who want a faster web IDE.</p>
             <p className="text-white/40">
-              Follow the journey on <a className="underline decoration-emerald-400/60 underline-offset-4 hover:text-white" href="https://twitter.com" target="_blank" rel="noreferrer">Twitter</a> and <a className="underline decoration-emerald-400/60 underline-offset-4 hover:text-white" href="https://github.com" target="_blank" rel="noreferrer">GitHub</a>.
+              Visit{' '}
+              <a
+                className="underline decoration-emerald-400/60 underline-offset-4 hover:text-white"
+                href={site.marketingUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {new URL(site.marketingUrl).host}
+              </a>{' '}
+              to follow the journey.
             </p>
           </div>
         </footer>
