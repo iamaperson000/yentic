@@ -1,6 +1,38 @@
-export type ProjectFile = { path: string; language: 'html' | 'css' | 'javascript'; code: string; };
+export type SupportedLanguage = 'html' | 'css' | 'javascript';
+export type ProjectFile = { path: string; language: SupportedLanguage; code: string; };
 export type ProjectFileMap = Record<string, ProjectFile>;
 const KEY = 'yentic.project.v1';
+
+export function inferLanguage(path: string): SupportedLanguage {
+  const normalized = path.toLowerCase();
+  if (normalized.endsWith('.html')) return 'html';
+  if (normalized.endsWith('.css')) return 'css';
+  return 'javascript';
+}
+
+export function scaffoldFor(path: string, language: SupportedLanguage): string {
+  if (language === 'html') {
+    return `<!-- ${path} -->\n`;
+  }
+  if (language === 'css') {
+    return `/* ${path} */\n`;
+  }
+  return `// ${path}\n`;
+}
+
+export function ensureUniquePath(path: string, map: ProjectFileMap): string {
+  if (!map[path]) return path;
+  const dotIndex = path.lastIndexOf('.');
+  const base = dotIndex === -1 ? path : path.slice(0, dotIndex);
+  const ext = dotIndex === -1 ? '' : path.slice(dotIndex);
+  let counter = 1;
+  let candidate = `${base}-${counter}${ext}`;
+  while (map[candidate]) {
+    counter += 1;
+    candidate = `${base}-${counter}${ext}`;
+  }
+  return candidate;
+}
 
 export const starterProject: ProjectFileMap = {
   'index.html': {
