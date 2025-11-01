@@ -120,8 +120,10 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
 
   button.addEventListener('click', () => {
     const now = new Date().toLocaleTimeString();
-    const prefix = output.textContent ? String.fromCharCode(10) : '';
-    output.textContent += prefix + 'Clicked at ' + now;
+    const line = 'Clicked at ' + now;
+    output.textContent = output.textContent
+      ? output.textContent + '\\n' + line
+      : line;
   });
 }
 
@@ -248,7 +250,14 @@ function migrateProject(slug: WorkspaceSlug, files: ProjectFileMap): ProjectFile
     return files;
   }
 
-  if (!script.code.includes("document.getElementById('out').textContent += '\\nClicked at ' + now;")) {
+  const hadNewlineConcat = script.code.includes(
+    "document.getElementById('out').textContent += '\\nClicked at ' + now;"
+  );
+  const hadPrefixConcat = script.code.includes(
+    "output.textContent += prefix + 'Clicked at ' + now;"
+  );
+
+  if (!hadNewlineConcat && !hadPrefixConcat) {
     return files;
   }
 
