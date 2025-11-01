@@ -1,6 +1,7 @@
 'use client';
 import Monaco from '@monaco-editor/react';
 export function Editor({ value, language, onChange }: { value: string; language: string; onChange: (v: string) => void; }) {
+  const monacoLanguage = language === 'c' ? 'cpp' : language;
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-white/10 bg-white/[0.03] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">
@@ -11,7 +12,7 @@ export function Editor({ value, language, onChange }: { value: string; language:
         <Monaco
           height="100%"
           theme="vs-dark"
-          language={language === 'javascript' ? 'javascript' : language}
+          language={monacoLanguage === 'javascript' ? 'javascript' : monacoLanguage}
           value={value}
           options={{
             minimap: { enabled: false },
