@@ -241,6 +241,36 @@ function executeJava(source: string): RunResult {
   }
 }
 
+function normalizePythonError(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message ?? '';
+    if (message) {
+      const lines = message.split('\n')
+        .map((line) => line.trimEnd())
+        .filter((line) => line.trim().length > 0);
+      if (lines.length > 0) {
+        return lines[lines.length - 1];
+      }
+      return message.trim();
+    }
+    return error.toString();
+  }
+  if (typeof error === 'string') {
+    const lines = error.split('\n')
+      .map((line) => line.trimEnd())
+      .filter((line) => line.trim().length > 0);
+    if (lines.length > 0) {
+      return lines[lines.length - 1];
+    }
+    return error.trim();
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return 'Unknown error';
+  }
+}
+
 async function executePython(source: string): Promise<RunResult> {
   const pyodide = await ensurePyodide();
   const stdoutChunks: string[] = [];
@@ -263,6 +293,11 @@ async function executePython(source: string): Promise<RunResult> {
       stdoutChunks.push(String(result));
     }
     return { stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') };
+  } catch (error) {
+    const normalized = normalizePythonError(error);
+    const stderr = stderrChunks.join('');
+    const message = stderr ? `${stderr}${stderr.endsWith('\n') ? '' : '\n'}${normalized}` : normalized;
+    return { stdout: stdoutChunks.join(''), stderr: message };
   } finally {
     if (restoreStdout) restoreStdout();
     if (restoreStderr) restoreStderr();

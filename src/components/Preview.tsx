@@ -88,7 +88,7 @@ function RuntimePreview({
         }
         setStdout(result.stdout);
         setStderr(result.stderr);
-        setStatus('ready');
+        setStatus(result.stderr ? 'error' : 'ready');
       } catch (error) {
         if (runId.current !== nextId) {
           return;
