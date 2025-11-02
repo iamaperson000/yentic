@@ -58,6 +58,7 @@ textarea {
 }
 
 /* Sandpack layout overrides */
+
 .sp-layout,
 .sp-stack,
 .sp-wrapper,
@@ -66,6 +67,9 @@ textarea {
   height: 100%;
   min-height: 0;
   width: 100%;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
 }
 
 .sp-layout {
@@ -78,4 +82,10 @@ textarea {
   height: 100%;
   min-height: 0;
   border-radius: inherit;
+  transform: none !important;
+}
+
+.sp-preview-actions,
+.sp-preview-container {
+  align-items: stretch;
 }
