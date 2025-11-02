@@ -102,21 +102,7 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
   'index.js': {
     path: 'index.js',
     language: 'javascript',
-    code: `function mount() {
-  const app = document.getElementById('app');
-  if (!app) return;
-  app.innerHTML =
-    '<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id="btn">Click me</button><pre id="out"></pre>';
-  document.getElementById('btn').addEventListener('click', () => {
-    const now = new Date().toLocaleTimeString();
-    document.getElementById('out').textContent += '\\nClicked at ' + now;
-  });
-}
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', mount);
-} else {
-  mount();
-}`
+    code: 'function mount() {\n  const app = document.getElementById(\'app\');\n  if (!app) return;\n  app.innerHTML =\n    \'<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id="btn">Click me</button><pre id="out"></pre>\';\n  document.getElementById(\'btn\').addEventListener(\'click\', () => {\n    const now = new Date().toLocaleTimeString();\n    document.getElementById(\'out\').textContent += \'\\nClicked at \' + now;\n  });\n}\nif (document.readyState === \'loading\') {\n  document.addEventListener(\'DOMContentLoaded\', mount);\n} else {\n  mount();\n}'
   }
 };
 
@@ -235,14 +221,9 @@ function migrateProject(slug: WorkspaceSlug, files: ProjectFileMap): ProjectFile
     return files;
   }
 
-  const hadNewlineConcat = script.code.includes(
-    "document.getElementById('out').textContent += '\\nClicked at ' + now;"
-  );
-  const hadPrefixConcat = script.code.includes(
-    "output.textContent += prefix + 'Clicked at ' + now;"
-  );
-
-  if (!hadNewlineConcat && !hadPrefixConcat) {
+  // Only migrate if the code contains an obvious broken string
+  const isBroken = script.code.includes("document.getElementById('out').textContent += '\n");
+  if (!isBroken) {
     return files;
   }
 
