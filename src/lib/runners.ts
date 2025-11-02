@@ -2,14 +2,14 @@ import type { SupportedLanguage } from './project';
 
 const PYODIDE_URL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js';
 
-export type ExecutableLanguage = Extract<SupportedLanguage, 'python' | 'c' | 'java'>;
+export type ExecutableLanguage = Extract<SupportedLanguage, 'python' | 'c' | 'cpp' | 'java'>;
 
 export type RunResult = {
   stdout: string;
   stderr: string;
 };
 
-const supportedLanguages: ReadonlySet<ExecutableLanguage> = new Set(['python', 'c', 'java']);
+const supportedLanguages: ReadonlySet<ExecutableLanguage> = new Set(['python', 'c', 'cpp', 'java']);
 
 type PyodideStdIO = {
   batched: (text: string) => void;
@@ -118,16 +118,16 @@ function transpileCToJavaScript(source: string): string {
   code = code.replace(/#include[^\n]*\n/g, '\n');
   code = code.replace(/\btypedef\b[^;]*;/g, '');
   code = code.replace(/\bunsigned\s+/g, '');
-  code = code.replace(/\bconst\s+(?=(int|float|double|long|short|char)\b)/g, 'const ');
-  code = code.replace(/\b(int|float|double|long|short|char)\s+\*/g, 'let ');
-  code = code.replace(/\b(void|int|float|double|long|short|char)\s+([A-Za-z_][\w]*)\s*\(([^)]*)\)/g, (_match, _type, name, params) => {
+  code = code.replace(/\bconst\s+(?=(int|float|double|long|short|char|bool)\b)/g, 'const ');
+  code = code.replace(/\b(int|float|double|long|short|char|bool)\s+\*/g, 'let ');
+  code = code.replace(/\b(void|int|float|double|long|short|char|bool)\s+([A-Za-z_][\w]*)\s*\(([^)]*)\)/g, (_match, _type, name, params) => {
     if (name === 'main') {
       return `function main(${params})`;
     }
-    const updatedParams = params.replace(/\b(int|float|double|long|short|char)\s+/g, '');
+    const updatedParams = params.replace(/\b(int|float|double|long|short|char|bool)\s+/g, '');
     return `function ${name}(${updatedParams})`;
   });
-  code = code.replace(/\b(int|float|double|long|short|char)\s+([A-Za-z_][\w]*)/g, 'let $2');
+  code = code.replace(/\b(int|float|double|long|short|char|bool)\s+([A-Za-z_][\w]*)/g, 'let $2');
   code = code.replace(/for\s*\(\s*int\s+/g, 'for (let ');
   code = code.replace(/printf\s*\(([^)]*)\)\s*;/g, '__printC($1);');
   code = code.replace(/puts\s*\(([^)]*)\)\s*;/g, "__printC($1, '\\n');");
@@ -164,6 +164,120 @@ function executeC(source: string): RunResult {
   try {
     const stdout = runtime();
     return { stdout, stderr: '' };
+  } catch (error) {
+    return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function splitCppStream(body: string): string[] {
+  return body
+    .split(/<</)
+    .map(segment => segment.trim())
+    .filter(Boolean);
+}
+
+function convertCppStream(body: string, target: '__cout' | '__cerr'): string {
+  const segments = splitCppStream(body);
+  if (!segments.length) {
+    return `${target}();`;
+  }
+  const args = segments.map(segment => {
+    if (segment === '__ENDL' || segment === 'std::endl' || segment === 'endl') {
+      return '__ENDL';
+    }
+    return segment.replace(/^std::/, '');
+  });
+  return `${target}(${args.join(', ')});`;
+}
+
+function transpileCppToJavaScript(source: string): string {
+  let code = source;
+  code = code.replace(/#include[^\n]*\n/g, '\n');
+  code = code.replace(/using\s+namespace\s+std\s*;?/g, '');
+  code = code.replace(/\bconstexpr\s+/g, '');
+  code = code.replace(/\bstd::endl\b/g, '__ENDL');
+  code = code.replace(/std::cout\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cout'));
+  code = code.replace(/std::cerr\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cerr'));
+  code = code.replace(/\bcout\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cout'));
+  code = code.replace(/\bcerr\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cerr'));
+  code = code.replace(/\bstd::string\b/g, 'string');
+  code = code.replace(/\bstd::/g, '');
+  code = transpileCToJavaScript(code);
+  code = code.replace(/\bstring\s+([A-Za-z_][\w]*)/g, 'let $1');
+  code = code.replace(/\bvector<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
+  code = code.replace(/\barray<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
+  code = code.replace(/\bmap<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
+  code = code.replace(/\bset<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
+  code = code.replace(/for\s*\(\s*(?:size_t|long\s+long)\s+/g, 'for (let ');
+  return code;
+}
+
+function executeCpp(source: string): RunResult {
+  let transformed: string;
+  try {
+    transformed = transpileCppToJavaScript(source);
+  } catch (error) {
+    return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
+  }
+
+  const runtimeSource = [
+    `'use strict';`,
+    'const __output = [];',
+    'const __stderr = [];',
+    `const formatC = ${formatCPrintf.toString()};`,
+    'const __printC = (...args) => {',
+    '  const [first, ...rest] = args;',
+    '  const text = formatC(first, rest);',
+    '  __output.push(text);',
+    '};',
+    'const __printChar = value => {',
+    "  const character = typeof value === 'number' ? String.fromCharCode(value) : String(value ?? '');",
+    '  __output.push(character);',
+    '};',
+    'const __ENDL = Symbol.for("cpp.endl");',
+    'const __cout = (...args) => {',
+    '  args.forEach(arg => {',
+    '    if (arg === __ENDL) {',
+    "      __output.push('\n');",
+    '      return;',
+    '    }',
+    "    __output.push(String(arg ?? ''));",
+    '  });',
+    '};',
+    'const __cerr = (...args) => {',
+    '  args.forEach(arg => {',
+    '    if (arg === __ENDL) {',
+    "      __stderr.push('\n');",
+    '      return;',
+    '    }',
+    "    __stderr.push(String(arg ?? ''));",
+    '  });',
+    '};',
+    transformed,
+    "if (typeof main === 'function') {",
+    '  const exitCode = main();',
+    "  if (typeof exitCode === 'number' && exitCode !== 0) {",
+    "    __stderr.push(`Program exited with code ${exitCode}`);",
+    '  }',
+    '}',
+    'const __result = { stdout: __output.join(""), stderr: __stderr.join("") };',
+    'return __result;'
+  ].join('\n');
+
+  const runtime = new Function(runtimeSource);
+
+  try {
+    const outcome = runtime() as unknown;
+    if (
+      outcome &&
+      typeof outcome === 'object' &&
+      'stdout' in (outcome as Record<string, unknown>) &&
+      'stderr' in (outcome as Record<string, unknown>)
+    ) {
+      const { stdout, stderr } = outcome as { stdout: string; stderr: string };
+      return { stdout, stderr };
+    }
+    return { stdout: '', stderr: '' };
   } catch (error) {
     return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
   }
@@ -313,6 +427,9 @@ export async function executeCode(language: ExecutableLanguage, source: string):
   }
   if (language === 'c') {
     return executeC(source);
+  }
+  if (language === 'cpp') {
+    return executeCpp(source);
   }
   if (language === 'java') {
     return executeJava(source);

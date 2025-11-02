@@ -26,6 +26,7 @@ const extensionMap: Record<SupportedLanguage, string> = {
   javascript: 'js',
   python: 'py',
   c: 'c',
+  cpp: 'cpp',
   java: 'java'
 };
 
@@ -279,10 +280,17 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
             <div className="flex min-w-0 flex-1 items-center gap-4">
               <Link
                 href="/"
-                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-2 text-sm font-semibold text-white/80 transition hover:border-white/40 hover:text-white"
+                className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
               >
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400 text-sm font-semibold text-black">
-                  Y
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10">
+                  <svg viewBox="0 0 20 20" aria-hidden className="h-3.5 w-3.5">
+                    <path
+                      d="M11.75 5.75 8 9.5l3.75 3.75"
+                      className="fill-none stroke-current stroke-[1.5]"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </span>
                 <span className="hidden sm:inline">Back to home</span>
                 <span className="sm:hidden">Home</span>
