@@ -1,6 +1,11 @@
 'use client';
 
-import { SandpackProvider, SandpackLayout, SandpackPreview } from '@codesandbox/sandpack-react';
+import {
+  SandpackProvider,
+  SandpackLayout,
+  SandpackPreview,
+  SandpackCodeEditor
+} from '@codesandbox/sandpack-react';
 
 import type { SupportedLanguage } from '@/lib/project';
 import { ExecutablePreview } from './ExecutablePreview';
@@ -57,18 +62,9 @@ export function Preview({
             }}
           >
             <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col">
-              <SandpackLayout
-                className="!h-full !min-h-0 !flex-1 !bg-transparent !border-none !shadow-none"
-                style={{
-                  height: '100%',
-                  minHeight: 0,
-                  flex: 1,
-                  background: 'transparent',
-                  border: 'none',
-                  boxShadow: 'none'
-                }}
-              >
+              <SandpackLayout className="!h-full !min-h-0 !flex-1 !border-none !bg-transparent !shadow-none">
                 <SandpackPreview
+                  showOpenInCodeSandbox={false}
                   className="!h-full !min-h-0 !w-full !flex-1 !bg-transparent"
                   style={{
                     height: '100%',
@@ -78,6 +74,12 @@ export function Preview({
                     background: 'transparent',
                     border: 'none',
                     boxShadow: 'none'
+                  }}
+                />
+                <SandpackCodeEditor
+                  className="hidden"
+                  style={{
+                    display: 'none'
                   }}
                 />
               </SandpackLayout>
