@@ -5,7 +5,9 @@ import {
   SandpackLayout,
   SandpackPreview,
   SandpackCodeEditor,
-  useSandpackConsole
+  useSandpack,
+  useSandpackConsole,
+  useErrorMessage
 } from '@codesandbox/sandpack-react';
 import { clsx } from 'clsx';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
@@ -407,6 +409,134 @@ function LiveConsolePanel() {
   );
 }
 
+function SandpackPreviewPane({ isVisible }: { isVisible: boolean }) {
+  const { sandpack, listen } = useSandpack();
+  const errorMessage = useErrorMessage();
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [frameError, setFrameError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = listen(message => {
+      if (message.type === 'start') {
+        setRuntimeError(null);
+        setFrameError(null);
+        return;
+      }
+
+      if (message.type === 'done' && !message.compilatonError) {
+        setRuntimeError(null);
+        return;
+      }
+
+      if (
+        message.type === 'action' &&
+        message.action === 'notification' &&
+        message.notificationType === 'error'
+      ) {
+        const title = typeof message.title === 'string' ? message.title.trim() : '';
+        const body =
+          typeof message.message === 'string'
+            ? message.message
+            : typeof message.body === 'string'
+              ? message.body
+              : '';
+        const combined = [title, body]
+          .map(segment => segment.trim())
+          .filter(Boolean)
+          .join('\n');
+        setRuntimeError(combined || 'An error occurred while running the preview.');
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [listen]);
+
+  useEffect(() => {
+    const root = previewRef.current;
+    if (!root) return;
+
+    const iframe = root.querySelector('iframe');
+    if (!iframe) return;
+
+    const handleLoad = () => {
+      setFrameError(null);
+    };
+
+    const handleError = () => {
+      setFrameError('Preview failed to load. Please review your code for errors.');
+    };
+
+    iframe.addEventListener('load', handleLoad);
+    iframe.addEventListener('error', handleError);
+
+    return () => {
+      iframe.removeEventListener('load', handleLoad);
+      iframe.removeEventListener('error', handleError);
+    };
+  }, [sandpack.activeFile, sandpack.status, errorMessage]);
+
+  const normalizedBundlerError = errorMessage
+    ?.replace(/^\[sandpack-client\]\s*/i, '')
+    .trim();
+
+  const timeoutMessage = sandpack.status === 'timeout' ? 'Preview timed out. Please try again.' : null;
+
+  const combinedError =
+    normalizedBundlerError || runtimeError || timeoutMessage || frameError || null;
+
+  const shouldShowOverlay = Boolean(combinedError) && isVisible;
+
+  return (
+    <div
+      ref={previewRef}
+      className={clsx('relative flex h-full min-h-0 w-full flex-1 flex-col', !isVisible && 'hidden')}
+      style={{
+        height: '100%',
+        minHeight: 0,
+        width: '100%',
+        flex: 1,
+        display: isVisible ? 'flex' : 'none',
+        flexDirection: 'column'
+      }}
+    >
+      <SandpackPreview
+        showOpenInCodeSandbox={false}
+        className="!flex !h-full !min-h-0 !w-full !flex-1 !flex-col !bg-transparent"
+        style={{
+          height: '100%',
+          minHeight: 0,
+          width: '100%',
+          flex: 1,
+          background: 'transparent',
+          border: 'none',
+          boxShadow: 'none'
+        }}
+      />
+      {shouldShowOverlay ? (
+        <div
+          className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-[#05060f]/90 px-6"
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="max-h-full w-full max-w-full overflow-auto">
+            <div className="mx-auto flex max-w-full flex-col gap-3 rounded-2xl border border-rose-400/40 bg-rose-400/15 px-6 py-4 text-left shadow-[0_20px_60px_rgba(244,63,94,0.25)]">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-rose-200/80">
+                Preview Error
+              </span>
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-rose-50/90">
+                {combinedError}
+              </pre>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Preview({
   files,
   activePath,
@@ -492,24 +622,7 @@ export function Preview({
                 }}
               >
                 <div className="flex h-full min-h-0 w-full flex-1 flex-col" style={{ height: '100%', minHeight: 0 }}>
-                  <SandpackPreview
-                    showOpenInCodeSandbox={false}
-                    className={clsx(
-                      '!flex !h-full !min-h-0 !w-full !flex-1 !flex-col !bg-transparent',
-                      activeSandpackView !== 'preview' && 'hidden'
-                    )}
-                    style={{
-                      height: '100%',
-                      minHeight: 0,
-                      width: '100%',
-                      flex: 1,
-                      display: activeSandpackView === 'preview' ? 'flex' : 'none',
-                      flexDirection: 'column',
-                      background: 'transparent',
-                      border: 'none',
-                      boxShadow: 'none'
-                    }}
-                  />
+                  <SandpackPreviewPane isVisible={activeSandpackView === 'preview'} />
                   <div
                     className={clsx(
                       'flex h-full min-h-0 w-full flex-1 flex-col',
