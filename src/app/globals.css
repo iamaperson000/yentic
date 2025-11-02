@@ -65,6 +65,7 @@ textarea {
 .sp-preview-container {
   height: 100%;
   min-height: 0;
+  width: 100%;
 }
 
 .sp-layout {
