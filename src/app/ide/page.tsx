@@ -27,6 +27,21 @@ const languageMeta: Record<
   }
 };
 
+const highlights = [
+  {
+    title: 'Smart scaffolding',
+    description: 'Language-aware starters and instant file creation tuned to each stack.'
+  },
+  {
+    title: 'Expanded workspace',
+    description: 'Layouts stretch across large displays without sacrificing smaller breakpoints.'
+  },
+  {
+    title: 'Unified polish',
+    description: 'Consistent typography, spacing, and hover states across the IDE family.'
+  }
+];
+
 export default function WorkspacePicker() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
