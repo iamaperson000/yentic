@@ -47,18 +47,40 @@ export function Preview({
   const [activeSandpackView, setActiveSandpackView] = useState<'preview' | 'console'>('preview');
 
   useEffect(() => {
-    // Force iframe to fill container
-    const fixIframeHeight = () => {
+    // Force iframe and all parent containers to fill space
+    const fixSandpackHeight = () => {
+      // Fix preview container
+      const containers = document.querySelectorAll('.sp-preview-container');
+      containers.forEach((container) => {
+        (container as HTMLElement).style.height = '100%';
+        (container as HTMLElement).style.minHeight = '0';
+        (container as HTMLElement).style.flex = '1';
+        (container as HTMLElement).style.display = 'flex';
+        (container as HTMLElement).style.flexDirection = 'column';
+      });
+
+      // Fix iframe
       const iframes = document.querySelectorAll('.sp-preview-iframe');
       iframes.forEach((iframe) => {
-        (iframe as HTMLElement).style.height = '100%';
-        (iframe as HTMLElement).style.minHeight = '100%';
+        (iframe as HTMLElement).style.height = '100% !important';
+        (iframe as HTMLElement).style.minHeight = '100% !important';
+        (iframe as HTMLElement).style.width = '100%';
+        (iframe as HTMLElement).style.flex = '1';
+      });
+
+      // Fix preview wrapper
+      const previews = document.querySelectorAll('.sp-preview');
+      previews.forEach((preview) => {
+        (preview as HTMLElement).style.height = '100%';
+        (preview as HTMLElement).style.minHeight = '0';
+        (preview as HTMLElement).style.flex = '1';
+        (preview as HTMLElement).style.display = 'flex';
+        (preview as HTMLElement).style.flexDirection = 'column';
       });
     };
 
-    // Run immediately and also set up observer for when Sandpack renders
-    fixIframeHeight();
-    const interval = setInterval(fixIframeHeight, 100);
+    fixSandpackHeight();
+    const interval = setInterval(fixSandpackHeight, 50);
 
     return () => clearInterval(interval);
   }, [activeSandpackView]);
