@@ -211,23 +211,93 @@ export function saveProject(slug: WorkspaceSlug, files: ProjectFileMap) {
   } catch {}
 }
 
+function ensureCssImport(code: string): { code: string; changed: boolean } {
+  if (code.includes("import './styles.css';")) {
+    return { code, changed: false };
+  }
+
+  return { code: "import './styles.css';\n" + code, changed: true };
+}
+
+function ensureStylesheetLink(html: string): { code: string; changed: boolean } {
+  if (html.includes('href="./styles.css"') || html.includes("href='./styles.css'")) {
+    return { code: html, changed: false };
+  }
+
+  if (!html.includes('</head>')) {
+    return { code: html, changed: false };
+  }
+
+  const linkTag = '    <link rel="stylesheet" href="./styles.css" />\n';
+  return { code: html.replace('</head>', `${linkTag}  </head>`), changed: true };
+}
+
+function ensureModuleScript(html: string): { code: string; changed: boolean } {
+  if (html.includes('<script type="module" src="./index.js"></script>')) {
+    return { code: html, changed: false };
+  }
+
+  if (html.includes('<script src="./index.js"></script>')) {
+    return {
+      code: html.replace('<script src="./index.js"></script>', '<script type="module" src="./index.js"></script>'),
+      changed: true
+    };
+  }
+
+  if (!html.includes('</body>')) {
+    return { code: html, changed: false };
+  }
+
+  const scriptTag = '    <script type="module" src="./index.js"></script>\n';
+  return { code: html.replace('</body>', `${scriptTag}  </body>`), changed: true };
+}
+
 function migrateProject(slug: WorkspaceSlug, files: ProjectFileMap): ProjectFileMap {
   if (slug !== 'web') {
     return files;
   }
 
-  const script = files['index.js'];
-  if (!script) {
-    return files;
-  }
-
-  // Only migrate if the code contains an obvious broken string
-  const isBroken = script.code.includes("document.getElementById('out').textContent += '\n");
-  if (!isBroken) {
-    return files;
-  }
-
   const next = cloneProject(files);
-  next['index.js'] = { ...next['index.js'], code: webStarter['index.js'].code };
-  return next;
+  let changed = false;
+
+  const script = files['index.js'];
+  if (script) {
+    const isBroken = script.code.includes("document.getElementById('out').textContent += '\\n");
+    if (isBroken) {
+      next['index.js'] = { ...next['index.js'], code: webStarter['index.js'].code };
+      changed = true;
+    } else {
+      const ensured = ensureCssImport(script.code);
+      if (ensured.changed) {
+        next['index.js'] = { ...next['index.js'], code: ensured.code };
+        changed = true;
+      }
+    }
+  }
+
+  if (!next['styles.css']) {
+    next['styles.css'] = { ...webStarter['styles.css'] };
+    changed = true;
+  }
+
+  const html = files['index.html'];
+  if (html) {
+    let updated = html.code;
+    const withLink = ensureStylesheetLink(updated);
+    if (withLink.changed) {
+      updated = withLink.code;
+      changed = true;
+    }
+    const withModuleScript = ensureModuleScript(updated);
+    if (withModuleScript.changed) {
+      updated = withModuleScript.code;
+      changed = true;
+    }
+    if (changed) {
+      next['index.html'] = { ...next['index.html'], code: updated };
+    }
+  }
+
+  return changed ? next : files;
 }
+
