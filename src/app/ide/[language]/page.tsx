@@ -316,7 +316,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
             </div>
           </div>
           <div className="relative flex flex-1 flex-col">
-            <div className="grid min-h-[600px] flex-1 gap-6 rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_40px_120px_rgba(10,18,41,0.45)] backdrop-blur-2xl lg:grid-cols-[300px_minmax(0,1fr)_minmax(0,1.35fr)]">
+            <div className="grid min-h-0 flex-1 gap-6 rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_40px_120px_rgba(10,18,41,0.45)] backdrop-blur-2xl lg:min-h-[580px] lg:grid-cols-[280px_minmax(0,1fr)_minmax(0,1.4fr)] xl:grid-cols-[320px_minmax(0,1fr)_minmax(0,1.5fr)]">
               <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04),0_24px_70px_rgba(5,10,25,0.45)]">
                 <FileExplorer
                   files={files}
