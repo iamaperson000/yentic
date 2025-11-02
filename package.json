@@ -12,6 +12,7 @@
     "@codesandbox/sandpack-react": "^2.20.0",
     "@monaco-editor/react": "^4.7.0",
     "clsx": "^2.1.1",
+    "JSCPP": "^2.0.9",
     "monaco-editor": "^0.54.0",
     "next": "16.0.1",
     "react": "19.2.0",
