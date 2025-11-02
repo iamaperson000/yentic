@@ -1,6 +1,11 @@
 'use client';
 
-import { SandpackProvider, SandpackLayout, SandpackPreview } from '@codesandbox/sandpack-react';
+import {
+  SandpackProvider,
+  SandpackLayout,
+  SandpackPreview,
+  SandpackCodeEditor
+} from '@codesandbox/sandpack-react';
 
 import type { SupportedLanguage } from '@/lib/project';
 import { ExecutablePreview } from './ExecutablePreview';
@@ -58,26 +63,33 @@ export function Preview({
           >
             <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col">
               <SandpackLayout
-                className="!h-full !min-h-0 !flex-1 !bg-transparent !border-none !shadow-none"
+                className="!h-full !min-h-0 !w-full !border-none !bg-transparent !shadow-none"
                 style={{
-                  height: '100%',
-                  minHeight: 0,
-                  flex: 1,
-                  background: 'transparent',
-                  border: 'none',
-                  boxShadow: 'none'
+                  gridTemplateColumns: 'minmax(0, 1fr)',
+                  gridTemplateRows: 'minmax(0, 1fr)',
+                  padding: 0,
+                  gap: 0
                 }}
               >
                 <SandpackPreview
-                  className="!h-full !min-h-0 !w-full !flex-1 !bg-transparent"
+                  showOpenInCodeSandbox={false}
+                  className="!flex !h-full !min-h-0 !w-full !flex-1 !flex-col !bg-transparent"
                   style={{
                     height: '100%',
                     minHeight: 0,
                     width: '100%',
                     flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
                     background: 'transparent',
                     border: 'none',
                     boxShadow: 'none'
+                  }}
+                />
+                <SandpackCodeEditor
+                  className="hidden"
+                  style={{
+                    display: 'none'
                   }}
                 />
               </SandpackLayout>
