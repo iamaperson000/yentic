@@ -52,7 +52,8 @@ export function Preview({
               activeFile: activePath,
               showTabs: false,
               showNavigator: false,
-              showConsole: false
+              showConsole: false,
+              showOpenInCodeSandbox: false
             }}
           >
             <SandpackLayout style={{ height: '100%', background: 'transparent', border: 'none', boxShadow: 'none' }}>
