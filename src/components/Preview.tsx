@@ -496,9 +496,10 @@ function SandpackPreviewPane({ isVisible }: { isVisible: boolean }) {
         height: '100%',
         minHeight: 0,
         width: '100%',
-        flex: 1,
+        flex: '1 1 auto',
         display: isVisible ? 'flex' : 'none',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        maxWidth: 'none'
       }}
     >
       <SandpackPreview
@@ -511,7 +512,8 @@ function SandpackPreviewPane({ isVisible }: { isVisible: boolean }) {
           flex: 1,
           background: 'transparent',
           border: 'none',
-          boxShadow: 'none'
+          boxShadow: 'none',
+          maxWidth: 'none'
         }}
       />
       {shouldShowOverlay ? (
@@ -554,7 +556,7 @@ export function Preview({
   const [activeSandpackView, setActiveSandpackView] = useState<'preview' | 'console'>('preview');
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col w-full">
       <div className="flex items-center gap-3 border-b border-slate-800/70 bg-slate-950/60 px-4 py-3">
         <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-400">{label}</span>
         {effectiveMode === 'sandpack' ? (
@@ -586,7 +588,7 @@ export function Preview({
           </div>
         ) : null}
       </div>
-      <div className="relative flex flex-1 min-h-0 bg-slate-950/70">
+      <div className="relative flex flex-1 min-h-0 bg-slate-950/70 w-full">
         {effectiveMode === 'sandpack' ? (
           <SandpackProvider
             files={files}
@@ -604,7 +606,7 @@ export function Preview({
               showOpenInCodeSandbox: false
             }}
           >
-            <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col" style={{ height: '100%', minHeight: 0 }}>
+            <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col w-full" style={{ height: '100%', minHeight: 0, width: '100%' }}>
               <SandpackLayout
                 className="!h-full !min-h-0 !w-full !border-none !bg-transparent !shadow-none"
                 style={{
@@ -616,6 +618,7 @@ export function Preview({
                   height: '100%',
                   minHeight: 0,
                   width: '100%',
+                  maxWidth: 'none',
                   flex: 1
                 }}
               >
