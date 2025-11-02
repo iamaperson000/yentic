@@ -4,6 +4,7 @@ export type SupportedLanguage =
   | 'javascript'
   | 'python'
   | 'c'
+  | 'cpp'
   | 'java';
 
 export type ProjectFile = {
@@ -14,7 +15,7 @@ export type ProjectFile = {
 
 export type ProjectFileMap = Record<string, ProjectFile>;
 
-export type WorkspaceSlug = 'web' | 'python' | 'c' | 'java';
+export type WorkspaceSlug = 'web' | 'python' | 'c' | 'cpp' | 'java';
 
 export type WorkspaceConfig = {
   slug: WorkspaceSlug;
@@ -45,6 +46,8 @@ export function inferLanguage(path: string): SupportedLanguage {
   }
   if (normalized.endsWith('.py')) return 'python';
   if (normalized.endsWith('.c')) return 'c';
+  if (normalized.endsWith('.cpp') || normalized.endsWith('.cc') || normalized.endsWith('.cxx')) return 'cpp';
+  if (normalized.endsWith('.hpp') || normalized.endsWith('.hh') || normalized.endsWith('.hxx')) return 'cpp';
   if (normalized.endsWith('.java')) return 'java';
   return 'javascript';
 }
@@ -61,6 +64,9 @@ export function scaffoldFor(path: string, language: SupportedLanguage): string {
   }
   if (language === 'c') {
     return `/* ${path} */\n`;
+  }
+  if (language === 'cpp') {
+    return `// ${path}\n`;
   }
   if (language === 'java') {
     return `// ${path}\n`;
@@ -130,6 +136,14 @@ const cStarter: ProjectFileMap = {
   }
 };
 
+const cppStarter: ProjectFileMap = {
+  'main.cpp': {
+    path: 'main.cpp',
+    language: 'cpp',
+    code: `// main.cpp\n#include <iostream>\n\nint main() {\n    std::cout << "Hello from Yentic!" << std::endl;\n    return 0;\n}\n`
+  }
+};
+
 const javaStarter: ProjectFileMap = {
   'Main.java': {
     path: 'Main.java',
@@ -169,6 +183,16 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     newFilePlaceholder: 'program.c',
     previewMode: 'runtime',
     starter: cStarter
+  },
+  cpp: {
+    slug: 'cpp',
+    title: 'C++',
+    description: 'Experiment with modern C++ snippets and see output instantly.',
+    accent: 'violet',
+    defaultActivePath: 'main.cpp',
+    newFilePlaceholder: 'program.cpp',
+    previewMode: 'runtime',
+    starter: cppStarter
   },
   java: {
     slug: 'java',
