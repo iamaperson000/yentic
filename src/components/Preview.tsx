@@ -27,22 +27,29 @@ type PreviewProps = {
   activeFileLanguage?: SupportedLanguage;
 };
 
-const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'java']);
+const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'java']);
 
 type RuntimeStatus = 'idle' | 'running' | 'ready' | 'error';
 
 function RuntimePreview({
   code,
-  language
+  language,
+  autorunEnabled,
+  runRequestId
 }: {
   code: string;
   language: SupportedLanguage | undefined;
+  autorunEnabled: boolean;
+  runRequestId: number;
 }) {
   const [stdout, setStdout] = useState<string>('');
   const [stderr, setStderr] = useState<string>('');
   const [status, setStatus] = useState<RuntimeStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasPendingChanges, setHasPendingChanges] = useState<boolean>(false);
   const runId = useRef(0);
+  const lastProcessedRun = useRef<number>(0);
+  const lastExecutedSource = useRef<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const normalizedLanguage = runtimeLanguages.has(language as ExecutableLanguage)
@@ -59,8 +66,37 @@ function RuntimePreview({
 
   useEffect(() => {
     if (!normalizedLanguage) {
+      scheduleStateUpdate(() => {
+        setHasPendingChanges(false);
+      });
+      lastExecutedSource.current = '';
       return;
     }
+
+    if (autorunEnabled) {
+      scheduleStateUpdate(() => {
+        setHasPendingChanges(false);
+      });
+      return;
+    }
+
+    const trimmed = code.trim();
+    scheduleStateUpdate(() => {
+      setHasPendingChanges(trimmed !== lastExecutedSource.current);
+    });
+  }, [autorunEnabled, code, normalizedLanguage, scheduleStateUpdate]);
+
+  useEffect(() => {
+    if (!normalizedLanguage) {
+      lastProcessedRun.current = runRequestId;
+      return;
+    }
+
+    if (runRequestId === 0 || runRequestId === lastProcessedRun.current) {
+      return;
+    }
+
+    lastProcessedRun.current = runRequestId;
 
     const trimmed = code.trim();
     if (!trimmed) {
@@ -69,6 +105,8 @@ function RuntimePreview({
         setStdout('');
         setStderr('');
         setErrorMessage(null);
+        lastExecutedSource.current = '';
+        setHasPendingChanges(false);
       });
       return;
     }
@@ -86,24 +124,28 @@ function RuntimePreview({
         if (runId.current !== nextId) {
           return;
         }
+        lastExecutedSource.current = trimmed;
         setStdout(result.stdout);
         setStderr(result.stderr);
         setStatus(result.stderr ? 'error' : 'ready');
+        setHasPendingChanges(false);
       } catch (error) {
         if (runId.current !== nextId) {
           return;
         }
+        lastExecutedSource.current = trimmed;
         setStatus('error');
         setStdout('');
         setStderr('');
         setErrorMessage(error instanceof Error ? error.message : String(error));
+        setHasPendingChanges(false);
       }
-    }, 250);
+    }, 150);
 
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [code, normalizedLanguage, scheduleStateUpdate]);
+  }, [autorunEnabled, code, normalizedLanguage, runRequestId, scheduleStateUpdate]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -117,6 +159,12 @@ function RuntimePreview({
   const computedErrorMessage = !isRunnable ? 'Select a runnable file to see live output.' : errorMessage;
   const displayStdout = isRunnable ? stdout : '';
   const displayStderr = isRunnable ? stderr : '';
+
+  const idleHint = autorunEnabled
+    ? 'Waiting for code changes to run automatically.'
+    : hasPendingChanges
+      ? 'Code changed since your last run. Press Run to update the output.'
+      : 'Press Run to execute your program.';
 
   const badgeClass =
     computedStatus === 'running'
@@ -145,6 +193,11 @@ function RuntimePreview({
       </div>
       <div className="relative flex flex-1 flex-col bg-black/50">
         <div className="relative flex flex-1 flex-col gap-4 overflow-hidden p-4 text-sm text-white/80">
+          {!autorunEnabled && hasPendingChanges ? (
+            <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+              Code changed since your last run. Press Run to update the output.
+            </div>
+          ) : null}
           {computedErrorMessage ? (
             <div className="rounded-2xl border border-rose-400/40 bg-rose-500/15 px-4 py-3 text-rose-100">
               {computedErrorMessage}
@@ -174,7 +227,7 @@ function RuntimePreview({
           ) : null}
           {computedStatus === 'idle' && !displayStderr && !displayStdout ? (
             <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white/60">
-              Start typing to see the program run automatically.
+              {idleHint}
             </div>
           ) : null}
         </div>
@@ -538,6 +591,39 @@ function SandpackPreviewPane({ isVisible }: { isVisible: boolean }) {
   );
 }
 
+function SandpackManualRunner({
+  autorunEnabled,
+  runRequestId
+}: {
+  autorunEnabled: boolean;
+  runRequestId: number;
+}) {
+  const { sandpack } = useSandpack();
+  const lastRunRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (autorunEnabled) {
+      lastRunRef.current = runRequestId;
+    }
+  }, [autorunEnabled, runRequestId]);
+
+  useEffect(() => {
+    if (autorunEnabled) {
+      return;
+    }
+    if (runRequestId === 0 || runRequestId === lastRunRef.current) {
+      return;
+    }
+    lastRunRef.current = runRequestId;
+    const run = sandpack?.runSandpack;
+    if (typeof run === 'function') {
+      run();
+    }
+  }, [autorunEnabled, runRequestId, sandpack]);
+
+  return null;
+}
+
 export function Preview({
   files,
   activePath,
@@ -554,37 +640,117 @@ export function Preview({
       : 'Live Preview';
 
   const [activeSandpackView, setActiveSandpackView] = useState<'preview' | 'console'>('preview');
+  const supportsAutorun = effectiveMode === 'sandpack' || effectiveMode === 'runtime';
+  const [autorunEnabled, setAutorunEnabled] = useState<boolean>(false);
+  const [runRequestId, setRunRequestId] = useState<number>(0);
+
+  const schedulePreviewUpdate = useCallback((updater: () => void) => {
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(updater);
+    } else {
+      window.setTimeout(updater, 0);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!supportsAutorun) {
+      schedulePreviewUpdate(() => {
+        setAutorunEnabled(prev => (prev ? false : prev));
+        setRunRequestId(prev => (prev !== 0 ? 0 : prev));
+      });
+    }
+  }, [schedulePreviewUpdate, supportsAutorun]);
+
+  useEffect(() => {
+    if (!supportsAutorun || !autorunEnabled) {
+      return;
+    }
+    schedulePreviewUpdate(() => {
+      setRunRequestId(previous => previous + 1);
+    });
+  }, [supportsAutorun, autorunEnabled, activeFileCode, activeFileLanguage, activePath, effectiveMode, schedulePreviewUpdate]);
+
+  const triggerRun = useCallback(() => {
+    if (!supportsAutorun) return;
+    setRunRequestId(previous => previous + 1);
+  }, [supportsAutorun]);
+
+  const toggleAutorun = useCallback(() => {
+    setAutorunEnabled(prev => !prev);
+  }, []);
+
+  const showAutorunControls = supportsAutorun;
+  const showRunButton = showAutorunControls && !autorunEnabled;
 
   return (
     <div className="flex h-full min-h-0 flex-col w-full">
-      <div className="flex items-center gap-3 border-b border-white/10 bg-black/40 px-4 py-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/50">{label}</span>
-        {effectiveMode === 'sandpack' ? (
-          <div className="flex items-center gap-1.5 text-white/60">
-            <button
-              type="button"
-              onClick={() => setActiveSandpackView('preview')}
-              className={clsx(
-                'relative rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] transition',
-                activeSandpackView === 'preview'
-                  ? 'bg-emerald-400/90 text-black shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
-                  : 'border border-white/20 bg-transparent text-white/70 hover:border-white/40 hover:text-white'
-              )}
-            >
-              Preview
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSandpackView('console')}
-              className={clsx(
-                'relative rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] transition',
-                activeSandpackView === 'console'
-                  ? 'bg-emerald-400/90 text-black shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
-                  : 'border border-white/20 bg-transparent text-white/70 hover:border-white/40 hover:text-white'
-              )}
-            >
-              Console
-            </button>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/40 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/50">{label}</span>
+          {effectiveMode === 'sandpack' ? (
+            <div className="flex items-center gap-1.5 text-white/60">
+              <button
+                type="button"
+                onClick={() => setActiveSandpackView('preview')}
+                className={clsx(
+                  'relative rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] transition',
+                  activeSandpackView === 'preview'
+                    ? 'bg-emerald-400/90 text-black shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
+                    : 'border border-white/20 bg-transparent text-white/70 hover:border-white/40 hover:text-white'
+                )}
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSandpackView('console')}
+                className={clsx(
+                  'relative rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] transition',
+                  activeSandpackView === 'console'
+                    ? 'bg-emerald-400/90 text-black shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
+                    : 'border border-white/20 bg-transparent text-white/70 hover:border-white/40 hover:text-white'
+                )}
+              >
+                Console
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {showAutorunControls ? (
+          <div className="flex items-center gap-3 text-xs text-white/60">
+            {showRunButton ? (
+              <button
+                type="button"
+                onClick={triggerRun}
+                className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+              >
+                Run
+              </button>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">Autorun</span>
+              <button
+                type="button"
+                onClick={toggleAutorun}
+                aria-pressed={autorunEnabled}
+                aria-label="Toggle autorun"
+                className={clsx(
+                  'relative inline-flex h-6 w-11 items-center rounded-full border transition',
+                  autorunEnabled
+                    ? 'border-emerald-300/70 bg-emerald-400/30 shadow-[0_8px_20px_rgba(16,185,129,0.25)]'
+                    : 'border-white/20 bg-white/5 hover:border-white/30 hover:bg-white/10'
+                )}
+              >
+                <span
+                  className={clsx(
+                    'inline-flex h-5 w-5 translate-x-1 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-slate-900 transition',
+                    autorunEnabled && 'translate-x-[1.35rem] bg-emerald-300 text-emerald-950 shadow-[0_8px_16px_rgba(16,185,129,0.35)]'
+                  )}
+                >
+                  {autorunEnabled ? 'ON' : 'OFF'}
+                </span>
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -596,10 +762,10 @@ export function Preview({
             options={{
               externalResources: [],
               activeFile: activePath,
-              autorun: true,
-              autoReload: true,
-              recompileMode: 'delayed',
-              recompileDelay: 300,
+              autorun: autorunEnabled,
+              autoReload: autorunEnabled,
+              recompileMode: autorunEnabled ? 'delayed' : 'immediate',
+              recompileDelay: autorunEnabled ? 300 : 0,
               showTabs: false,
               showNavigator: false,
               showConsole: true,
@@ -607,6 +773,7 @@ export function Preview({
             }}
           >
             <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col w-full" style={{ height: '100%', minHeight: 0, width: '100%' }}>
+              <SandpackManualRunner autorunEnabled={autorunEnabled} runRequestId={runRequestId} />
               <SandpackLayout
                 className="!h-full !min-h-0 !w-full !border-none !bg-transparent !shadow-none"
                 style={{
@@ -656,7 +823,12 @@ export function Preview({
             </div>
           </SandpackProvider>
         ) : effectiveMode === 'runtime' ? (
-          <RuntimePreview code={activeFileCode ?? ''} language={activeFileLanguage} />
+          <RuntimePreview
+            code={activeFileCode ?? ''}
+            language={activeFileLanguage}
+            autorunEnabled={autorunEnabled}
+            runRequestId={runRequestId}
+          />
         ) : effectiveMode === 'code' ? (
           <div className="relative flex h-full flex-col overflow-hidden">
             <div className="relative flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 text-xs text-white/60">

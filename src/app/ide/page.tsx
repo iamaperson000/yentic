@@ -35,6 +35,15 @@ const languageIcons: Record<string, ReactNode> = {
       />
     </svg>
   ),
+  cpp: (
+    <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 text-violet-200">
+      <circle cx="12" cy="12" r="8" className="fill-none stroke-current stroke-[1.4] opacity-60" />
+      <path d="M10 12h4" className="fill-none stroke-current stroke-[1.4]" strokeLinecap="round" />
+      <path d="M12 10v4" className="fill-none stroke-current stroke-[1.4]" strokeLinecap="round" />
+      <path d="M6.5 12a5.5 5.5 0 0 1 5.5-5.5" className="fill-none stroke-current stroke-[1.4] opacity-40" />
+      <path d="M17.5 12a5.5 5.5 0 0 1-5.5 5.5" className="fill-none stroke-current stroke-[1.4] opacity-40" />
+    </svg>
+  ),
   java: (
     <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 text-amber-300">
       <path
