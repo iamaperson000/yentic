@@ -80,15 +80,15 @@ export function FileExplorer({
   );
 
   return (
-    <div className="flex h-full flex-col text-sm text-slate-200">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-900/80 px-3 py-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Files</p>
+    <div className="flex h-full flex-col text-sm text-white/80">
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/40 px-3 py-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Files</p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {onCreateFile ? (
             <button
               type="button"
               onClick={onCreateFile}
-              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-400/50 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/70 hover:bg-emerald-500/20"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
             >
               <span aria-hidden className="text-base leading-none">＋</span>
               New file
@@ -102,10 +102,10 @@ export function FileExplorer({
             <li
               key={f.path}
               className={clsx(
-                'rounded-lg border px-3 py-2 transition',
+                'rounded-2xl border px-3 py-2 transition',
                 activePath === f.path
-                  ? 'border-emerald-400/50 bg-emerald-500/10'
-                  : 'border-slate-900/70 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-900/70'
+                  ? 'border-emerald-400/40 bg-emerald-500/10'
+                  : 'border-white/10 bg-black/30 hover:border-white/20 hover:bg-black/40'
               )}
             >
               <div className="flex items-center gap-3">
@@ -114,13 +114,13 @@ export function FileExplorer({
                   onClick={() => onSelect(f.path)}
                   className="flex min-w-0 flex-1 flex-col text-left"
                 >
-                  <span className="truncate text-sm font-medium text-slate-100">{f.path}</span>
-                  <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{f.language}</span>
+                  <span className="truncate text-sm font-semibold text-white">{f.path}</span>
+                  <span className="text-[11px] uppercase tracking-[0.3em] text-white/40">{f.language}</span>
                 </button>
                 <div className="flex items-center gap-1.5 text-[11px]">
                   <button
                     type="button"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-800 bg-slate-900 text-slate-400 transition hover:border-slate-600 hover:text-slate-100"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/60 transition hover:border-white/40 hover:text-white"
                     onClick={() => beginRename(f.path)}
                     aria-label={`Rename ${f.path}`}
                   >
@@ -129,9 +129,9 @@ export function FileExplorer({
                   <button
                     type="button"
                     className={clsx(
-                      'inline-flex h-7 w-7 items-center justify-center rounded-md border text-slate-300 transition',
+                      'inline-flex h-7 w-7 items-center justify-center rounded-full border text-white/70 transition',
                       pendingDelete === f.path
-                        ? 'border-rose-400/70 bg-rose-500/20 text-rose-100'
+                        ? 'border-rose-400/60 bg-rose-500/20 text-rose-100'
                         : 'border-rose-400/40 bg-rose-500/10 hover:border-rose-300 hover:text-rose-100'
                     )}
                     onClick={() =>
@@ -145,8 +145,8 @@ export function FileExplorer({
               </div>
 
               {renameTarget === f.path ? (
-                <div className="mt-2 rounded-md border border-slate-800 bg-slate-900/80 p-3">
-                  <label className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-500">
+                <div className="mt-2 rounded-2xl border border-white/10 bg-black/50 p-3">
+                  <label className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/50">
                     Rename file
                   </label>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -164,20 +164,20 @@ export function FileExplorer({
                         }
                       }}
                       placeholder={placeholder ?? ''}
-                      className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-emerald-300/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
+                      className="flex-1 rounded-xl border border-white/20 bg-black/60 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
                     />
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => submitRename(f.path)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-400/70 bg-emerald-400/80 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
                       >
                         Save
                       </button>
                       <button
                         type="button"
                         onClick={cancelRename}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:border-slate-600 hover:text-slate-100"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:border-white/40 hover:text-white"
                       >
                         Cancel
                       </button>
@@ -187,21 +187,21 @@ export function FileExplorer({
               ) : null}
 
               {pendingDelete === f.path ? (
-                <div className="mt-2 rounded-md border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-                  <p className="text-[11px] uppercase tracking-[0.25em] text-rose-100/70">Confirm deletion</p>
-                  <p className="mt-1 text-xs text-rose-100/80">This action cannot be undone.</p>
+                <div className="mt-2 rounded-2xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                  <p className="text-[11px] uppercase tracking-[0.25em] text-rose-100/80">Confirm deletion</p>
+                  <p className="mt-1 text-xs text-rose-100/70">This action cannot be undone.</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => confirmDelete(f.path)}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-rose-300/60 bg-rose-400/20 px-3 py-1.5 text-xs font-semibold text-rose-50 transition hover:bg-rose-400/30"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-rose-300/60 bg-rose-500/20 px-3 py-1.5 text-xs font-semibold text-rose-50 transition hover:bg-rose-500/30"
                     >
                       Delete
                     </button>
                     <button
                       type="button"
                       onClick={() => setPendingDelete(null)}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-600 hover:text-white"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:border-white/40 hover:text-white"
                     >
                       Cancel
                     </button>

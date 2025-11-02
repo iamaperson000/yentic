@@ -54,7 +54,7 @@ const languageIcons: Record<string, ReactNode> = {
 };
 
 const defaultIcon = (
-  <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 text-slate-300">
+  <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 text-white/70">
     <rect x="4" y="4" width="16" height="16" rx="3" className="fill-none stroke-current stroke-[1.5]" />
     <path d="M9 8h6m-6 4h6m-6 4h3" className="fill-none stroke-current stroke-[1.5]" />
   </svg>
@@ -62,11 +62,12 @@ const defaultIcon = (
 
 export default function WorkspacePicker() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-12 px-6 py-16">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#06070d] via-[#090b19] to-[#040509] text-white">
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.25),_transparent_60%)]" />
+      <div className="relative mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-12 px-6 py-16">
         <header className="flex flex-col gap-3 text-center">
           <h1 className="text-3xl font-semibold sm:text-4xl">Choose your language</h1>
-          <p className="text-sm text-slate-400 sm:text-base">
+          <p className="text-sm text-white/70 sm:text-base">
             Launch a workspace configured for your stack.
           </p>
         </header>
@@ -77,16 +78,16 @@ export default function WorkspacePicker() {
               <Link
                 key={workspace.slug}
                 href={`/ide/${workspace.slug}`}
-                className="group flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-6 transition hover:border-slate-700 hover:bg-slate-900"
+                className="group flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 transition hover:border-white/20 hover:bg-white/10"
               >
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 text-slate-100">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-black/40 text-white">
                   {icon}
                 </span>
                 <div className="flex flex-col gap-1 text-left">
                   <h2 className="text-lg font-semibold">{workspace.title}</h2>
-                  <p className="text-sm text-slate-400">{workspace.description}</p>
+                  <p className="text-sm text-white/60">{workspace.description}</p>
                 </div>
-                <span className="mt-auto inline-flex items-center gap-2 text-sm font-medium text-emerald-200">
+                <span className="mt-auto inline-flex items-center gap-2 text-sm font-semibold text-emerald-200">
                   Open workspace
                   <span aria-hidden className="transition group-hover:translate-x-1">→</span>
                 </span>
@@ -94,9 +95,9 @@ export default function WorkspacePicker() {
             );
           })}
         </div>
-        <p className="text-center text-xs text-slate-500">
+        <p className="text-center text-xs text-white/50">
           Need another language? Let us know at{' '}
-          <a className="text-emerald-200" href="mailto:hello@yentic.com">
+          <a className="text-emerald-200 underline decoration-emerald-400/60 underline-offset-4" href="mailto:hello@yentic.com">
             hello@yentic.com
           </a>
           .
@@ -104,7 +105,7 @@ export default function WorkspacePicker() {
         <div className="flex justify-center">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-md border border-slate-800 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-700 hover:text-white"
+            className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-white/40 hover:text-white"
           >
             Back to home
           </Link>
