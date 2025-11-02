@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
 
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
@@ -20,6 +19,25 @@ import {
   type WorkspaceSlug,
   workspaceConfigs
 } from '@/lib/project';
+
+const extensionMap: Record<SupportedLanguage, string> = {
+  html: 'html',
+  css: 'css',
+  javascript: 'js',
+  python: 'py',
+  c: 'c',
+  java: 'java'
+};
+
+function smartPlaceholder(base: string, language?: SupportedLanguage) {
+  if (!language) return base;
+  const extension = extensionMap[language];
+  if (!extension) return base;
+  const dotIndex = base.lastIndexOf('.');
+  const baseName = dotIndex === -1 ? base : base.slice(0, dotIndex);
+  const normalized = baseName.trim() || 'untitled';
+  return `${normalized}.${extension}`;
+}
 
 function formatTime(date: Date | null) {
   if (!date) return null;
@@ -45,10 +63,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const [activePath, setActivePath] = useState<string>(config.defaultActivePath);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState<boolean>(false);
-  const [newFileName, setNewFileName] = useState<string>('');
-  const [newFileLanguage, setNewFileLanguage] = useState<SupportedLanguage | 'auto'>('auto');
-  const [newFileError, setNewFileError] = useState<string | null>(null);
+  const [recentlyCreatedPath, setRecentlyCreatedPath] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
 
@@ -113,8 +128,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         }
 
         const { [oldPath]: oldFile, ...rest } = prev;
+        const nextLanguage = inferLanguage(nextPath);
         renamed = true;
-        return { ...rest, [nextPath]: { ...oldFile, path: nextPath } };
+        return { ...rest, [nextPath]: { ...oldFile, path: nextPath, language: nextLanguage } };
       });
 
       if (!error && renamed && activePath === oldPath) {
@@ -155,14 +171,13 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     }
   }, [activePath, slug, config.defaultActivePath]);
 
-  const onCreate = useCallback(
-    (rawPath: string, language?: SupportedLanguage): string => {
+  const onCreate = useCallback((rawPath: string): string => {
       const desired = rawPath.trim() || config.newFilePlaceholder;
       let nextPath = desired;
       setFiles(prev => {
         const safePath = ensureUniquePath(desired, prev);
         nextPath = safePath;
-        const fileLanguage = language ?? inferLanguage(safePath);
+        const fileLanguage = inferLanguage(safePath);
         return {
           ...prev,
           [safePath]: {
@@ -174,9 +189,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       });
       setActivePath(nextPath);
       return nextPath;
-    },
-    [config.newFilePlaceholder]
-  );
+    }, [config.newFilePlaceholder]);
 
   const handleSave = useCallback(() => {
     saveProject(slug, files);
@@ -196,15 +209,17 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const savedLabel = isSaving ? 'Saving…' : formattedTime ? `Saved at ${formattedTime}` : 'Synced';
 
   const statusBadgeClass = isSaving
-    ? 'inline-flex items-center rounded-full border border-amber-300/40 bg-amber-300/10 px-3 py-1 text-xs font-medium text-amber-100'
-    : 'inline-flex items-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100';
+    ? 'inline-flex items-center gap-2 rounded-full border border-amber-300/50 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-100'
+    : 'inline-flex items-center gap-2 rounded-full border border-emerald-300/50 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-100';
 
-  const toolbarButtonBaseClass =
-    'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70';
-  const toolbarButtonClass =
-    `${toolbarButtonBaseClass} border border-white/15 bg-white/10 text-white/90 hover:border-white/25 hover:bg-white/15`;
-  const resetButtonClass =
-    `${toolbarButtonBaseClass} border border-rose-400/40 bg-rose-400/10 text-rose-100 hover:border-rose-300/60 hover:bg-rose-400/20`;
+  const actionButtonBaseClass =
+    'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70';
+  const primaryActionClass =
+    `${actionButtonBaseClass} border-emerald-400/70 bg-emerald-400/80 text-slate-950 hover:bg-emerald-300`;
+  const subtleActionClass =
+    `${actionButtonBaseClass} border-slate-700 bg-slate-900/60 text-slate-200 hover:border-slate-500 hover:bg-slate-900`;
+  const dangerActionClass =
+    `${actionButtonBaseClass} border-rose-400/60 bg-rose-500/20 text-rose-100 hover:border-rose-300 hover:bg-rose-500/30`;
 
   const resetWorkspace = useCallback(() => {
     const confirmed = window.confirm(
@@ -232,6 +247,15 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     }, 3600);
   }, []);
 
+  const createSmartFile = useCallback(() => {
+    const activeFile = files[activePath];
+    const activeLanguage = activeFile?.language;
+    const placeholder = smartPlaceholder(config.newFilePlaceholder, activeLanguage);
+    const createdPath = onCreate(placeholder);
+    setRecentlyCreatedPath(createdPath);
+    pushToast({ kind: 'success', message: `Created ${createdPath}` });
+  }, [files, activePath, config.newFilePlaceholder, onCreate, pushToast]);
+
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current) {
@@ -240,204 +264,96 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     };
   }, []);
 
-  const closeCreateDialog = useCallback(() => {
-    setIsCreateDialogOpen(false);
-    setNewFileName('');
-    setNewFileLanguage('auto');
-    setNewFileError(null);
-  }, []);
-
-  const submitCreateDialog = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      const trimmed = newFileName.trim();
-      if (!trimmed) {
-        setNewFileError('Please provide a file name.');
-        return;
-      }
-      const language = newFileLanguage === 'auto' ? undefined : newFileLanguage;
-      const createdPath = onCreate(trimmed, language);
-      pushToast({ kind: 'success', message: `Created ${createdPath}` });
-      closeCreateDialog();
-    },
-    [newFileName, newFileLanguage, onCreate, pushToast, closeCreateDialog]
-  );
-
-  const languageOptions: Array<{ value: SupportedLanguage | 'auto'; label: string }> = [
-    { value: 'auto', label: 'Auto-detect' },
-    { value: 'html', label: 'HTML' },
-    { value: 'css', label: 'CSS' },
-    { value: 'javascript', label: 'JavaScript' },
-    { value: 'python', label: 'Python' },
-    { value: 'c', label: 'C' },
-    { value: 'java', label: 'Java' }
-  ];
+  useEffect(() => {
+    if (!recentlyCreatedPath) return;
+    const timeout = window.setTimeout(() => setRecentlyCreatedPath(null), 0);
+    return () => window.clearTimeout(timeout);
+  }, [recentlyCreatedPath]);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#05060f] via-[#050414] to-[#02030a] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.25),_transparent_60%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.18),_transparent_55%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(16,185,129,0.12),_transparent_58%)]" />
-      <div className="relative flex min-h-screen flex-col">
-        <header className="flex items-center justify-between border-b border-white/10 bg-black/30 px-8 py-5 backdrop-blur">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/15"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400 text-base font-semibold text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.45)]">
-              Y
+    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+      <header className="border-b border-slate-900/80 bg-slate-950/70">
+        <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-emerald-400/60 hover:text-emerald-200"
+            >
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-400 text-sm font-semibold text-slate-950">
+                Y
+              </span>
+              <span className="hidden sm:inline">Back to home</span>
+              <span className="sm:hidden">Home</span>
+            </Link>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold text-slate-100 sm:text-xl">{config.title} workspace</h1>
+              <p className="mt-1 truncate text-sm text-slate-400">{config.description}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-slate-400">
+            <span className={statusBadgeClass}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+              {savedLabel}
             </span>
-            Back to home
-          </Link>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-white/60">
-            <span className={statusBadgeClass}>{savedLabel}</span>
-            <div className="hidden h-4 w-px bg-white/15 sm:block" />
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => setIsCreateDialogOpen(true)} className={toolbarButtonClass}>
+              <button onClick={createSmartFile} className={primaryActionClass}>
                 New file
               </button>
-              <button onClick={handleSave} className={toolbarButtonClass}>
+              <button onClick={handleSave} className={subtleActionClass}>
                 Save now
               </button>
-              <button onClick={resetWorkspace} className={resetButtonClass}>
-                Reset workspace
+              <button onClick={resetWorkspace} className={dangerActionClass}>
+                Reset
               </button>
             </div>
           </div>
-        </header>
-        <main className="flex flex-1 flex-col gap-6 px-8 py-8">
-          <div className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_40px_120px_rgba(10,18,41,0.45)] backdrop-blur-xl">
-            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.35em] text-white/60">
-              {config.title}
-            </div>
-            <div className="grid gap-2">
-              <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{config.title} workspace</h1>
-              <p className="max-w-3xl text-sm text-white/70 sm:text-base">{config.description}</p>
-            </div>
+        </div>
+      </header>
+      <main className="flex flex-1 flex-col px-4 pb-8 pt-6 lg:px-8">
+        <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-4 md:gap-5 lg:grid-cols-[240px_minmax(0,1.8fr)_minmax(0,1.2fr)] xl:grid-cols-[260px_minmax(0,1.9fr)_minmax(0,1.2fr)]">
+          <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-900/80 bg-slate-950/80">
+            <FileExplorer
+              files={files}
+              activePath={activePath}
+              onSelect={setActivePath}
+              onRename={onRename}
+              onDelete={onDelete}
+              onCreateFile={createSmartFile}
+              newlyCreatedPath={recentlyCreatedPath}
+              onFeedback={pushToast}
+              placeholder={config.newFilePlaceholder}
+            />
           </div>
-          <div className="relative flex flex-1 flex-col">
-            <div className="grid min-h-0 flex-1 gap-6 rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_40px_120px_rgba(10,18,41,0.45)] backdrop-blur-2xl lg:min-h-[580px] lg:grid-cols-[280px_minmax(0,1fr)_minmax(0,1.4fr)] xl:grid-cols-[320px_minmax(0,1fr)_minmax(0,1.5fr)]">
-              <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04),0_24px_70px_rgba(5,10,25,0.45)]">
-                <FileExplorer
-                  files={files}
-                  activePath={activePath}
-                  onSelect={setActivePath}
-                  onRename={onRename}
-                  onDelete={onDelete}
-                  onOpenCreateDialog={() => setIsCreateDialogOpen(true)}
-                  onFeedback={pushToast}
-                  placeholder={config.newFilePlaceholder}
-                />
-              </div>
-              <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#060a1c]/80 shadow-[0_30px_90px_rgba(17,25,56,0.5)]">
-                <Editor value={code} language={lang} onChange={setActiveCode} />
-              </div>
-              <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#040811]/85 shadow-[0_30px_90px_rgba(11,22,55,0.5)]">
-                <Preview
-                  files={sandpackFiles}
-                  activePath={`/${activePath}`}
-                  template={config.previewTemplate}
-                  mode={config.previewMode}
-                  disabledMessage={config.previewMessage}
-                  activeFileCode={code}
-                  activeFileLanguage={lang}
-                />
-              </div>
-            </div>
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-900/80 bg-slate-950">
+            <Editor value={code} language={lang} onChange={setActiveCode} />
           </div>
-        </main>
-      </div>
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-900/80 bg-slate-950">
+            <Preview
+              files={sandpackFiles}
+              activePath={`/${activePath}`}
+              template={config.previewTemplate}
+              mode={config.previewMode}
+              disabledMessage={config.previewMessage}
+              activeFileCode={code}
+              activeFileLanguage={lang}
+            />
+          </div>
+        </div>
+      </main>
 
       {toast ? (
         <div className="pointer-events-none fixed inset-x-0 top-6 flex justify-center px-4">
           <div
-            className={`pointer-events-auto inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-lg backdrop-blur ${
+            className={`pointer-events-auto inline-flex items-center gap-3 rounded-full border px-4 py-2 text-sm shadow-lg backdrop-blur ${
               toast.kind === 'success'
-                ? 'border-emerald-400/40 bg-emerald-400/20 text-emerald-100'
-                : 'border-rose-400/40 bg-rose-400/20 text-rose-100'
+                ? 'border-emerald-400/40 bg-emerald-500/20 text-emerald-100'
+                : 'border-rose-400/40 bg-rose-500/20 text-rose-100'
             }`}
           >
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/30 text-xs font-semibold uppercase tracking-[0.2em]">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px] font-semibold uppercase tracking-[0.2em]">
               {toast.kind === 'success' ? 'OK' : 'ERR'}
             </span>
             <span>{toast.message}</span>
-          </div>
-        </div>
-      ) : null}
-
-      {isCreateDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur">
-          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#070b18] p-8 text-white shadow-[0_40px_120px_rgba(8,15,40,0.65)]">
-            <button
-              type="button"
-              className="absolute right-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:border-white/25 hover:text-white"
-              onClick={closeCreateDialog}
-            >
-              <span className="sr-only">Close create file dialog</span>
-              ×
-            </button>
-            <div className="space-y-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/40">
-                New file
-              </span>
-              <h2 className="text-2xl font-semibold">Create a fresh file</h2>
-              <p className="text-sm text-white/60">Name your file and optionally choose a language. We&apos;ll scaffold it for you instantly.</p>
-            </div>
-            <form onSubmit={submitCreateDialog} className="mt-6 space-y-5">
-              <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-[0.3em] text-white/40">File name</label>
-                <input
-                  autoFocus
-                  value={newFileName}
-                  onChange={event => {
-                    setNewFileName(event.target.value);
-                    if (newFileError) {
-                      setNewFileError(null);
-                    }
-                  }}
-                  placeholder={config.newFilePlaceholder}
-                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 focus:border-emerald-300/70 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-[0.3em] text-white/40">Language</label>
-                <div className="relative">
-                  <select
-                    value={newFileLanguage}
-                    onChange={event => setNewFileLanguage(event.target.value as SupportedLanguage | 'auto')}
-                    className="w-full appearance-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white focus:border-emerald-300/70 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
-                  >
-                    {languageOptions.map(option => (
-                      <option key={option.value} value={option.value} className="bg-[#070b18] text-white">
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-white/40">▾</span>
-                </div>
-                <p className="text-[11px] text-white/35">Auto-detect chooses a language based on the file extension.</p>
-              </div>
-              {newFileError ? (
-                <div className="rounded-2xl border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-                  {newFileError}
-                </div>
-              ) : null}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={closeCreateDialog}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm text-white/70 transition hover:border-white/30 hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-2 rounded-full border border-emerald-400/70 bg-emerald-400/90 px-5 py-2 text-sm font-semibold text-slate-950 shadow-[0_15px_45px_rgba(16,185,129,0.35)] transition hover:bg-emerald-300"
-                >
-                  Create file
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       ) : null}

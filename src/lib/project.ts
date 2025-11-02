@@ -33,8 +33,16 @@ const KEY_PREFIX = 'yentic.project.v1';
 
 export function inferLanguage(path: string): SupportedLanguage {
   const normalized = path.toLowerCase();
-  if (normalized.endsWith('.html')) return 'html';
+  if (normalized.endsWith('.html') || normalized.endsWith('.htm')) return 'html';
   if (normalized.endsWith('.css')) return 'css';
+  if (
+    normalized.endsWith('.js') ||
+    normalized.endsWith('.mjs') ||
+    normalized.endsWith('.cjs') ||
+    normalized.endsWith('.jsx')
+  ) {
+    return 'javascript';
+  }
   if (normalized.endsWith('.py')) return 'python';
   if (normalized.endsWith('.c')) return 'c';
   if (normalized.endsWith('.java')) return 'java';
