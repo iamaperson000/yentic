@@ -643,7 +643,6 @@ export function Preview({
   const supportsAutorun = effectiveMode === 'sandpack' || effectiveMode === 'runtime';
   const [autorunEnabled, setAutorunEnabled] = useState<boolean>(false);
   const [runRequestId, setRunRequestId] = useState<number>(0);
-  const autorunWasEnabledRef = useRef<boolean>(false);
 
   const schedulePreviewUpdate = useCallback((updater: () => void) => {
     if (typeof queueMicrotask === 'function') {
@@ -663,17 +662,9 @@ export function Preview({
   }, [schedulePreviewUpdate, supportsAutorun]);
 
   useEffect(() => {
-    const previouslyEnabled = autorunWasEnabledRef.current;
-    autorunWasEnabledRef.current = autorunEnabled;
-
     if (!supportsAutorun || !autorunEnabled) {
       return;
     }
-
-    if (!previouslyEnabled) {
-      return;
-    }
-
     schedulePreviewUpdate(() => {
       setRunRequestId(previous => previous + 1);
     });
@@ -685,19 +676,8 @@ export function Preview({
   }, [supportsAutorun]);
 
   const toggleAutorun = useCallback(() => {
-    if (!supportsAutorun) {
-      return;
-    }
-    setAutorunEnabled(prev => {
-      const next = !prev;
-      if (next) {
-        schedulePreviewUpdate(() => {
-          setRunRequestId(previous => previous + 1);
-        });
-      }
-      return next;
-    });
-  }, [schedulePreviewUpdate, supportsAutorun]);
+    setAutorunEnabled(prev => !prev);
+  }, []);
 
   const showAutorunControls = supportsAutorun;
   const showRunButton = showAutorunControls && !autorunEnabled;
