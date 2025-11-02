@@ -94,17 +94,22 @@ export function Preview({
               showOpenInCodeSandbox: false
             }}
           >
-            <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col">
+            <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col" style={{ height: '100%', minHeight: 0 }}>
               <SandpackLayout
                 className="!h-full !min-h-0 !w-full !border-none !bg-transparent !shadow-none"
                 style={{
-                  gridTemplateColumns: 'minmax(0, 1fr)',
-                  gridTemplateRows: 'minmax(0, 1fr)',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr',
+                  gridTemplateRows: '1fr',
                   padding: 0,
-                  gap: 0
+                  gap: 0,
+                  height: '100%',
+                  minHeight: 0,
+                  width: '100%',
+                  flex: 1
                 }}
               >
-                <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+                <div className="flex h-full min-h-0 w-full flex-1 flex-col" style={{ height: '100%', minHeight: 0 }}>
                   <SandpackPreview
                     showOpenInCodeSandbox={false}
                     className={clsx(
@@ -116,7 +121,7 @@ export function Preview({
                       minHeight: 0,
                       width: '100%',
                       flex: 1,
-                      display: 'flex',
+                      display: activeSandpackView === 'preview' ? 'flex' : 'none',
                       flexDirection: 'column',
                       background: 'transparent',
                       border: 'none',
@@ -134,7 +139,7 @@ export function Preview({
                       minHeight: 0,
                       width: '100%',
                       flex: 1,
-                      display: 'flex',
+                      display: activeSandpackView === 'console' ? 'flex' : 'none',
                       flexDirection: 'column',
                       background: 'rgba(5, 6, 15, 0.7)',
                       border: 'none',
