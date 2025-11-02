@@ -47,54 +47,70 @@ export function Preview({
   const [activeSandpackView, setActiveSandpackView] = useState<'preview' | 'console'>('preview');
 
   useEffect(() => {
-    // Debug the container heights
-    const previewRoot = document.querySelector('[data-preview-root]');
-    if (previewRoot) {
-      const rect = previewRoot.getBoundingClientRect();
-      console.log('Preview root height:', rect.height, 'width:', rect.width);
-      console.log('Preview root computed height:', window.getComputedStyle(previewRoot as HTMLElement).height);
-    }
-
-    // Force iframe and all parent containers to fill space
-    const fixSandpackHeight = () => {
-      // Fix preview container
-      const containers = document.querySelectorAll('.sp-preview-container');
-      containers.forEach((container) => {
-        (container as HTMLElement).style.height = '100%';
-        (container as HTMLElement).style.minHeight = '0';
-        (container as HTMLElement).style.flex = '1';
-        (container as HTMLElement).style.display = 'flex';
-        (container as HTMLElement).style.flexDirection = 'column';
+    // More aggressive - target all Sandpack wrapper divs
+    const fixAllHeights = () => {
+      // Fix all Sandpack divs that might be constraining height
+      const allDivs = document.querySelectorAll('[class*="sp-"]');
+      allDivs.forEach((el) => {
+        const html = el as HTMLElement;
+        // Remove any max-height constraints
+        if (html.style.maxHeight && html.style.maxHeight !== '100%') {
+          html.style.maxHeight = 'none';
+        }
       });
 
-      // Fix iframe
+      // Specifically target the preview container and make it flex
+      const previewContainers = document.querySelectorAll('.sp-preview-container');
+      previewContainers.forEach((container) => {
+        (container as HTMLElement).style.cssText = `
+          height: 100% !important;
+          min-height: 0 !important;
+          flex: 1 !important;
+          display: flex !important;
+          flex-direction: column !important;
+        `;
+      });
+
       const iframes = document.querySelectorAll('.sp-preview-iframe');
       iframes.forEach((iframe) => {
-        (iframe as HTMLElement).style.height = '100% !important';
-        (iframe as HTMLElement).style.minHeight = '100% !important';
-        (iframe as HTMLElement).style.width = '100%';
-        (iframe as HTMLElement).style.flex = '1';
+        (iframe as HTMLElement).style.cssText = `
+          height: 100% !important;
+          min-height: 0 !important;
+          width: 100% !important;
+          flex: 1 !important;
+        `;
       });
 
-      // Fix preview wrapper
       const previews = document.querySelectorAll('.sp-preview');
       previews.forEach((preview) => {
-        (preview as HTMLElement).style.height = '100%';
-        (preview as HTMLElement).style.minHeight = '0';
-        (preview as HTMLElement).style.flex = '1';
-        (preview as HTMLElement).style.display = 'flex';
-        (preview as HTMLElement).style.flexDirection = 'column';
+        (preview as HTMLElement).style.cssText = `
+          height: 100% !important;
+          min-height: 0 !important;
+          flex: 1 !important;
+          display: flex !important;
+          flex-direction: column !important;
+        `;
+      });
+
+      // Also fix the stack wrapper
+      const stacks = document.querySelectorAll('[class*="sp-stack"]');
+      stacks.forEach((stack) => {
+        (stack as HTMLElement).style.cssText = `
+          height: 100% !important;
+          min-height: 0 !important;
+          flex: 1 !important;
+        `;
       });
     };
 
-    fixSandpackHeight();
-    const interval = setInterval(fixSandpackHeight, 50);
+    fixAllHeights();
+    const interval = setInterval(fixAllHeights, 50);
 
     return () => clearInterval(interval);
   }, [activeSandpackView]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-preview-root="true">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-2">
         <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">{label}</span>
         {effectiveMode === 'sandpack' ? (
