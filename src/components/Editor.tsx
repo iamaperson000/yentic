@@ -21,7 +21,8 @@ export function Editor({ value, language, onChange }: { value: string; language:
             fontFamily: 'var(--font-mono)',
             smoothScrolling: true,
             lineHeight: 22,
-            scrollBeyondLastLine: false
+            scrollBeyondLastLine: false,
+            automaticLayout: true
           }}
           onChange={val => onChange(val ?? '')}
         />
