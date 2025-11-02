@@ -8,7 +8,7 @@ import {
   SandpackConsole
 } from '@codesandbox/sandpack-react';
 import { clsx } from 'clsx';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import type { SupportedLanguage } from '@/lib/project';
 import { ExecutablePreview } from './ExecutablePreview';
@@ -45,6 +45,23 @@ export function Preview({
     (activeFileLanguage === 'python' || activeFileLanguage === 'c' || activeFileLanguage === 'java');
 
   const [activeSandpackView, setActiveSandpackView] = useState<'preview' | 'console'>('preview');
+
+  useEffect(() => {
+    // Force iframe to fill container
+    const fixIframeHeight = () => {
+      const iframes = document.querySelectorAll('.sp-preview-iframe');
+      iframes.forEach((iframe) => {
+        (iframe as HTMLElement).style.height = '100%';
+        (iframe as HTMLElement).style.minHeight = '100%';
+      });
+    };
+
+    // Run immediately and also set up observer for when Sandpack renders
+    fixIframeHeight();
+    const interval = setInterval(fixIframeHeight, 100);
+
+    return () => clearInterval(interval);
+  }, [activeSandpackView]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -94,12 +111,6 @@ export function Preview({
               showOpenInCodeSandbox: false
             }}
           >
-            <style>{`
-              .sp-preview-iframe {
-                height: 100% !important;
-                min-height: 100% !important;
-              }
-            `}</style>
             <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col" style={{ height: '100%', minHeight: 0 }}>
               <SandpackLayout
                 className="!h-full !min-h-0 !w-full !border-none !bg-transparent !shadow-none"
