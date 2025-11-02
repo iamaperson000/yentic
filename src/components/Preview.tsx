@@ -56,9 +56,17 @@ export function Preview({
               showOpenInCodeSandbox: false
             }}
           >
-            <SandpackLayout style={{ height: '100%', background: 'transparent', border: 'none', boxShadow: 'none' }}>
-              <SandpackPreview style={{ height: '100%', background: 'transparent', border: 'none', boxShadow: 'none' }} />
-            </SandpackLayout>
+            <div className="relative z-10 flex h-full flex-col">
+              <SandpackLayout
+                className="!h-full flex-1 !bg-transparent !border-none !shadow-none"
+                style={{ height: '100%', flex: 1, background: 'transparent', border: 'none', boxShadow: 'none' }}
+              >
+                <SandpackPreview
+                  className="!h-full !bg-transparent"
+                  style={{ height: '100%', width: '100%', background: 'transparent', border: 'none', boxShadow: 'none' }}
+                />
+              </SandpackLayout>
+            </div>
           </SandpackProvider>
         ) : effectiveMode === 'code' ? (
           isExecutable ? (
