@@ -47,6 +47,14 @@ export function Preview({
   const [activeSandpackView, setActiveSandpackView] = useState<'preview' | 'console'>('preview');
 
   useEffect(() => {
+    // Debug the container heights
+    const previewRoot = document.querySelector('[data-preview-root]');
+    if (previewRoot) {
+      const rect = previewRoot.getBoundingClientRect();
+      console.log('Preview root height:', rect.height, 'width:', rect.width);
+      console.log('Preview root computed height:', window.getComputedStyle(previewRoot as HTMLElement).height);
+    }
+
     // Force iframe and all parent containers to fill space
     const fixSandpackHeight = () => {
       // Fix preview container
@@ -86,7 +94,7 @@ export function Preview({
   }, [activeSandpackView]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" data-preview-root="true">
       <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-2">
         <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">{label}</span>
         {effectiveMode === 'sandpack' ? (
