@@ -169,117 +169,99 @@ function executeC(source: string): RunResult {
   }
 }
 
-function splitCppStream(body: string): string[] {
-  return body
-    .split(/<</)
-    .map(segment => segment.trim())
-    .filter(Boolean);
-}
+type JSCPPModule = {
+  run: (code: string, input?: string, config?: JSCPPConfig) => number;
+};
 
-function convertCppStream(body: string, target: '__cout' | '__cerr'): string {
-  const segments = splitCppStream(body);
-  if (!segments.length) {
-    return `${target}();`;
+type JSCPPConfig = {
+  stdio?: {
+    write?: (text: string) => void;
+  };
+  maxTimeout?: number;
+};
+
+let jscppInstance: JSCPPModule | null = null;
+let jscppLoading: Promise<JSCPPModule> | null = null;
+
+async function ensureJSCPP(): Promise<JSCPPModule> {
+  if (jscppInstance) {
+    return jscppInstance;
   }
-  const args = segments.map(segment => {
-    if (segment === '__ENDL' || segment === 'std::endl' || segment === 'endl') {
-      return '__ENDL';
-    }
-    return segment.replace(/^std::/, '');
-  });
-  return `${target}(${args.join(', ')});`;
+  if (jscppLoading) {
+    return jscppLoading;
+  }
+  if (typeof window === 'undefined') {
+    throw new Error('C++ runtime is only available in the browser.');
+  }
+  jscppLoading = import('JSCPP')
+    .then(module => {
+      const runtime = (module as { default?: JSCPPModule }).default ?? (module as unknown as JSCPPModule);
+      if (!runtime || typeof runtime.run !== 'function') {
+        throw new Error('Failed to load C++ runtime.');
+      }
+      jscppInstance = runtime;
+      return runtime;
+    })
+    .finally(() => {
+      jscppLoading = null;
+    });
+  return jscppLoading;
 }
 
-function transpileCppToJavaScript(source: string): string {
+function prepareCppSource(source: string): string {
+  if (!/\bstd::/.test(source)) {
+    return source;
+  }
+
   let code = source;
-  code = code.replace(/#include[^\n]*\n/g, '\n');
-  code = code.replace(/using\s+namespace\s+std\s*;?/g, '');
-  code = code.replace(/\bconstexpr\s+/g, '');
-  code = code.replace(/\bstd::endl\b/g, '__ENDL');
-  code = code.replace(/std::cout\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cout'));
-  code = code.replace(/std::cerr\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cerr'));
-  code = code.replace(/\bcout\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cout'));
-  code = code.replace(/\bcerr\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cerr'));
-  code = code.replace(/\bstd::string\b/g, 'string');
-  code = code.replace(/\bstd::/g, '');
-  code = transpileCToJavaScript(code);
-  code = code.replace(/\bstring\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/\bvector<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/\barray<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/\bmap<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/\bset<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/for\s*\(\s*(?:size_t|long\s+long)\s+/g, 'for (let ');
-  return code;
+  const hasUsingNamespaceStd = /using\s+namespace\s+std\s*;/.test(code);
+
+  if (!hasUsingNamespaceStd) {
+    const lines = code.split(/\r?\n/);
+    const insertIndex = lines.findIndex(line => {
+      const trimmed = line.trim();
+      return trimmed.length > 0 && !trimmed.startsWith('#include');
+    });
+
+    const index = insertIndex === -1 ? lines.length : insertIndex;
+    const updatedLines = [...lines.slice(0, index), 'using namespace std;', ...lines.slice(index)];
+    code = updatedLines.join('\n');
+  }
+
+  return code.replace(/\bstd::/g, '');
 }
 
-function executeCpp(source: string): RunResult {
-  let transformed: string;
+async function executeCpp(source: string): Promise<RunResult> {
+  let runtime: JSCPPModule;
   try {
-    transformed = transpileCppToJavaScript(source);
+    runtime = await ensureJSCPP();
   } catch (error) {
     return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
   }
 
-  const runtimeSource = [
-    `'use strict';`,
-    'const __output = [];',
-    'const __stderr = [];',
-    `const formatC = ${formatCPrintf.toString()};`,
-    'const __printC = (...args) => {',
-    '  const [first, ...rest] = args;',
-    '  const text = formatC(first, rest);',
-    '  __output.push(text);',
-    '};',
-    'const __printChar = value => {',
-    "  const character = typeof value === 'number' ? String.fromCharCode(value) : String(value ?? '');",
-    '  __output.push(character);',
-    '};',
-    'const __ENDL = Symbol.for("cpp.endl");',
-    'const __cout = (...args) => {',
-    '  args.forEach(arg => {',
-    '    if (arg === __ENDL) {',
-    "      __output.push('\n');",
-    '      return;',
-    '    }',
-    "    __output.push(String(arg ?? ''));",
-    '  });',
-    '};',
-    'const __cerr = (...args) => {',
-    '  args.forEach(arg => {',
-    '    if (arg === __ENDL) {',
-    "      __stderr.push('\n');",
-    '      return;',
-    '    }',
-    "    __stderr.push(String(arg ?? ''));",
-    '  });',
-    '};',
-    transformed,
-    "if (typeof main === 'function') {",
-    '  const exitCode = main();',
-    "  if (typeof exitCode === 'number' && exitCode !== 0) {",
-    "    __stderr.push(`Program exited with code ${exitCode}`);",
-    '  }',
-    '}',
-    'const __result = { stdout: __output.join(""), stderr: __stderr.join("") };',
-    'return __result;'
-  ].join('\n');
-
-  const runtime = new Function(runtimeSource);
+  const stdoutChunks: string[] = [];
 
   try {
-    const outcome = runtime() as unknown;
-    if (
-      outcome &&
-      typeof outcome === 'object' &&
-      'stdout' in (outcome as Record<string, unknown>) &&
-      'stderr' in (outcome as Record<string, unknown>)
-    ) {
-      const { stdout, stderr } = outcome as { stdout: string; stderr: string };
-      return { stdout, stderr };
+    const prepared = prepareCppSource(source);
+    const exitCode = runtime.run(prepared, '', {
+      maxTimeout: 3000,
+      stdio: {
+        write: text => {
+          if (typeof text === 'string' && text.length > 0) {
+            stdoutChunks.push(text);
+          }
+        }
+      }
+    });
+
+    const stdout = stdoutChunks.join('');
+    if (typeof exitCode === 'number' && exitCode !== 0) {
+      return { stdout, stderr: `Program exited with code ${exitCode}` };
     }
-    return { stdout: '', stderr: '' };
+    return { stdout, stderr: '' };
   } catch (error) {
-    return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
+    const stderr = error instanceof Error ? error.message : String(error);
+    return { stdout: stdoutChunks.join(''), stderr };
   }
 }
 
