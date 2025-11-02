@@ -11,7 +11,7 @@ import { clsx } from 'clsx';
 import { useState, useEffect } from 'react';
 
 import type { SupportedLanguage } from '@/lib/project';
-import { ExecutablePreview } from './ExecutablePreview';
+import { ExecutablePreview } from '@/components/ExecutablePreview';
 
 type PreviewMode = 'sandpack' | 'code' | 'message';
 
