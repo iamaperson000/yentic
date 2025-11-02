@@ -62,15 +62,25 @@ export function Preview({
             }}
           >
             <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col">
-              <SandpackLayout className="!h-full !min-h-0 !flex-1 !border-none !bg-transparent !shadow-none">
+              <SandpackLayout
+                className="!h-full !min-h-0 !w-full !border-none !bg-transparent !shadow-none"
+                style={{
+                  gridTemplateColumns: 'minmax(0, 1fr)',
+                  gridTemplateRows: 'minmax(0, 1fr)',
+                  padding: 0,
+                  gap: 0
+                }}
+              >
                 <SandpackPreview
                   showOpenInCodeSandbox={false}
-                  className="!h-full !min-h-0 !w-full !flex-1 !bg-transparent"
+                  className="!flex !h-full !min-h-0 !w-full !flex-1 !flex-col !bg-transparent"
                   style={{
                     height: '100%',
                     minHeight: 0,
                     width: '100%',
                     flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
                     background: 'transparent',
                     border: 'none',
                     boxShadow: 'none'
