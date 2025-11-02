@@ -54,61 +54,140 @@ const languageIcons: Record<string, ReactNode> = {
 };
 
 const defaultIcon = (
-  <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 text-slate-300">
+  <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 text-white/70">
     <rect x="4" y="4" width="16" height="16" rx="3" className="fill-none stroke-current stroke-[1.5]" />
     <path d="M9 8h6m-6 4h6m-6 4h3" className="fill-none stroke-current stroke-[1.5]" />
   </svg>
 );
 
+const accentGradient: Record<string, string> = {
+  emerald: 'from-emerald-300/40 via-emerald-400/10 to-transparent',
+  sky: 'from-sky-300/40 via-sky-400/10 to-transparent',
+  violet: 'from-violet-300/40 via-violet-400/10 to-transparent',
+  amber: 'from-amber-300/40 via-amber-400/10 to-transparent'
+};
+
+const accentGlow: Record<string, string> = {
+  emerald: 'shadow-[0_0_25px_rgba(16,185,129,0.35)]',
+  sky: 'shadow-[0_0_25px_rgba(56,189,248,0.35)]',
+  violet: 'shadow-[0_0_25px_rgba(139,92,246,0.35)]',
+  amber: 'shadow-[0_0_25px_rgba(245,158,11,0.35)]'
+};
+
+const highlights = [
+  'Live Sandpack preview',
+  'Runtime & console streaming',
+  'Instant project scaffolding'
+];
+
 export default function WorkspacePicker() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-12 px-6 py-16">
-        <header className="flex flex-col gap-3 text-center">
-          <h1 className="text-3xl font-semibold sm:text-4xl">Choose your language</h1>
-          <p className="text-sm text-slate-400 sm:text-base">
-            Launch a workspace configured for your stack.
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#04060d] via-[#080c1a] to-[#05060a] text-white">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-24 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" />
+        <div className="absolute bottom-0 right-[-10%] h-96 w-96 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="absolute -bottom-32 left-[-10%] h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
+      </div>
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-40" />
+
+      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-12 px-6 py-12 sm:px-10 sm:py-16">
+        <nav className="flex items-center justify-between text-sm text-white/60">
+          <Link
+            href="/"
+            className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 font-medium text-white/80 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10">
+              <svg viewBox="0 0 20 20" aria-hidden className="h-3.5 w-3.5">
+                <path
+                  d="M11.75 5.75 8 9.5l3.75 3.75"
+                  className="fill-none stroke-current stroke-[1.5]"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            Back to home
+          </Link>
+          <span className="hidden items-center gap-2 uppercase tracking-[0.3em] text-white/40 sm:inline-flex">
+            <span className="h-1 w-1 rounded-full bg-emerald-300" aria-hidden />
+            Yentic IDE
+          </span>
+        </nav>
+
+        <header className="flex flex-col gap-6 text-center sm:gap-8">
+          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-white/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" aria-hidden />
+            Launch your stack
+          </div>
+          <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
+            Pick a workspace that matches your flow
+          </h1>
+          <p className="mx-auto max-w-2xl text-base text-white/70 sm:text-lg">
+            Each workspace is pre-tuned with starter files, runtime defaults, and UI accents that mirror the marketing experience.
+            Choose a language to dive straight into building.
           </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            {highlights.map(highlight => (
+              <span
+                key={highlight}
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white/60"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/70" aria-hidden />
+                {highlight}
+              </span>
+            ))}
+          </div>
         </header>
-        <div className="grid gap-4 md:grid-cols-2">
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {workspaceList.map(workspace => {
             const icon = languageIcons[workspace.slug] ?? defaultIcon;
+            const gradient = accentGradient[workspace.accent] ?? accentGradient.emerald;
+            const glow = accentGlow[workspace.accent] ?? accentGlow.emerald;
             return (
               <Link
                 key={workspace.slug}
                 href={`/ide/${workspace.slug}`}
-                className="group flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-6 transition hover:border-slate-700 hover:bg-slate-900"
+                className={`group relative flex min-h-[220px] flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 transition duration-300 hover:-translate-y-1.5 hover:border-white/20 hover:bg-white/10 ${glow}`}
               >
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 text-slate-100">
+                <div
+                  aria-hidden
+                  className={`pointer-events-none absolute inset-0 opacity-0 transition duration-300 group-hover:opacity-100`}
+                >
+                  <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`} />
+                </div>
+                <span className="relative inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-black/40 text-white shadow-lg shadow-black/20 transition duration-300 group-hover:scale-105">
                   {icon}
                 </span>
-                <div className="flex flex-col gap-1 text-left">
-                  <h2 className="text-lg font-semibold">{workspace.title}</h2>
-                  <p className="text-sm text-slate-400">{workspace.description}</p>
+                <div className="relative flex flex-col gap-1 text-left">
+                  <h2 className="text-lg font-semibold text-white">{workspace.title}</h2>
+                  <p className="text-sm text-white/60">{workspace.description}</p>
                 </div>
-                <span className="mt-auto inline-flex items-center gap-2 text-sm font-medium text-emerald-200">
-                  Open workspace
-                  <span aria-hidden className="transition group-hover:translate-x-1">→</span>
-                </span>
+                <div className="relative mt-auto flex items-center justify-between pt-2 text-sm font-semibold text-emerald-200">
+                  <span className="inline-flex items-center gap-2">
+                    Open workspace
+                    <span aria-hidden className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+                  </span>
+                  <span className="text-[0.7rem] uppercase tracking-[0.25em] text-white/40">Ready</span>
+                </div>
               </Link>
             );
           })}
-        </div>
-        <p className="text-center text-xs text-slate-500">
-          Need another language? Let us know at{' '}
-          <a className="text-emerald-200" href="mailto:hello@yentic.com">
-            hello@yentic.com
-          </a>
-          .
-        </p>
-        <div className="flex justify-center">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 rounded-md border border-slate-800 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-700 hover:text-white"
-          >
-            Back to home
-          </Link>
-        </div>
+        </section>
+
+        <footer className="flex flex-col items-center gap-4 pb-6 text-center text-xs text-white/50 sm:flex-row sm:justify-between sm:text-left">
+          <p>
+            Need another language? Let us know at{' '}
+            <a className="text-emerald-200 underline decoration-emerald-400/60 underline-offset-4" href="mailto:hello@yentic.com">
+              hello@yentic.com
+            </a>
+            .
+          </p>
+          <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[0.7rem] uppercase tracking-[0.3em] text-white/40">
+            <span className="h-1 w-1 rounded-full bg-emerald-300" aria-hidden />
+            Always a click away
+          </div>
+        </footer>
       </div>
     </div>
   );
