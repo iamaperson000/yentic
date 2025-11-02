@@ -122,8 +122,8 @@ function RuntimePreview({
     computedStatus === 'running'
       ? 'border-amber-300/50 bg-amber-400/10 text-amber-100'
       : computedStatus === 'error'
-        ? 'border-rose-400/60 bg-rose-400/15 text-rose-100'
-        : 'border-emerald-400/60 bg-emerald-400/15 text-emerald-100';
+        ? 'border-rose-400/60 bg-rose-500/20 text-rose-100'
+        : 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100';
 
   const statusLabel =
     computedStatus === 'running'
@@ -136,36 +136,35 @@ function RuntimePreview({
 
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.03] px-4 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">{runtimeLabel}</span>
+      <div className="flex items-center justify-between border-b border-slate-800/70 bg-slate-950/60 px-4 py-3">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-400">{runtimeLabel}</span>
         <span className={clsx('inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.25em]', badgeClass)}>
           <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
           {statusLabel}
         </span>
       </div>
-      <div className="relative flex flex-1 flex-col bg-[#02030c]/80">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.18),_transparent_60%)]" />
-        <div className="relative flex flex-1 flex-col gap-4 overflow-hidden p-4 text-sm text-white/80">
+      <div className="relative flex flex-1 flex-col bg-slate-950/70">
+        <div className="relative flex flex-1 flex-col gap-4 overflow-hidden p-4 text-sm text-slate-200/90">
           {computedErrorMessage ? (
-            <div className="rounded-2xl border border-rose-400/40 bg-rose-400/10 px-4 py-3 text-rose-100">
+            <div className="rounded-xl border border-rose-400/40 bg-rose-500/15 px-4 py-3 text-rose-100">
               {computedErrorMessage}
             </div>
           ) : null}
-          <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-            <div className="border-b border-white/10 bg-black/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/45">
+          <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60">
+            <div className="border-b border-slate-800 bg-slate-950/60 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
               Output
             </div>
-            <div ref={scrollRef} className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed text-white/80">
+            <div ref={scrollRef} className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed text-slate-200/90">
               {displayStdout ? (
                 <pre className="whitespace-pre-wrap break-words">{displayStdout}</pre>
               ) : (
-                <span className="text-white/40">{computedStatus === 'running' ? 'Executing…' : 'No output yet.'}</span>
+                <span className="text-slate-500">{computedStatus === 'running' ? 'Executing…' : 'No output yet.'}</span>
               )}
             </div>
           </div>
           {displayStderr ? (
-            <div className="flex flex-col overflow-hidden rounded-2xl border border-rose-400/30 bg-rose-400/10">
-              <div className="border-b border-rose-400/30 bg-black/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-rose-100/80">
+            <div className="flex flex-col overflow-hidden rounded-xl border border-rose-400/40 bg-rose-500/15">
+              <div className="border-b border-rose-400/40 bg-transparent px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-rose-100/85">
                 Errors
               </div>
               <div className="max-h-48 overflow-auto p-4 font-mono text-[13px] leading-relaxed text-rose-100/90">
@@ -174,7 +173,7 @@ function RuntimePreview({
             </div>
           ) : null}
           {computedStatus === 'idle' && !displayStderr && !displayStdout ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/60">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-400">
               Start typing to see the program run automatically.
             </div>
           ) : null}
@@ -336,14 +335,14 @@ function LiveConsolePanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#04060f]/85 text-white/80">
-      <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.03] px-4 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">Console</span>
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-slate-950/70 text-slate-200/90">
+      <div className="flex items-center justify-between border-b border-slate-800/70 bg-slate-950/60 px-4 py-3">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-400">Console</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleClear}
-            className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/25 hover:text-white"
+            className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
           >
             Clear
           </button>
@@ -351,7 +350,7 @@ function LiveConsolePanel() {
       </div>
       <div ref={listRef} className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed">
         {entries.length === 0 ? (
-          <span className="text-white/45">Console output will appear here. Use the input below to run JavaScript.</span>
+          <span className="text-slate-500">Console output will appear here. Use the input below to run JavaScript.</span>
         ) : (
           <ul className="space-y-2">
             {entries.map(entry => {
@@ -361,12 +360,12 @@ function LiveConsolePanel() {
                   : entry.type === 'warn'
                     ? 'text-amber-200'
                     : entry.type === 'info'
-                      ? 'text-white/60'
+                      ? 'text-slate-400'
                       : entry.type === 'command'
                         ? 'text-sky-200'
                         : entry.type === 'result'
                           ? 'text-emerald-200'
-                          : 'text-white/80';
+                          : 'text-slate-200';
               return (
                 <li key={entry.id} className={clsx('whitespace-pre-wrap break-words', baseClass)}>
                   {entry.type === 'command' ? `> ${entry.text}` : entry.text}
@@ -381,7 +380,7 @@ function LiveConsolePanel() {
           event.preventDefault();
           void runCommand();
         }}
-        className="border-t border-white/10 bg-[#030512]/90 px-4 py-3"
+        className="border-t border-slate-800/70 bg-slate-950/60 px-4 py-3"
       >
         <div className="flex items-end gap-3">
           <div className="flex-1">
@@ -394,12 +393,12 @@ function LiveConsolePanel() {
               onChange={event => setInput(event.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="console.log('Hello from Yentic!')"
-              className="h-24 w-full resize-none rounded-2xl border border-white/10 bg-black/40 px-3 py-2 font-mono text-[13px] text-white/80 placeholder:text-white/30 focus:border-emerald-300/70 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
+              className="h-24 w-full resize-none rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 font-mono text-[13px] text-slate-200/90 placeholder:text-slate-500 focus:border-emerald-300/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
             />
           </div>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/50 bg-emerald-400/20 px-4 py-2 text-sm font-semibold uppercase tracking-[0.3em] text-emerald-100 transition hover:border-emerald-300/70 hover:bg-emerald-400/30"
+            className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/60 bg-emerald-500/20 px-4 py-2 text-sm font-semibold uppercase tracking-[0.3em] text-emerald-100 transition hover:border-emerald-300/70 hover:bg-emerald-500/30"
           >
             Run
           </button>
@@ -556,10 +555,10 @@ export function Preview({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">{label}</span>
+      <div className="flex items-center gap-3 border-b border-slate-800/70 bg-slate-950/60 px-4 py-3">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-400">{label}</span>
         {effectiveMode === 'sandpack' ? (
-          <div className="flex items-center gap-1.5 text-white/60">
+          <div className="flex items-center gap-1.5 text-slate-400">
             <button
               type="button"
               onClick={() => setActiveSandpackView('preview')}
@@ -567,7 +566,7 @@ export function Preview({
                 'relative rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] transition',
                 activeSandpackView === 'preview'
                   ? 'bg-emerald-400/90 text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
-                  : 'border border-white/10 bg-transparent text-white/60 hover:border-white/25 hover:text-white/80'
+                  : 'border border-slate-700 bg-transparent text-slate-300 hover:border-slate-500 hover:text-slate-100'
               )}
             >
               Preview
@@ -579,7 +578,7 @@ export function Preview({
                 'relative rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] transition',
                 activeSandpackView === 'console'
                   ? 'bg-emerald-400/90 text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
-                  : 'border border-white/10 bg-transparent text-white/60 hover:border-white/25 hover:text-white/80'
+                  : 'border border-slate-700 bg-transparent text-slate-300 hover:border-slate-500 hover:text-slate-100'
               )}
             >
               Console
@@ -587,8 +586,7 @@ export function Preview({
           </div>
         ) : null}
       </div>
-      <div className="relative flex flex-1 min-h-0">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.18),_transparent_60%)]" />
+      <div className="relative flex flex-1 min-h-0 bg-slate-950/70">
         {effectiveMode === 'sandpack' ? (
           <SandpackProvider
             files={files}
@@ -658,20 +656,20 @@ export function Preview({
           <RuntimePreview code={activeFileCode ?? ''} language={activeFileLanguage} />
         ) : effectiveMode === 'code' ? (
           <div className="relative flex h-full flex-col overflow-hidden">
-            <div className="relative flex items-center justify-between border-b border-white/10 bg-[#050814]/80 px-4 py-2 text-xs text-white/60">
+            <div className="relative flex items-center justify-between border-b border-slate-800/70 bg-slate-950/60 px-4 py-3 text-xs text-slate-400">
               <span className="truncate">{activePath.replace(/^[\/]/, '')}</span>
-              <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-white/50">
+              <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-400">
                 Viewing
               </span>
             </div>
-            <div className="relative flex-1 bg-[#02030c]/85">
-              <pre className="h-full w-full overflow-auto whitespace-pre-wrap break-words bg-[#05060f]/60 p-6 font-mono text-sm text-white/80">
+            <div className="relative flex-1 bg-slate-950/70">
+              <pre className="h-full w-full overflow-auto whitespace-pre-wrap break-words bg-slate-950/60 p-6 font-mono text-sm text-slate-200/90">
                 <code>{activeFileCode ?? ''}</code>
               </pre>
             </div>
           </div>
         ) : (
-          <div className="flex h-full items-center justify-center px-8 text-center text-sm text-white/60">
+          <div className="flex h-full items-center justify-center px-8 text-center text-sm text-slate-400">
             {disabledMessage ?? 'Preview is not available for this workspace yet.'}
           </div>
         )}
