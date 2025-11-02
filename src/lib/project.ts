@@ -149,8 +149,7 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'sky',
     defaultActivePath: 'main.py',
     newFilePlaceholder: 'script.py',
-    previewMode: 'code',
-    previewMessage: 'Live execution preview is coming soon for Python workspaces.',
+    previewMode: 'runtime',
     starter: pythonStarter
   },
   c: {
@@ -160,8 +159,7 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'violet',
     defaultActivePath: 'main.c',
     newFilePlaceholder: 'program.c',
-    previewMode: 'code',
-    previewMessage: 'Live execution preview is not available for C workspaces yet.',
+    previewMode: 'runtime',
     starter: cStarter
   },
   java: {
@@ -171,8 +169,7 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'amber',
     defaultActivePath: 'Main.java',
     newFilePlaceholder: 'App.java',
-    previewMode: 'code',
-    previewMessage: 'Live execution preview is coming soon for Java workspaces.',
+    previewMode: 'runtime',
     starter: javaStarter
   }
 };
