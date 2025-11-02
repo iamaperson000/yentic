@@ -102,7 +102,7 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
   'index.js': {
     path: 'index.js',
     language: 'javascript',
-    code: "function mount(){const app=document.getElementById('app');if(!app)return;app.innerHTML='<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id=\"btn\">Click me</button><pre id=\"out\"></pre>';const button=document.getElementById('btn');const output=document.getElementById('out');if(!button||!output)return;button.addEventListener('click',()=>{const now=new Date().toLocaleTimeString();const line='Clicked at '+now;output.textContent=output.textContent?output.textContent+'\\n'+line:line;});}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',mount);}else{mount();}"
+    code: "function mount(){const app=document.getElementById('app');if(!app)return;app.innerHTML='<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id=\"btn\">Click me</button><pre id=\"out\"></pre>';const btn=document.getElementById('btn');const out=document.getElementById('out');if(!btn||!out)return;btn.addEventListener('click',()=>{const now=new Date().toLocaleTimeString();out.textContent+='Clicked at '+now+'\\n';});}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',mount);}else{mount();}"
   }
 };
 
