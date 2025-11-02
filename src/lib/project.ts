@@ -84,11 +84,11 @@ const webStarter: ProjectFileMap = {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Yentic Starter</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div id="app"></div>
-    <script src="/index.js"></script>
+    <script type="module" src="./index.js"></script>
   </body>
 </html>`
   },
@@ -102,7 +102,7 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
   'index.js': {
     path: 'index.js',
     language: 'javascript',
-    code: 'function mount() {\n  const app = document.getElementById(\'app\');\n  if (!app) return;\n  app.innerHTML =\n    \'<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id="btn">Click me</button><pre id="out"></pre>\';\n  document.getElementById(\'btn\').addEventListener(\'click\', () => {\n    const now = new Date().toLocaleTimeString();\n    document.getElementById(\'out\').textContent += \'\\nClicked at \' + now;\n  });\n}\nif (document.readyState === \'loading\') {\n  document.addEventListener(\'DOMContentLoaded\', mount);\n} else {\n  mount();\n}'
+    code: "import './styles.css';\n\nfunction mount() {\n  const app = document.getElementById('app');\n  if (!app) return;\n  app.innerHTML =\n    '<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id=\"btn\">Click me</button><pre id=\"out\"></pre>';\n  const button = document.getElementById('btn');\n  const output = document.getElementById('out');\n  if (button && output) {\n    button.addEventListener('click', () => {\n      const now = new Date().toLocaleTimeString();\n      output.textContent += '\\nClicked at ' + now;\n    });\n  }\n}\n\nif (document.readyState === 'loading') {\n  document.addEventListener('DOMContentLoaded', mount);\n} else {\n  mount();\n}\n"
   }
 };
 
