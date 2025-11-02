@@ -329,7 +329,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                   placeholder={config.newFilePlaceholder}
                 />
               </div>
-              <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#060a1c]/80 shadow-[0_30px_90px_rgba(17,25,56,0.5)]">
+              <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#060a1c]/80 shadow-[0_30px_90px_rgba(17,25,56,0.5)]">
                 <Editor value={code} language={lang} onChange={setActiveCode} />
               </div>
               <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#040811]/85 shadow-[0_30px_90px_rgba(11,22,55,0.5)]">
