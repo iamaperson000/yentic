@@ -1,190 +1,446 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { notFound } from 'next/navigation';
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
 
-import { workspaceList } from '@/lib/project';
+import { Editor } from '@/components/Editor';
+import { FileExplorer } from '@/components/FileExplorer';
+import { Preview } from '@/components/Preview';
+import {
+  ensureUniquePath,
+  getStarterProject,
+  inferLanguage,
+  loadProject,
+  saveProject,
+  scaffoldFor,
+  type ProjectFileMap,
+  type SupportedLanguage,
+  type WorkspaceSlug,
+  workspaceConfigs
+} from '@/lib/project';
 
-const accentMap: Record<string, string> = {
-  emerald: 'from-emerald-400/20 via-emerald-400/10 to-emerald-500/5 text-emerald-200',
-  sky: 'from-sky-400/20 via-sky-400/10 to-sky-500/5 text-sky-200',
-  violet: 'from-violet-400/20 via-violet-400/10 to-violet-500/5 text-violet-200',
-  amber: 'from-amber-400/25 via-amber-400/10 to-amber-500/5 text-amber-100'
+function formatTime(date: Date | null) {
+  if (!date) return null;
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+type WorkspacePageProps = {
+  params: Promise<{ language: string }>;
 };
 
-export default function WorkspacePicker() {
-  const [query, setQuery] = useState('');
-  const [selectedSlug, setSelectedSlug] = useState<string>(workspaceList[0]?.slug ?? 'web');
+export default function WorkspacePage({ params }: WorkspacePageProps) {
+  const { language } = use(params);
+  const slug = language as WorkspaceSlug;
+  const workspace = workspaceConfigs[slug];
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredWorkspaces = useMemo(() => {
-    if (!normalizedQuery) return workspaceList;
-    return workspaceList.filter(workspace => {
-      const haystack = `${workspace.title} ${workspace.description}`.toLowerCase();
-      return haystack.includes(normalizedQuery);
+  if (!workspace) {
+    notFound();
+  }
+
+  const config = workspace;
+
+  const [files, setFiles] = useState<ProjectFileMap>(() => getStarterProject(slug));
+  const [activePath, setActivePath] = useState<string>(config.defaultActivePath);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState<boolean>(false);
+  const [newFileName, setNewFileName] = useState<string>('');
+  const [newFileLanguage, setNewFileLanguage] = useState<SupportedLanguage | 'auto'>('auto');
+  const [newFileError, setNewFileError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const stored = loadProject(slug);
+    if (stored && Object.keys(stored).length) {
+      setFiles(stored);
+      const preferred = stored[config.defaultActivePath]
+        ? config.defaultActivePath
+        : Object.keys(stored).sort((a, b) => a.localeCompare(b))[0];
+      setActivePath(preferred);
+    } else {
+      const starter = getStarterProject(slug);
+      setFiles(starter);
+      setActivePath(config.defaultActivePath);
+    }
+  }, [slug, config.defaultActivePath]);
+
+  useEffect(() => {
+    if (!files || !Object.keys(files).length) return;
+    setIsSaving(true);
+    const timeout = window.setTimeout(() => {
+      saveProject(slug, files);
+      setIsSaving(false);
+      setLastSavedAt(new Date());
+    }, 400);
+    return () => window.clearTimeout(timeout);
+  }, [files, slug]);
+
+  const code = files[activePath]?.code ?? '';
+  const lang = files[activePath]?.language ?? 'javascript';
+
+  const setActiveCode = useCallback((next: string) => {
+    setFiles(prev => {
+      const target = prev[activePath];
+      if (!target) return prev;
+      return { ...prev, [activePath]: { ...target, code: next } };
     });
-  }, [normalizedQuery]);
+  }, [activePath]);
 
-  const selectedWorkspace = useMemo(() => {
-    return workspaceList.find(workspace => workspace.slug === selectedSlug) ?? workspaceList[0];
-  }, [selectedSlug]);
+  const onRename = useCallback(
+    (oldPath: string, newPathRaw: string): string | null => {
+      const nextPath = newPathRaw.trim();
+      if (!nextPath) {
+        return 'File name cannot be empty.';
+      }
+      if (nextPath === oldPath) {
+        return null;
+      }
+
+      let error: string | null = null;
+      let renamed = false;
+
+      setFiles(prev => {
+        if (!prev[oldPath]) {
+          error = 'The original file could not be found.';
+          return prev;
+        }
+        if (prev[nextPath]) {
+          error = 'A file with that name already exists.';
+          return prev;
+        }
+
+        const { [oldPath]: oldFile, ...rest } = prev;
+        renamed = true;
+        return { ...rest, [nextPath]: { ...oldFile, path: nextPath } };
+      });
+
+      if (!error && renamed && activePath === oldPath) {
+        setActivePath(nextPath);
+      }
+
+      return error;
+    },
+    [activePath]
+  );
+
+  const onDelete = useCallback((path: string) => {
+    let nextActivePath = activePath;
+    let shouldUpdateActive = false;
+
+    setFiles(prev => {
+      if (!prev[path]) return prev;
+      const nextFiles = { ...prev };
+      delete nextFiles[path];
+      const remaining = Object.keys(nextFiles).sort((a, b) => a.localeCompare(b));
+
+      if (!remaining.length) {
+        nextActivePath = config.defaultActivePath;
+        shouldUpdateActive = true;
+        return getStarterProject(slug);
+      }
+
+      if (path === activePath) {
+        nextActivePath = remaining[0];
+        shouldUpdateActive = true;
+      }
+
+      return nextFiles;
+    });
+
+    if (shouldUpdateActive) {
+      setActivePath(nextActivePath);
+    }
+  }, [activePath, slug, config.defaultActivePath]);
+
+  const onCreate = useCallback(
+    (rawPath: string, language?: SupportedLanguage): string => {
+      const desired = rawPath.trim() || config.newFilePlaceholder;
+      let nextPath = desired;
+      setFiles(prev => {
+        const safePath = ensureUniquePath(desired, prev);
+        nextPath = safePath;
+        const fileLanguage = language ?? inferLanguage(safePath);
+        return {
+          ...prev,
+          [safePath]: {
+            path: safePath,
+            language: fileLanguage,
+            code: scaffoldFor(safePath, fileLanguage)
+          }
+        };
+      });
+      setActivePath(nextPath);
+      return nextPath;
+    },
+    [config.newFilePlaceholder]
+  );
+
+  const handleSave = useCallback(() => {
+    saveProject(slug, files);
+    setLastSavedAt(new Date());
+    setIsSaving(false);
+  }, [files, slug]);
+
+  const sandpackFiles = useMemo(() => {
+    const map: Record<string, { code: string }> = {};
+    Object.values(files).forEach(f => {
+      map[`/${f.path}`] = { code: f.code };
+    });
+    return map;
+  }, [files]);
+
+  const formattedTime = formatTime(lastSavedAt);
+  const savedLabel = isSaving ? 'Saving…' : formattedTime ? `Saved at ${formattedTime}` : 'Synced';
+
+  const statusBadgeClass = isSaving
+    ? 'inline-flex items-center rounded-full border border-amber-300/40 bg-amber-300/10 px-3 py-1 text-xs font-medium text-amber-100'
+    : 'inline-flex items-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100';
+
+  const toolbarButtonBaseClass =
+    'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70';
+  const toolbarButtonClass =
+    `${toolbarButtonBaseClass} border border-white/15 bg-white/10 text-white/90 hover:border-white/25 hover:bg-white/15`;
+  const resetButtonClass =
+    `${toolbarButtonBaseClass} border border-rose-400/40 bg-rose-400/10 text-rose-100 hover:border-rose-300/60 hover:bg-rose-400/20`;
+
+  const resetWorkspace = useCallback(() => {
+    const confirmed = window.confirm(
+      'Reset this workspace to the starter files? This will replace your current files.'
+    );
+    if (!confirmed) {
+      return;
+    }
+    const starter = getStarterProject(slug);
+    setFiles(starter);
+    setActivePath(config.defaultActivePath);
+    saveProject(slug, starter);
+    setLastSavedAt(new Date());
+    setIsSaving(false);
+  }, [slug, config.defaultActivePath]);
+
+  const pushToast = useCallback((next: { kind: 'success' | 'error'; message: string }) => {
+    setToast(next);
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 3600);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const closeCreateDialog = useCallback(() => {
+    setIsCreateDialogOpen(false);
+    setNewFileName('');
+    setNewFileLanguage('auto');
+    setNewFileError(null);
+  }, []);
+
+  const submitCreateDialog = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmed = newFileName.trim();
+      if (!trimmed) {
+        setNewFileError('Please provide a file name.');
+        return;
+      }
+      const language = newFileLanguage === 'auto' ? undefined : newFileLanguage;
+      const createdPath = onCreate(trimmed, language);
+      pushToast({ kind: 'success', message: `Created ${createdPath}` });
+      closeCreateDialog();
+    },
+    [newFileName, newFileLanguage, onCreate, pushToast, closeCreateDialog]
+  );
+
+  const languageOptions: Array<{ value: SupportedLanguage | 'auto'; label: string }> = [
+    { value: 'auto', label: 'Auto-detect' },
+    { value: 'html', label: 'HTML' },
+    { value: 'css', label: 'CSS' },
+    { value: 'javascript', label: 'JavaScript' },
+    { value: 'python', label: 'Python' },
+    { value: 'c', label: 'C' },
+    { value: 'java', label: 'Java' }
+  ];
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#05060f] via-[#050414] to-[#02030a] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.22),_transparent_58%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.16),_transparent_60%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(56,189,248,0.14),_transparent_60%)]" />
-      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-14 px-6 py-20">
-        <header className="flex flex-col gap-4 text-center">
-          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/50">
-            Yentic Workspaces
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.25),_transparent_60%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.18),_transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(16,185,129,0.12),_transparent_58%)]" />
+      <div className="relative flex min-h-screen flex-col">
+        <header className="flex items-center justify-between border-b border-white/10 bg-black/30 px-8 py-5 backdrop-blur">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/15"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400 text-base font-semibold text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.45)]">
+              Y
+            </span>
+            Back to home
+          </Link>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-white/60">
+            <span className={statusBadgeClass}>{savedLabel}</span>
+            <div className="hidden h-4 w-px bg-white/15 sm:block" />
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => setIsCreateDialogOpen(true)} className={toolbarButtonClass}>
+                New file
+              </button>
+              <button onClick={handleSave} className={toolbarButtonClass}>
+                Save now
+              </button>
+              <button onClick={resetWorkspace} className={resetButtonClass}>
+                Reset workspace
+              </button>
+            </div>
           </div>
-          <h1 className="text-4xl font-semibold sm:text-5xl">Choose your starting language</h1>
-          <p className="mx-auto max-w-2xl text-base text-white/70 sm:text-lg">
-            Filter the catalog or pick from the dropdown to explore each workspace&apos;s tailored starter files and tooling.
-          </p>
         </header>
+        <main className="flex flex-1 flex-col gap-6 px-8 py-8 min-h-0">
+          <div className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_40px_120px_rgba(10,18,41,0.45)] backdrop-blur-xl">
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.35em] text-white/60">
+              {config.title}
+            </div>
+            <div className="grid gap-2">
+              <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">{config.title} workspace</h1>
+              <p className="max-w-3xl text-sm text-white/70 sm:text-base">{config.description}</p>
+            </div>
+          </div>
+          <div className="relative flex flex-1 flex-col min-h-0">
+            <div className="grid flex-1 gap-6 rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_40px_120px_rgba(10,18,41,0.45)] backdrop-blur-2xl h-full min-h-0 lg:grid-cols-[300px_minmax(0,1.05fr)_minmax(0,1fr)]">
+              <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04),0_24px_70px_rgba(5,10,25,0.45)]">
+                <FileExplorer
+                  files={files}
+                  activePath={activePath}
+                  onSelect={setActivePath}
+                  onRename={onRename}
+                  onDelete={onDelete}
+                  onOpenCreateDialog={() => setIsCreateDialogOpen(true)}
+                  onFeedback={pushToast}
+                  placeholder={config.newFilePlaceholder}
+                />
+              </div>
+              <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#060a1c]/80 shadow-[0_30px_90px_rgba(17,25,56,0.5)]">
+                <Editor value={code} language={lang} onChange={setActiveCode} />
+              </div>
+              <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#040811]/85 shadow-[0_30px_90px_rgba(11,22,55,0.5)]">
+                <Preview
+                  files={sandpackFiles}
+                  activePath={`/${activePath}`}
+                  template={config.previewTemplate}
+                  mode={config.previewMode}
+                  disabledMessage={config.previewMessage}
+                  activeFileCode={code}
+                  activeFileLanguage={lang}
+                />
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
 
-        <div className="grid gap-10 lg:grid-cols-[360px_minmax(0,1fr)]">
-          <section className="space-y-6 rounded-3xl border border-white/10 bg-white/[0.04] p-8 shadow-[0_40px_120px_rgba(10,18,41,0.45)] backdrop-blur-xl">
+      {toast ? (
+        <div className="pointer-events-none fixed inset-x-0 top-6 flex justify-center px-4">
+          <div
+            className={`pointer-events-auto inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-lg backdrop-blur ${
+              toast.kind === 'success'
+                ? 'border-emerald-400/40 bg-emerald-400/20 text-emerald-100'
+                : 'border-rose-400/40 bg-rose-400/20 text-rose-100'
+            }`}
+          >
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/30 text-xs font-semibold uppercase tracking-[0.2em]">
+              {toast.kind === 'success' ? 'OK' : 'ERR'}
+            </span>
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {isCreateDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur">
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#070b18] p-8 text-white shadow-[0_40px_120px_rgba(8,15,40,0.65)]">
+            <button
+              type="button"
+              className="absolute right-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:border-white/25 hover:text-white"
+              onClick={closeCreateDialog}
+            >
+              <span className="sr-only">Close create file dialog</span>
+              ×
+            </button>
             <div className="space-y-2">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/40">
-                Quick start
+                New file
               </span>
-              <h2 className="text-2xl font-semibold">Preview a workspace</h2>
-              <p className="text-sm text-white/65">
-                Select a language to see what&apos;s included before you launch into the editor.
-              </p>
+              <h2 className="text-2xl font-semibold">Create a fresh file</h2>
+              <p className="text-sm text-white/60">Name your file and optionally choose a language. We&apos;ll scaffold it for you instantly.</p>
             </div>
-
-            <label className="block text-left">
-              <span className="text-xs font-semibold uppercase tracking-[0.3em] text-white/40">Language</span>
-              <div className="relative mt-2">
-                <select
-                  value={selectedSlug}
-                  onChange={event => setSelectedSlug(event.target.value)}
-                  className="w-full appearance-none rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white focus:border-emerald-300/70 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
-                >
-                  {workspaceList.map(workspace => (
-                    <option key={workspace.slug} value={workspace.slug} className="bg-[#05060f] text-white">
-                      {workspace.title}
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-white/40">▾</span>
-              </div>
-            </label>
-
-            {selectedWorkspace ? (
-              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.06] p-6 shadow-[0_30px_80px_rgba(10,18,41,0.5)]">
-                <div
-                  className={`pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-gradient-to-br ${
-                    accentMap[selectedWorkspace.accent] ?? 'from-white/10 to-white/0'
-                  } blur-3xl opacity-70`}
-                />
-                <div className="relative space-y-4">
-                  <div className="space-y-2">
-                    <span className="text-sm font-semibold uppercase tracking-[0.3em] text-white/40">
-                      {selectedWorkspace.title}
-                    </span>
-                    <h3 className="text-2xl font-semibold text-white">{selectedWorkspace.title}</h3>
-                    <p className="text-sm text-white/70">{selectedWorkspace.description}</p>
-                  </div>
-                  <Link
-                    href={`/ide/${selectedWorkspace.slug}`}
-                    className="inline-flex items-center gap-2 rounded-full border border-emerald-400/70 bg-emerald-400/90 px-5 py-2 text-sm font-semibold text-slate-950 shadow-[0_15px_45px_rgba(16,185,129,0.35)] transition hover:bg-emerald-300"
-                  >
-                    Launch workspace
-                    <span aria-hidden>→</span>
-                  </Link>
-                </div>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="space-y-6 rounded-3xl border border-white/10 bg-white/[0.02] p-8 shadow-[0_40px_120px_rgba(10,18,41,0.35)] backdrop-blur-lg">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold">All workspaces</h2>
-                <p className="text-sm text-white/55">Search or skim the list—hover any entry to preview it on the left.</p>
-              </div>
-              <div className="relative w-full max-w-xs">
+            <form onSubmit={submitCreateDialog} className="mt-6 space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.3em] text-white/40">File name</label>
                 <input
-                  value={query}
-                  onChange={event => setQuery(event.target.value)}
-                  placeholder="Search languages"
-                  className="w-full rounded-full border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-emerald-300/60 focus:outline-none"
+                  autoFocus
+                  value={newFileName}
+                  onChange={event => {
+                    setNewFileName(event.target.value);
+                    if (newFileError) {
+                      setNewFileError(null);
+                    }
+                  }}
+                  placeholder={config.newFilePlaceholder}
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-white/30 focus:border-emerald-300/70 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
                 />
-                <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-white/40">⌕</span>
               </div>
-            </div>
-
-            <div className="custom-scrollbar max-h-[520px] space-y-4 overflow-y-auto pr-2">
-              {filteredWorkspaces.length ? (
-                filteredWorkspaces.map(workspace => {
-                  const isSelected = workspace.slug === selectedSlug;
-                  return (
-                    <div
-                      key={workspace.slug}
-                      className={
-                        'relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.05] p-5 transition hover:border-white/20 hover:bg-white/[0.08]'
-                      }
-                      onMouseEnter={() => setSelectedSlug(workspace.slug)}
-                    >
-                      <div
-                        className={`pointer-events-none absolute -right-14 -top-14 h-36 w-36 rounded-full bg-gradient-to-br ${
-                          accentMap[workspace.accent] ?? 'from-white/10 to-white/0'
-                        } blur-3xl opacity-60`}
-                      />
-                      <div className="relative flex flex-col gap-4">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-white/40">
-                            <span>{workspace.title}</span>
-                            {isSelected ? (
-                              <span className="inline-flex items-center rounded-full border border-emerald-300/60 bg-emerald-300/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
-                                Selected
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="text-sm text-white/70">{workspace.description}</p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedSlug(workspace.slug)}
-                            className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-1.5 text-xs text-white/70 transition hover:border-white/35 hover:text-white"
-                          >
-                            Preview details
-                          </button>
-                          <Link
-                            href={`/ide/${workspace.slug}`}
-                            className="inline-flex items-center gap-2 rounded-full border border-emerald-400/60 bg-emerald-400/90 px-4 py-1.5 text-xs font-semibold text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.3)] transition hover:bg-emerald-300"
-                          >
-                            Open
-                            <span aria-hidden>→</span>
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="rounded-3xl border border-white/10 bg-black/40 px-6 py-10 text-center text-sm text-white/60">
-                  No workspaces match that search just yet. Try a different keyword or reach out at{' '}
-                  <a className="text-emerald-200 underline decoration-emerald-300/60 underline-offset-4" href="mailto:hello@yentic.com">
-                    hello@yentic.com
-                  </a>
-                  .
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.3em] text-white/40">Language</label>
+                <div className="relative">
+                  <select
+                    value={newFileLanguage}
+                    onChange={event => setNewFileLanguage(event.target.value as SupportedLanguage | 'auto')}
+                    className="w-full appearance-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white focus:border-emerald-300/70 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                  >
+                    {languageOptions.map(option => (
+                      <option key={option.value} value={option.value} className="bg-[#070b18] text-white">
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-white/40">▾</span>
                 </div>
-              )}
-            </div>
-          </section>
+                <p className="text-[11px] text-white/35">Auto-detect chooses a language based on the file extension.</p>
+              </div>
+              {newFileError ? (
+                <div className="rounded-2xl border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                  {newFileError}
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeCreateDialog}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm text-white/70 transition hover:border-white/30 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-400/70 bg-emerald-400/90 px-5 py-2 text-sm font-semibold text-slate-950 shadow-[0_15px_45px_rgba(16,185,129,0.35)] transition hover:bg-emerald-300"
+                >
+                  Create file
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-
-        <p className="text-center text-xs text-white/40">
-          More languages are on the way. Let us know what you want to build: <a className="text-emerald-200 underline decoration-emerald-300/60 underline-offset-4" href="mailto:hello@yentic.com">hello@yentic.com</a>.
-        </p>
-      </div>
+      ) : null}
     </div>
   );
 }
