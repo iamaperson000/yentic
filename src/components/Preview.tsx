@@ -4,8 +4,11 @@ import {
   SandpackProvider,
   SandpackLayout,
   SandpackPreview,
-  SandpackCodeEditor
+  SandpackCodeEditor,
+  SandpackConsole
 } from '@codesandbox/sandpack-react';
+import { clsx } from 'clsx';
+import { useState } from 'react';
 
 import type { SupportedLanguage } from '@/lib/project';
 import { ExecutablePreview } from './ExecutablePreview';
@@ -41,6 +44,8 @@ export function Preview({
     effectiveMode === 'code' &&
     (activeFileLanguage === 'python' || activeFileLanguage === 'c' || activeFileLanguage === 'java');
 
+  const [activeSandpackView, setActiveSandpackView] = useState<'preview' | 'console'>('preview');
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-white/10 bg-white/[0.03] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">
@@ -57,11 +62,37 @@ export function Preview({
               activeFile: activePath,
               showTabs: false,
               showNavigator: false,
-              showConsole: false,
+              showConsole: true,
               showOpenInCodeSandbox: false
             }}
           >
             <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col">
+              <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.04] px-4 py-2 text-[11px] font-medium uppercase tracking-[0.3em] text-white/50">
+                <button
+                  type="button"
+                  onClick={() => setActiveSandpackView('preview')}
+                  className={clsx(
+                    'relative rounded-full px-3 py-1 text-[10px] font-semibold tracking-[0.25em] transition',
+                    activeSandpackView === 'preview'
+                      ? 'bg-emerald-400/90 text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
+                      : 'border border-white/10 bg-transparent text-white/60 hover:border-white/25 hover:text-white/80'
+                  )}
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSandpackView('console')}
+                  className={clsx(
+                    'relative rounded-full px-3 py-1 text-[10px] font-semibold tracking-[0.25em] transition',
+                    activeSandpackView === 'console'
+                      ? 'bg-emerald-400/90 text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
+                      : 'border border-white/10 bg-transparent text-white/60 hover:border-white/25 hover:text-white/80'
+                  )}
+                >
+                  Console
+                </button>
+              </div>
               <SandpackLayout
                 className="!h-full !min-h-0 !w-full !border-none !bg-transparent !shadow-none"
                 style={{
@@ -71,19 +102,48 @@ export function Preview({
                   gap: 0
                 }}
               >
-                <SandpackPreview
-                  showOpenInCodeSandbox={false}
-                  className="!flex !h-full !min-h-0 !w-full !flex-1 !flex-col !bg-transparent"
+                <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+                  <SandpackPreview
+                    showOpenInCodeSandbox={false}
+                    className={clsx(
+                      '!flex !h-full !min-h-0 !w-full !flex-1 !flex-col !bg-transparent',
+                      activeSandpackView !== 'preview' && 'hidden'
+                    )}
+                    style={{
+                      height: '100%',
+                      minHeight: 0,
+                      width: '100%',
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      background: 'transparent',
+                      border: 'none',
+                      boxShadow: 'none'
+                    }}
+                  />
+                  <SandpackConsole
+                    showHeader={false}
+                    className={clsx(
+                      '!flex !h-full !min-h-0 !w-full !flex-1 !flex-col !bg-[#05060f]/70 !text-[13px]',
+                      activeSandpackView !== 'console' && 'hidden'
+                    )}
+                    style={{
+                      height: '100%',
+                      minHeight: 0,
+                      width: '100%',
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      background: 'rgba(5, 6, 15, 0.7)',
+                      border: 'none',
+                      boxShadow: 'none'
+                    }}
+                  />
+                </div>
+                <SandpackCodeEditor
+                  className="hidden"
                   style={{
-                    height: '100%',
-                    minHeight: 0,
-                    width: '100%',
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    background: 'transparent',
-                    border: 'none',
-                    boxShadow: 'none'
+                    display: 'none'
                   }}
                 />
                 <SandpackCodeEditor
