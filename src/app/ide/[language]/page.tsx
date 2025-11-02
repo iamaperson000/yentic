@@ -102,22 +102,32 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [activePath]);
 
   const onDelete = useCallback((path: string) => {
+    let nextActivePath = activePath;
+    let shouldUpdateActive = false;
+
     setFiles(prev => {
       if (!prev[path]) return prev;
       const nextFiles = { ...prev };
       delete nextFiles[path];
-      const remaining = Object.keys(nextFiles);
-      if (path === activePath) {
-        if (remaining.length) {
-          setActivePath(remaining.sort((a, b) => a.localeCompare(b))[0]);
-        } else {
-          const starter = getStarterProject(slug);
-          setActivePath(config.defaultActivePath);
-          return starter;
-        }
+      const remaining = Object.keys(nextFiles).sort((a, b) => a.localeCompare(b));
+
+      if (!remaining.length) {
+        nextActivePath = config.defaultActivePath;
+        shouldUpdateActive = true;
+        return getStarterProject(slug);
       }
-      return remaining.length ? nextFiles : getStarterProject(slug);
+
+      if (path === activePath) {
+        nextActivePath = remaining[0];
+        shouldUpdateActive = true;
+      }
+
+      return nextFiles;
     });
+
+    if (shouldUpdateActive) {
+      setActivePath(nextActivePath);
+    }
   }, [activePath, slug, config.defaultActivePath]);
 
   const onCreate = useCallback((rawPath: string, language?: SupportedLanguage) => {
@@ -160,8 +170,27 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     ? 'inline-flex items-center rounded-full border border-amber-300/40 bg-amber-300/10 px-3 py-1 text-xs font-medium text-amber-100'
     : 'inline-flex items-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100';
 
+  const toolbarButtonBaseClass =
+    'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70';
   const toolbarButtonClass =
-    'inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-medium text-white/90 transition hover:border-white/25 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70';
+    `${toolbarButtonBaseClass} border border-white/15 bg-white/10 text-white/90 hover:border-white/25 hover:bg-white/15`;
+  const resetButtonClass =
+    `${toolbarButtonBaseClass} border border-rose-400/40 bg-rose-400/10 text-rose-100 hover:border-rose-300/60 hover:bg-rose-400/20`;
+
+  const resetWorkspace = useCallback(() => {
+    const confirmed = window.confirm(
+      'Reset this workspace to the starter files? This will replace your current files.'
+    );
+    if (!confirmed) {
+      return;
+    }
+    const starter = getStarterProject(slug);
+    setFiles(starter);
+    setActivePath(config.defaultActivePath);
+    saveProject(slug, starter);
+    setLastSavedAt(new Date());
+    setIsSaving(false);
+  }, [slug, config.defaultActivePath]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#05060f] via-[#050414] to-[#02030a] text-white">
@@ -188,6 +217,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
               </button>
               <button onClick={handleSave} className={toolbarButtonClass}>
                 Save now
+              </button>
+              <button onClick={resetWorkspace} className={resetButtonClass}>
+                Reset workspace
               </button>
             </div>
           </div>
