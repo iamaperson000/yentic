@@ -84,11 +84,11 @@ const webStarter: ProjectFileMap = {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Yentic Starter</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div id="app"></div>
-    <script src="/index.js"></script>
+    <script type="module" src="./index.js"></script>
   </body>
 </html>`
   },
@@ -102,7 +102,7 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
   'index.js': {
     path: 'index.js',
     language: 'javascript',
-    code: 'function mount() {\n  const app = document.getElementById(\'app\');\n  if (!app) return;\n  app.innerHTML =\n    \'<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id="btn">Click me</button><pre id="out"></pre>\';\n  document.getElementById(\'btn\').addEventListener(\'click\', () => {\n    const now = new Date().toLocaleTimeString();\n    document.getElementById(\'out\').textContent += \'\\nClicked at \' + now;\n  });\n}\nif (document.readyState === \'loading\') {\n  document.addEventListener(\'DOMContentLoaded\', mount);\n} else {\n  mount();\n}'
+    code: "import './styles.css';\n\nfunction mount() {\n  const app = document.getElementById('app');\n  if (!app) return;\n  app.innerHTML =\n    '<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id=\"btn\">Click me</button><pre id=\"out\"></pre>';\n  const button = document.getElementById('btn');\n  const output = document.getElementById('out');\n  if (button && output) {\n    button.addEventListener('click', () => {\n      const now = new Date().toLocaleTimeString();\n      output.textContent += '\\nClicked at ' + now;\n    });\n  }\n}\n\nif (document.readyState === 'loading') {\n  document.addEventListener('DOMContentLoaded', mount);\n} else {\n  mount();\n}\n"
   }
 };
 
@@ -211,23 +211,93 @@ export function saveProject(slug: WorkspaceSlug, files: ProjectFileMap) {
   } catch {}
 }
 
+function ensureCssImport(code: string): { code: string; changed: boolean } {
+  if (code.includes("import './styles.css';")) {
+    return { code, changed: false };
+  }
+
+  return { code: "import './styles.css';\n" + code, changed: true };
+}
+
+function ensureStylesheetLink(html: string): { code: string; changed: boolean } {
+  if (html.includes('href="./styles.css"') || html.includes("href='./styles.css'")) {
+    return { code: html, changed: false };
+  }
+
+  if (!html.includes('</head>')) {
+    return { code: html, changed: false };
+  }
+
+  const linkTag = '    <link rel="stylesheet" href="./styles.css" />\n';
+  return { code: html.replace('</head>', `${linkTag}  </head>`), changed: true };
+}
+
+function ensureModuleScript(html: string): { code: string; changed: boolean } {
+  if (html.includes('<script type="module" src="./index.js"></script>')) {
+    return { code: html, changed: false };
+  }
+
+  if (html.includes('<script src="./index.js"></script>')) {
+    return {
+      code: html.replace('<script src="./index.js"></script>', '<script type="module" src="./index.js"></script>'),
+      changed: true
+    };
+  }
+
+  if (!html.includes('</body>')) {
+    return { code: html, changed: false };
+  }
+
+  const scriptTag = '    <script type="module" src="./index.js"></script>\n';
+  return { code: html.replace('</body>', `${scriptTag}  </body>`), changed: true };
+}
+
 function migrateProject(slug: WorkspaceSlug, files: ProjectFileMap): ProjectFileMap {
   if (slug !== 'web') {
     return files;
   }
 
-  const script = files['index.js'];
-  if (!script) {
-    return files;
-  }
-
-  // Only migrate if the code contains an obvious broken string
-  const isBroken = script.code.includes("document.getElementById('out').textContent += '\n");
-  if (!isBroken) {
-    return files;
-  }
-
   const next = cloneProject(files);
-  next['index.js'] = { ...next['index.js'], code: webStarter['index.js'].code };
-  return next;
+  let changed = false;
+
+  const script = files['index.js'];
+  if (script) {
+    const isBroken = script.code.includes("document.getElementById('out').textContent += '\\n");
+    if (isBroken) {
+      next['index.js'] = { ...next['index.js'], code: webStarter['index.js'].code };
+      changed = true;
+    } else {
+      const ensured = ensureCssImport(script.code);
+      if (ensured.changed) {
+        next['index.js'] = { ...next['index.js'], code: ensured.code };
+        changed = true;
+      }
+    }
+  }
+
+  if (!next['styles.css']) {
+    next['styles.css'] = { ...webStarter['styles.css'] };
+    changed = true;
+  }
+
+  const html = files['index.html'];
+  if (html) {
+    let updated = html.code;
+    const withLink = ensureStylesheetLink(updated);
+    if (withLink.changed) {
+      updated = withLink.code;
+      changed = true;
+    }
+    const withModuleScript = ensureModuleScript(updated);
+    if (withModuleScript.changed) {
+      updated = withModuleScript.code;
+      changed = true;
+    }
+    if (changed) {
+      next['index.html'] = { ...next['index.html'], code: updated };
+    }
+  }
+
+  return changed ? next : files;
 }
+
