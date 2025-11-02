@@ -48,8 +48,36 @@ export function Preview({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-white/10 bg-white/[0.03] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">
-        {label}
+      <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">{label}</span>
+        {effectiveMode === 'sandpack' ? (
+          <div className="flex items-center gap-2 text-white/60">
+            <button
+              type="button"
+              onClick={() => setActiveSandpackView('preview')}
+              className={clsx(
+                'relative rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] transition',
+                activeSandpackView === 'preview'
+                  ? 'bg-emerald-400/90 text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
+                  : 'border border-white/10 bg-transparent text-white/60 hover:border-white/25 hover:text-white/80'
+              )}
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSandpackView('console')}
+              className={clsx(
+                'relative rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] transition',
+                activeSandpackView === 'console'
+                  ? 'bg-emerald-400/90 text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
+                  : 'border border-white/10 bg-transparent text-white/60 hover:border-white/25 hover:text-white/80'
+              )}
+            >
+              Console
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="relative flex flex-1 min-h-0">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.18),_transparent_60%)]" />
@@ -67,32 +95,6 @@ export function Preview({
             }}
           >
             <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col">
-              <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.04] px-4 py-2 text-[11px] font-medium uppercase tracking-[0.3em] text-white/50">
-                <button
-                  type="button"
-                  onClick={() => setActiveSandpackView('preview')}
-                  className={clsx(
-                    'relative rounded-full px-3 py-1 text-[10px] font-semibold tracking-[0.25em] transition',
-                    activeSandpackView === 'preview'
-                      ? 'bg-emerald-400/90 text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
-                      : 'border border-white/10 bg-transparent text-white/60 hover:border-white/25 hover:text-white/80'
-                  )}
-                >
-                  Preview
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSandpackView('console')}
-                  className={clsx(
-                    'relative rounded-full px-3 py-1 text-[10px] font-semibold tracking-[0.25em] transition',
-                    activeSandpackView === 'console'
-                      ? 'bg-emerald-400/90 text-slate-950 shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
-                      : 'border border-white/10 bg-transparent text-white/60 hover:border-white/25 hover:text-white/80'
-                  )}
-                >
-                  Console
-                </button>
-              </div>
               <SandpackLayout
                 className="!h-full !min-h-0 !w-full !border-none !bg-transparent !shadow-none"
                 style={{
