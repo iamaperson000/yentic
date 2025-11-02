@@ -37,11 +37,11 @@ export function Preview({
     (activeFileLanguage === 'python' || activeFileLanguage === 'c' || activeFileLanguage === 'java');
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-white/10 bg-white/[0.03] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">
         {label}
       </div>
-      <div className="relative flex-1">
+      <div className="relative flex-1 min-h-0">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.18),_transparent_60%)]" />
         {effectiveMode === 'sandpack' ? (
           <SandpackProvider
@@ -52,12 +52,28 @@ export function Preview({
               activeFile: activePath,
               showTabs: false,
               showNavigator: false,
-              showConsole: false
+              showConsole: false,
+              showOpenInCodeSandbox: false
             }}
           >
-            <SandpackLayout style={{ height: '100%', background: 'transparent', border: 'none', boxShadow: 'none' }}>
-              <SandpackPreview style={{ height: '100%', background: 'transparent', border: 'none', boxShadow: 'none' }} />
-            </SandpackLayout>
+            <div className="relative z-10 flex h-full min-h-0 flex-col">
+              <SandpackLayout
+                className="!h-full !min-h-0 flex-1 !bg-transparent !border-none !shadow-none"
+                style={{ height: '100%', minHeight: 0, flex: 1, background: 'transparent', border: 'none', boxShadow: 'none' }}
+              >
+                <SandpackPreview
+                  className="!h-full !min-h-0 !bg-transparent"
+                  style={{
+                    height: '100%',
+                    minHeight: 0,
+                    width: '100%',
+                    background: 'transparent',
+                    border: 'none',
+                    boxShadow: 'none'
+                  }}
+                />
+              </SandpackLayout>
+            </div>
           </SandpackProvider>
         ) : effectiveMode === 'code' ? (
           isExecutable ? (

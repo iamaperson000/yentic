@@ -72,6 +72,10 @@ export function ExecutablePreview({ code, language, path }: ExecutablePreviewPro
   useEffect(() => {
     latestCode.current = code;
     if (!autoRun) {
+      if (pendingRun.current) {
+        clearTimeout(pendingRun.current);
+        pendingRun.current = null;
+      }
       return;
     }
     if (pendingRun.current) {
