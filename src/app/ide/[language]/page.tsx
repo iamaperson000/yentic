@@ -128,8 +128,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         }
 
         const { [oldPath]: oldFile, ...rest } = prev;
+        const nextLanguage = inferLanguage(nextPath);
         renamed = true;
-        return { ...rest, [nextPath]: { ...oldFile, path: nextPath } };
+        return { ...rest, [nextPath]: { ...oldFile, path: nextPath, language: nextLanguage } };
       });
 
       if (!error && renamed && activePath === oldPath) {
@@ -170,14 +171,13 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     }
   }, [activePath, slug, config.defaultActivePath]);
 
-  const onCreate = useCallback(
-    (rawPath: string, language?: SupportedLanguage): string => {
+  const onCreate = useCallback((rawPath: string): string => {
       const desired = rawPath.trim() || config.newFilePlaceholder;
       let nextPath = desired;
       setFiles(prev => {
         const safePath = ensureUniquePath(desired, prev);
         nextPath = safePath;
-        const fileLanguage = language ?? inferLanguage(safePath);
+        const fileLanguage = inferLanguage(safePath);
         return {
           ...prev,
           [safePath]: {
@@ -189,9 +189,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       });
       setActivePath(nextPath);
       return nextPath;
-    },
-    [config.newFilePlaceholder]
-  );
+    }, [config.newFilePlaceholder]);
 
   const handleSave = useCallback(() => {
     saveProject(slug, files);
@@ -253,7 +251,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     const activeFile = files[activePath];
     const activeLanguage = activeFile?.language;
     const placeholder = smartPlaceholder(config.newFilePlaceholder, activeLanguage);
-    const createdPath = onCreate(placeholder, activeLanguage);
+    const createdPath = onCreate(placeholder);
     setRecentlyCreatedPath(createdPath);
     pushToast({ kind: 'success', message: `Created ${createdPath}` });
   }, [files, activePath, config.newFilePlaceholder, onCreate, pushToast]);
@@ -273,81 +271,75 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [recentlyCreatedPath]);
 
   return (
-    <div className="relative min-h-screen bg-slate-950 text-slate-100">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(76,29,149,0.16),_transparent_60%)]" />
-      <div className="relative flex min-h-screen flex-col">
-        <header className="border-b border-slate-900/70 bg-slate-950/80 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-6 px-6 py-6 lg:px-10">
-            <div className="flex flex-1 flex-wrap items-center gap-6">
-              <Link
-                href="/"
-                className="inline-flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-emerald-400/60 hover:text-emerald-200"
-              >
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-400/90 text-base font-semibold text-slate-950 shadow-[0_12px_30px_rgba(16,185,129,0.35)]">
-                  Y
-                </span>
-                <span className="hidden sm:inline">Back to home</span>
-                <span className="sm:hidden">Home</span>
-              </Link>
-              <div className="min-w-0 space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">{config.title}</p>
-                <h1 className="text-2xl font-semibold text-slate-100 sm:text-3xl">{config.title} workspace</h1>
-                <p className="max-w-2xl text-sm text-slate-400">{config.description}</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-slate-400">
-              <span className={statusBadgeClass}>
-                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-                {savedLabel}
+    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+      <header className="border-b border-slate-900/80 bg-slate-950/70">
+        <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-emerald-400/60 hover:text-emerald-200"
+            >
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-400 text-sm font-semibold text-slate-950">
+                Y
               </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <button onClick={createSmartFile} className={primaryActionClass}>
-                  New file
-                </button>
-                <button onClick={handleSave} className={subtleActionClass}>
-                  Save now
-                </button>
-                <button onClick={resetWorkspace} className={dangerActionClass}>
-                  Reset workspace
-                </button>
-              </div>
+              <span className="hidden sm:inline">Back to home</span>
+              <span className="sm:hidden">Home</span>
+            </Link>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold text-slate-100 sm:text-xl">{config.title} workspace</h1>
+              <p className="mt-1 truncate text-sm text-slate-400">{config.description}</p>
             </div>
           </div>
-        </header>
-        <main className="flex flex-1 flex-col px-6 pb-10 pt-8 lg:px-10">
-          <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-6">
-            <div className="grid min-h-0 flex-1 gap-4 md:gap-6 lg:grid-cols-[260px_minmax(0,1.5fr)_minmax(0,1.2fr)] xl:grid-cols-[300px_minmax(0,1.6fr)_minmax(0,1.2fr)]">
-              <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-950/70">
-                <FileExplorer
-                  files={files}
-                  activePath={activePath}
-                  onSelect={setActivePath}
-                  onRename={onRename}
-                  onDelete={onDelete}
-                  onCreateFile={createSmartFile}
-                  newlyCreatedPath={recentlyCreatedPath}
-                  onFeedback={pushToast}
-                  placeholder={config.newFilePlaceholder}
-                />
-              </div>
-              <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-950/70">
-                <Editor value={code} language={lang} onChange={setActiveCode} />
-              </div>
-              <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-950/70">
-                <Preview
-                  files={sandpackFiles}
-                  activePath={`/${activePath}`}
-                  template={config.previewTemplate}
-                  mode={config.previewMode}
-                  disabledMessage={config.previewMessage}
-                  activeFileCode={code}
-                  activeFileLanguage={lang}
-                />
-              </div>
+          <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-slate-400">
+            <span className={statusBadgeClass}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+              {savedLabel}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={createSmartFile} className={primaryActionClass}>
+                New file
+              </button>
+              <button onClick={handleSave} className={subtleActionClass}>
+                Save now
+              </button>
+              <button onClick={resetWorkspace} className={dangerActionClass}>
+                Reset
+              </button>
             </div>
           </div>
-        </main>
-      </div>
+        </div>
+      </header>
+      <main className="flex flex-1 flex-col px-4 pb-8 pt-6 lg:px-8">
+        <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-4 md:gap-5 lg:grid-cols-[240px_minmax(0,1.8fr)_minmax(0,1.2fr)] xl:grid-cols-[260px_minmax(0,1.9fr)_minmax(0,1.2fr)]">
+          <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-900/80 bg-slate-950/80">
+            <FileExplorer
+              files={files}
+              activePath={activePath}
+              onSelect={setActivePath}
+              onRename={onRename}
+              onDelete={onDelete}
+              onCreateFile={createSmartFile}
+              newlyCreatedPath={recentlyCreatedPath}
+              onFeedback={pushToast}
+              placeholder={config.newFilePlaceholder}
+            />
+          </div>
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-900/80 bg-slate-950">
+            <Editor value={code} language={lang} onChange={setActiveCode} />
+          </div>
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-900/80 bg-slate-950">
+            <Preview
+              files={sandpackFiles}
+              activePath={`/${activePath}`}
+              template={config.previewTemplate}
+              mode={config.previewMode}
+              disabledMessage={config.previewMessage}
+              activeFileCode={code}
+              activeFileLanguage={lang}
+            />
+          </div>
+        </div>
+      </main>
 
       {toast ? (
         <div className="pointer-events-none fixed inset-x-0 top-6 flex justify-center px-4">
