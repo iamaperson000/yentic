@@ -58,7 +58,6 @@ textarea {
 }
 
 /* Sandpack layout overrides */
-
 .sp-layout,
 .sp-wrapper,
 .sp-preview,
@@ -68,6 +67,7 @@ textarea {
   min-height: 0;
   width: 100%;
   padding: 0 !important;
+  margin: 0 !important;
 }
 
 .sp-layout {
@@ -77,23 +77,26 @@ textarea {
   gap: 0 !important;
   grid-template-columns: minmax(0, 1fr) !important;
   grid-template-rows: minmax(0, 1fr) !important;
+  width: 100% !important;
 }
 
 .sp-preview,
 .sp-preview-container,
 .sp-preview-content {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto !important;
   flex-direction: column;
+  width: 100% !important;
 }
 
 .sp-preview-iframe {
-  width: 100%;
+  width: 100% !important;
   height: 100%;
   min-height: 0;
   flex: 1;
   border-radius: inherit;
   transform: none !important;
+  margin: 0 !important;
 }
 
 .sp-console,
