@@ -3,31 +3,31 @@ import Monaco from '@monaco-editor/react';
 export function Editor({ value, language, onChange }: { value: string; language: string; onChange: (v: string) => void; }) {
   const monacoLanguage = language === 'c' ? 'cpp' : language;
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-white/10 bg-white/[0.03] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">
-        Editor
-      </div>
-      <div className="relative flex-1">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.18),_transparent_60%)]" />
-        <Monaco
-          height="100%"
-          width="100%"
-          theme="vs-dark"
-          language={monacoLanguage === 'javascript' ? 'javascript' : monacoLanguage}
-          value={value}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 14,
-            tabSize: 2,
-            fontFamily: 'var(--font-mono)',
-            smoothScrolling: true,
-            lineHeight: 22,
-            scrollBeyondLastLine: false,
-            automaticLayout: true
-          }}
-          onChange={val => onChange(val ?? '')}
-        />
-      </div>
+    <div className="relative flex h-full min-h-0">
+      <Monaco
+        height="100%"
+        width="100%"
+        theme="vs-dark"
+        language={monacoLanguage === 'javascript' ? 'javascript' : monacoLanguage}
+        value={value}
+        options={{
+          minimap: { enabled: false },
+          fontSize: 15,
+          tabSize: 2,
+          fontFamily: 'var(--font-mono)',
+          smoothScrolling: true,
+          lineHeight: 22,
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          padding: { top: 12 },
+          glyphMargin: false,
+          lineDecorationsWidth: 8,
+          overviewRulerBorder: false,
+          renderLineHighlight: 'line',
+          wordWrap: 'off'
+        }}
+        onChange={val => onChange(val ?? '')}
+      />
     </div>
   );
 }
