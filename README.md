@@ -1,4 +1,4 @@
-## 🚀 Setup and Updating Yentic dev version
+## 🚀 Setup and Updating Yentic Developer Edition
 
 To get started with Yentic (the web IDE project), follow these steps:
 
