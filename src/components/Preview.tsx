@@ -305,12 +305,14 @@ function LiveConsolePanel() {
       }
       const text = formatConsoleData(item.data);
       if (!text) return;
+      const method = item.method as string;
       const type: ConsoleEntryType =
-  item.method === 'error'
-    ? 'error'
-    : item.method === 'warn' || item.method === 'warning'
-    ? 'warn'
-    : 'log';
+        method === 'error'
+          ? 'error'
+          : method === 'warn' || method === 'warning'
+          ? 'warn'
+          : 'log';
+      
 
       appendEntry({ id: `log-${item.id}`, type, text });
     });
