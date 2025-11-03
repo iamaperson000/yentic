@@ -49,6 +49,14 @@ type WorkspacePageProps = {
   params: Promise<{ language: string }>;
 };
 
+type SavedProject = {
+  id: string;
+  name: string;
+  language: string;
+  files: ProjectFileMap;
+  updatedAt: string;
+};
+
 export default function WorkspacePage({ params }: WorkspacePageProps) {
   const { language } = use(params);
   const slug = language as WorkspaceSlug;
@@ -66,6 +74,8 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [recentlyCreatedPath, setRecentlyCreatedPath] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const toastTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -84,15 +94,68 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [slug, config.defaultActivePath]);
 
   useEffect(() => {
+    async function loadProjects() {
+      try {
+        setIsLoadingProjects(true);
+        const res = await fetch("/api/projects");
+        if (res.ok) {
+          const data = await res.json();
+          setSavedProjects(data);
+          console.log("Loaded projects:", data);
+        } else {
+          console.warn("Failed to load projects");
+        }
+      } catch (err) {
+        console.error("Error loading projects:", err);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    }
+
+    loadProjects();
+
+    const interval = setInterval(loadProjects, 5000); // refresh every 5s
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     if (!files || !Object.keys(files).length) return;
-    setIsSaving(true);
-    const timeout = window.setTimeout(() => {
-      saveProject(slug, files);
-      setIsSaving(false);
-      setLastSavedAt(new Date());
-    }, 400);
+    const timeout = window.setTimeout(async () => {
+      setIsSaving(true);
+      try {
+        // Save to localStorage first (backup)
+        saveProject(slug, files);
+        
+        // Then auto-save to cloud
+        const payload = {
+          name: activePath || "Untitled Project",
+          language: files[activePath]?.language || "javascript",
+          files,
+        };
+        const res = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          setLastSavedAt(new Date());
+          // Refresh projects list
+          const projectsRes = await fetch("/api/projects");
+          if (projectsRes.ok) {
+            const projectsData = await projectsRes.json();
+            setSavedProjects(projectsData);
+          }
+        } else {
+          console.warn("Auto-save failed:", await res.text());
+        }
+      } catch (err) {
+        console.error("Auto-save error:", err);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 800); // slightly longer delay so it doesn't spam
     return () => window.clearTimeout(timeout);
-  }, [files, slug]);
+  }, [files, slug, activePath]);
 
   const code = files[activePath]?.code ?? '';
   const lang = files[activePath]?.language ?? 'javascript';
@@ -192,11 +255,75 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       return nextPath;
     }, [config.newFilePlaceholder]);
 
-  const handleSave = useCallback(() => {
-    saveProject(slug, files);
-    setLastSavedAt(new Date());
-    setIsSaving(false);
-  }, [files, slug]);
+  const pushToast = useCallback((next: { kind: 'success' | 'error'; message: string }) => {
+    setToast(next);
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 3600);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    
+    try {
+      const payload = {
+        name: activePath || "Untitled Project",
+        language: lang || "javascript",
+        files: files,
+      };
+
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const savedProject = await res.json();
+        setLastSavedAt(new Date());
+        setIsSaving(false);
+        pushToast({
+          kind: "success",
+          message: `✅ Project saved to cloud workspace!`,
+        });
+        
+        // Reload projects list
+        const projectsRes = await fetch("/api/projects");
+        if (projectsRes.ok) {
+          const projectsData = await projectsRes.json();
+          setSavedProjects(projectsData);
+        }
+      } else {
+        const error = await res.json();
+        setIsSaving(false);
+        pushToast({
+          kind: "error",
+          message: `❌ Save failed: ${error.error || "Unknown error"}`,
+        });
+      }
+    } catch (err) {
+      console.error("Save failed:", err);
+      setIsSaving(false);
+      pushToast({
+        kind: "error",
+        message: "❌ Save failed: network or auth issue",
+      });
+    }
+  }, [files, lang, activePath, pushToast]);
+
+  const loadSavedProject = useCallback((project: SavedProject) => {
+    setFiles(project.files);
+    const firstPath = Object.keys(project.files).sort()[0] || config.defaultActivePath;
+    setActivePath(firstPath);
+    pushToast({
+      kind: "success",
+      message: `✅ Loaded project: ${project.name}`,
+    });
+  }, [config.defaultActivePath, pushToast]);
 
   const sandpackFiles = useMemo(() => {
     const map: Record<string, { code: string }> = {};
@@ -222,6 +349,15 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const dangerActionClass =
     `${actionButtonBaseClass} border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:border-rose-300 hover:bg-rose-500/20 hover:text-rose-50`;
 
+  const createSmartFile = useCallback(() => {
+    const activeFile = files[activePath];
+    const activeLanguage = activeFile?.language;
+    const placeholder = smartPlaceholder(config.newFilePlaceholder, activeLanguage);
+    const createdPath = onCreate(placeholder);
+    setRecentlyCreatedPath(createdPath);
+    pushToast({ kind: 'success', message: `Created ${createdPath}` });
+  }, [files, activePath, config.newFilePlaceholder, onCreate, pushToast]);
+
   const resetWorkspace = useCallback(() => {
     const confirmed = window.confirm(
       'Reset this workspace to the starter files? This will replace your current files.'
@@ -236,26 +372,6 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     setLastSavedAt(new Date());
     setIsSaving(false);
   }, [slug, config.defaultActivePath]);
-
-  const pushToast = useCallback((next: { kind: 'success' | 'error'; message: string }) => {
-    setToast(next);
-    if (toastTimeoutRef.current) {
-      window.clearTimeout(toastTimeoutRef.current);
-    }
-    toastTimeoutRef.current = window.setTimeout(() => {
-      setToast(null);
-      toastTimeoutRef.current = null;
-    }, 3600);
-  }, []);
-
-  const createSmartFile = useCallback(() => {
-    const activeFile = files[activePath];
-    const activeLanguage = activeFile?.language;
-    const placeholder = smartPlaceholder(config.newFilePlaceholder, activeLanguage);
-    const createdPath = onCreate(placeholder);
-    setRecentlyCreatedPath(createdPath);
-    pushToast({ kind: 'success', message: `Created ${createdPath}` });
-  }, [files, activePath, config.newFilePlaceholder, onCreate, pushToast]);
 
   useEffect(() => {
     return () => {
@@ -322,17 +438,40 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         <main className="flex flex-1 flex-col px-4 pb-8 pt-6 lg:px-8">
           <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-4 md:gap-5 lg:grid-cols-[240px_minmax(0,1.8fr)_minmax(0,1.2fr)] xl:grid-cols-[260px_minmax(0,1.9fr)_minmax(0,1.2fr)]">
             <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/40">
-              <FileExplorer
-                files={files}
-                activePath={activePath}
-                onSelect={setActivePath}
-                onRename={onRename}
-                onDelete={onDelete}
-                onCreateFile={createSmartFile}
-                newlyCreatedPath={recentlyCreatedPath}
-                onFeedback={pushToast}
-                placeholder={config.newFilePlaceholder}
-              />
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <FileExplorer
+                  files={files}
+                  activePath={activePath}
+                  onSelect={setActivePath}
+                  onRename={onRename}
+                  onDelete={onDelete}
+                  onCreateFile={createSmartFile}
+                  newlyCreatedPath={recentlyCreatedPath}
+                  onFeedback={pushToast}
+                  placeholder={config.newFilePlaceholder}
+                />
+              </div>
+              <section className="border-t border-white/10 p-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60 mb-2">Saved Projects</h3>
+                <ul className="space-y-1 text-xs">
+                  {isLoadingProjects ? (
+                    <li className="text-white/40">Loading…</li>
+                  ) : savedProjects.length === 0 ? (
+                    <li className="text-white/40">No saved projects yet</li>
+                  ) : (
+                    savedProjects.map((p) => (
+                      <li
+                        key={p.id}
+                        className="cursor-pointer px-2 py-1 rounded hover:bg-white/10 transition text-white/70 hover:text-emerald-400"
+                        onClick={() => loadSavedProject(p)}
+                      >
+                        <div className="truncate font-medium">{p.name}</div>
+                        <div className="text-white/40 text-[10px]">{p.language}</div>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </section>
             </div>
             <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/40">
               <Editor value={code} language={lang} onChange={setActiveCode} />
