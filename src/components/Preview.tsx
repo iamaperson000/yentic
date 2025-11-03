@@ -494,13 +494,14 @@ function SandpackPreviewPane({ isVisible }: { isVisible: boolean }) {
         message.action === 'notification' &&
         message.notificationType === 'error'
       ) {
-        const title = typeof message.title === 'string' ? message.title.trim() : '';
-        const body =
-          typeof message.message === 'string'
-            ? message.message
-            : typeof message.body === 'string'
-              ? message.body
-              : '';
+        const title = typeof (message as any).title === 'string' ? (message as any).title.trim() : '';
+const body =
+  typeof (message as any).message === 'string'
+    ? (message as any).message
+    : typeof (message as any).body === 'string'
+    ? (message as any).body
+    : '';
+
         const combined = [title, body]
           .map(segment => segment.trim())
           .filter(Boolean)
