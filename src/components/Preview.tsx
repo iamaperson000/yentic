@@ -775,8 +775,6 @@ export function Preview({
               autoReload: autorunEnabled,
               recompileMode: autorunEnabled ? 'delayed' : 'immediate',
               recompileDelay: autorunEnabled ? 300 : 0,
-              showNavigator: false,
-              showConsole: true,
               showOpenInCodeSandbox: false
             }}
           >
