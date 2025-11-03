@@ -305,7 +305,13 @@ function LiveConsolePanel() {
       }
       const text = formatConsoleData(item.data);
       if (!text) return;
-      const type: ConsoleEntryType = item.method === 'error' ? 'error' : item.method === 'warning' ? 'warn' : 'log';
+      const type: ConsoleEntryType =
+  item.method === 'error'
+    ? 'error'
+    : item.method === 'warn' || item.method === 'warning'
+    ? 'warn'
+    : 'log';
+
       appendEntry({ id: `log-${item.id}`, type, text });
     });
   }, [appendEntry, logs]);
