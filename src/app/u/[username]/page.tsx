@@ -1,25 +1,38 @@
 import { notFound } from "next/navigation";
-
 import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-type Params = { username: string };
+export async function generateMetadata({
+  params,
+}: {
+  params: { username?: string };
+}) {
+  const username = await Promise.resolve(params?.username);
+  if (!username) return { title: "User | Yentic" };
 
-export async function generateMetadata({ params }: { params: Params }) {
   const user = await prisma.user.findUnique({
-    where: { username: params.username },
+    where: { username },
     select: { name: true, username: true },
   });
+
   const title = user ? `${user.username} | Yentic` : "User | Yentic";
   return { title };
 }
 
-export default async function UserPage({ params }: { params: Params }) {
+export default async function UserPage({
+  params,
+}: {
+  params: { username?: string };
+}) {
+  const username = await Promise.resolve(params?.username);
+  if (!username || typeof username !== "string") return notFound();
+
   const user = await prisma.user.findUnique({
-    where: { username: params.username },
+    where: { username },
     select: { id: true, name: true, username: true, bio: true, image: true },
   });
+
   if (!user) return notFound();
 
   return (
