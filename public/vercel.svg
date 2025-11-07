@@ -1,1 +1,6 @@
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000">
+  <!-- Background -->
+  <rect width="1155" height="1000" fill="#0a0f24"/>
+  <!-- Stylized "Y" -->
+  <path d="M 300 150 L 577.5 450 L 855 150 L 720 150 L 577.5 320 L 435 150 Z M 527.5 450 L 627.5 450 L 627.5 850 L 527.5 850 Z" fill="#00ff66"/>
+</svg>
