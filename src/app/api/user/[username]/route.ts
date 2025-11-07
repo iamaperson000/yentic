@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 
 import prisma from "@/lib/prisma"
 
 export async function GET(
-  _: Request,
-  { params }: { params: { username: string } },
+  _: NextRequest,
+  { params }: { params: Promise<{ username: string }> },
 ) {
-  const username = params.username?.toLowerCase()
+  const { username: rawUsername } = await params
+  const username = rawUsername?.toLowerCase()
 
   if (!username) {
     return NextResponse.json({ error: "Username is required" }, { status: 400 })

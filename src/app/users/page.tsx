@@ -4,18 +4,29 @@ import Link from "next/link"
 import prisma from "@/lib/prisma"
 
 export default async function UsersDirectoryPage() {
-  const users = await prisma.user.findMany({
-    where: { username: { not: null } },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      bio: true,
-      image: true,
-      createdAt: true,
-    },
-  })
+  let users: Array<{
+    id: string
+    name: string | null
+    username: string | null
+    bio: string | null
+    image: string | null
+    createdAt: Date
+  }> = []
+
+  if (process.env.DATABASE_URL) {
+    users = await prisma.user.findMany({
+      where: { username: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        bio: true,
+        image: true,
+        createdAt: true,
+      },
+    })
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-16 text-white">
