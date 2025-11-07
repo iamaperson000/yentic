@@ -1,3 +1,4 @@
+import JSCPP from 'JSCPP';
 import type { SupportedLanguage } from './project';
 
 const PYODIDE_URL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js';
@@ -113,6 +114,17 @@ function formatCPrintf(template: unknown, args: unknown[]): string {
   return remaining.length ? `${formatted} ${remaining.join(' ')}` : formatted;
 }
 
+function normalizeCFunctionParameters(params: string, options: { stripTypes?: boolean } = {}): string {
+  const trimmed = params.trim();
+  if (!trimmed || /^void\s*$/.test(trimmed)) {
+    return '';
+  }
+  if (options.stripTypes) {
+    return params.replace(/\b(int|float|double|long|short|char|bool)\s+/g, '').trim();
+  }
+  return trimmed;
+}
+
 function transpileCToJavaScript(source: string): string {
   let code = source;
   code = code.replace(/#include[^\n]*\n/g, '\n');
@@ -122,9 +134,9 @@ function transpileCToJavaScript(source: string): string {
   code = code.replace(/\b(int|float|double|long|short|char|bool)\s+\*/g, 'let ');
   code = code.replace(/\b(void|int|float|double|long|short|char|bool)\s+([A-Za-z_][\w]*)\s*\(([^)]*)\)/g, (_match, _type, name, params) => {
     if (name === 'main') {
-      return `function main(${params})`;
+      return `function main(${normalizeCFunctionParameters(params)})`;
     }
-    const updatedParams = params.replace(/\b(int|float|double|long|short|char|bool)\s+/g, '');
+    const updatedParams = normalizeCFunctionParameters(params, { stripTypes: true });
     return `function ${name}(${updatedParams})`;
   });
   code = code.replace(/\b(int|float|double|long|short|char|bool)\s+([A-Za-z_][\w]*)/g, 'let $2');
@@ -135,37 +147,72 @@ function transpileCToJavaScript(source: string): string {
   return code;
 }
 
-function executeC(source: string): RunResult {
-  const runtimeSource = [
-    `'use strict';`,
-    'const __output = [];',
-    `const formatC = ${formatCPrintf.toString()};`,
-    'const __printC = (...args) => {',
-    '  const [first, ...rest] = args;',
-    '  const text = formatC(first, rest);',
-    '  __output.push(text);',
-    '};',
-    'const __printChar = value => {',
-    "  const character = typeof value === 'number' ? String.fromCharCode(value) : String(value ?? '');",
-    '  __output.push(character);',
-    '};',
-    transpileCToJavaScript(source),
-    "if (typeof main === 'function') {",
-    '  const exitCode = main();',
-    "  if (typeof exitCode === 'number' && exitCode !== 0) {",
-    "    __printC('Program exited with code %d\\n', exitCode);",
-    '  }',
-    '}',
-    "return __output.join('');"
-  ].join('\n');
+function normalizeCSourceForInterpreter(source: string): string {
+  return source.replace(/\(\s*void\s*\)/g, '()');
+}
 
-  const runtime = new Function(runtimeSource);
+type ProcessStub = { stdout?: { write?: (chunk: string) => void } };
+
+function ensureProcessStdout(): () => void {
+  const globalObject = globalThis as typeof globalThis & { process?: ProcessStub };
+  const existingProcess = globalObject.process;
+
+  if (!existingProcess) {
+    globalObject.process = { stdout: { write: () => {} } };
+    return () => {
+      delete globalObject.process;
+    };
+  }
+
+  if (!existingProcess.stdout) {
+    existingProcess.stdout = { write: () => {} };
+    return () => {
+      delete existingProcess.stdout;
+    };
+  }
+
+  if (typeof existingProcess.stdout.write !== 'function') {
+    const previousWrite = existingProcess.stdout.write;
+    existingProcess.stdout.write = () => {};
+    return () => {
+      if (previousWrite === undefined) {
+        delete existingProcess.stdout!.write;
+      } else {
+        existingProcess.stdout!.write = previousWrite;
+      }
+    };
+  }
+
+  return () => {};
+}
+
+function executeC(source: string): RunResult {
+  const restoreProcess = ensureProcessStdout();
+  const normalizedSource = normalizeCSourceForInterpreter(source);
+  let stdout = '';
 
   try {
-    const stdout = runtime();
+    const exitCode = JSCPP.run(normalizedSource, '', {
+      stdio: {
+        write(chunk: string) {
+          stdout += chunk;
+        },
+        drain() {
+          return '';
+        }
+      }
+    });
+
+    if (typeof exitCode === 'number' && exitCode !== 0) {
+      stdout += `Program exited with code ${exitCode}\n`;
+    }
+
     return { stdout, stderr: '' };
   } catch (error) {
-    return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
+    const message = error instanceof Error ? error.message : String(error);
+    return { stdout, stderr: message };
+  } finally {
+    restoreProcess();
   }
 }
 
