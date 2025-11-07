@@ -47,6 +47,20 @@ function formatTime(date: Date | null) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function resolveWorkspaceFromProject(language: string, fallback: WorkspaceSlug): WorkspaceSlug {
+  if (language in workspaceConfigs) {
+    return language as WorkspaceSlug;
+  }
+  if (['html', 'css', 'javascript'].includes(language)) {
+    return 'web';
+  } 
+  if (language === 'python') return 'python';
+  if (language === 'c') return 'c';
+  if (language === 'cpp') return 'cpp';
+  if (language === 'java') return 'java';
+  return fallback;
+}
+
 type WorkspacePageProps = {
   params: Promise<{ language: string }>;
 };
