@@ -29,6 +29,8 @@ type PreviewProps = {
 
 const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'java']);
 
+const standardInputLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'java']);
+
 type RuntimeStatus = 'idle' | 'running' | 'ready' | 'error';
 
 type SandpackErrorNotification = {
@@ -203,6 +205,8 @@ function RuntimePreview({
   }, [stdout, stderr, status]);
 
   const isRunnable = Boolean(normalizedLanguage);
+  const supportsStandardInput =
+    normalizedLanguage !== undefined && standardInputLanguages.has(normalizedLanguage);
   const runtimeLabel = normalizedLanguage ? `Live Runtime · ${normalizedLanguage.toUpperCase()}` : 'Live Runtime';
 
   const computedStatus: RuntimeStatus = !isRunnable ? 'error' : status;
@@ -253,21 +257,22 @@ function RuntimePreview({
               {computedErrorMessage}
             </div>
           ) : null}
-          <div className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-            <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
-              Standard Input
+          {supportsStandardInput ? (
+            <div className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+              <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
+                Standard Input
+              </div>
+              <textarea
+                value={stdinValue}
+                onChange={event => setStdinValue(event.target.value)}
+                className="min-h-[80px] flex-1 bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30"
+                placeholder="Provide input for scanf or other stdin reads…"
+              />
+              <div className="border-t border-white/5 bg-black/20 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white/30">
+                Passed to program via stdin before execution
+              </div>
             </div>
-            <textarea
-              value={stdinValue}
-              onChange={event => setStdinValue(event.target.value)}
-              className="min-h-[80px] flex-1 bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30 disabled:text-white/30"
-              placeholder={isRunnable ? 'Provide input for scanf or other stdin reads…' : 'Select a runnable file to provide input.'}
-              disabled={!isRunnable}
-            />
-            <div className="border-t border-white/5 bg-black/20 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white/30">
-              Passed to program via stdin before execution
-            </div>
-          </div>
+          ) : null}
           <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
             <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
               Output
