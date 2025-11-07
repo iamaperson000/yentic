@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import AuthStatus from '@/components/AuthStatus'
 import { site } from '@/config/site'
 
 const highlights = [
@@ -56,11 +55,6 @@ const snippetLines = [
 export default function MarketingHome() {
   return (
     <>
-      {/* ✅ Sign-in bar at the top */}
-      <div className="flex justify-end mb-6">
-        <AuthStatus />
-      </div>
-
       <section className="grid gap-10 md:grid-cols-[1.15fr_0.85fr] md:items-center">
         <div className="flex flex-col gap-6">
           <span className="text-xs font-semibold uppercase tracking-[0.4em] text-emerald-300/80">
