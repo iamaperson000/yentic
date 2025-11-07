@@ -72,6 +72,65 @@ function RuntimePreview({
     }
   }, []);
 
+  const enqueueExecution = useCallback(
+    (trimmed: string, inputSnapshot: string): (() => void) | undefined => {
+      if (!normalizedLanguage) {
+        return undefined;
+      }
+
+      const nextId = runId.current + 1;
+      runId.current = nextId;
+
+      if (!trimmed) {
+        lastExecutedSource.current = '';
+        lastExecutedInput.current = inputSnapshot;
+        scheduleStateUpdate(() => {
+          setStatus('idle');
+          setStdout('');
+          setStderr('');
+          setErrorMessage(null);
+          setHasPendingChanges(false);
+        });
+        return undefined;
+      }
+
+      lastExecutedSource.current = trimmed;
+      lastExecutedInput.current = inputSnapshot;
+
+      scheduleStateUpdate(() => {
+        setStatus('running');
+        setErrorMessage(null);
+      });
+
+      const timeout = window.setTimeout(async () => {
+        try {
+          const result = await executeCode(normalizedLanguage, trimmed, inputSnapshot);
+          if (runId.current !== nextId) {
+            return;
+          }
+          setStdout(result.stdout);
+          setStderr(result.stderr);
+          setStatus(result.stderr ? 'error' : 'ready');
+          setHasPendingChanges(false);
+        } catch (error) {
+          if (runId.current !== nextId) {
+            return;
+          }
+          setStatus('error');
+          setStdout('');
+          setStderr('');
+          setErrorMessage(error instanceof Error ? error.message : String(error));
+          setHasPendingChanges(false);
+        }
+      }, 150);
+
+      return () => {
+        window.clearTimeout(timeout);
+      };
+    },
+    [normalizedLanguage, scheduleStateUpdate]
+  );
+
   useEffect(() => {
     if (!normalizedLanguage) {
       scheduleStateUpdate(() => {
@@ -103,6 +162,11 @@ function RuntimePreview({
       return;
     }
 
+    if (autorunEnabled) {
+      lastProcessedRun.current = runRequestId;
+      return;
+    }
+
     if (runRequestId === 0 || runRequestId === lastProcessedRun.current) {
       return;
     }
@@ -111,56 +175,27 @@ function RuntimePreview({
 
     const trimmed = code.trim();
     const inputSnapshot = stdinValue;
-    if (!trimmed) {
-      scheduleStateUpdate(() => {
-        setStatus('idle');
-        setStdout('');
-        setStderr('');
-        setErrorMessage(null);
-        lastExecutedSource.current = '';
-        lastExecutedInput.current = '';
-        setHasPendingChanges(false);
-      });
+    return enqueueExecution(trimmed, inputSnapshot);
+  }, [autorunEnabled, code, enqueueExecution, normalizedLanguage, runRequestId, stdinValue]);
+
+  useEffect(() => {
+    if (!normalizedLanguage || !autorunEnabled) {
       return;
     }
 
-    const nextId = runId.current + 1;
-    runId.current = nextId;
-    scheduleStateUpdate(() => {
-      setStatus('running');
-      setErrorMessage(null);
-    });
+    lastProcessedRun.current = runRequestId;
 
-    const timeout = window.setTimeout(async () => {
-      try {
-        const result = await executeCode(normalizedLanguage, trimmed, inputSnapshot);
-        if (runId.current !== nextId) {
-          return;
-        }
-        lastExecutedSource.current = trimmed;
-        lastExecutedInput.current = inputSnapshot;
-        setStdout(result.stdout);
-        setStderr(result.stderr);
-        setStatus(result.stderr ? 'error' : 'ready');
-        setHasPendingChanges(false);
-      } catch (error) {
-        if (runId.current !== nextId) {
-          return;
-        }
-        lastExecutedSource.current = trimmed;
-        lastExecutedInput.current = inputSnapshot;
-        setStatus('error');
-        setStdout('');
-        setStderr('');
-        setErrorMessage(error instanceof Error ? error.message : String(error));
-        setHasPendingChanges(false);
-      }
-    }, 150);
+    const trimmed = code.trim();
+    const inputSnapshot = stdinValue;
+    if (
+      trimmed === lastExecutedSource.current &&
+      inputSnapshot === lastExecutedInput.current
+    ) {
+      return;
+    }
 
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [autorunEnabled, code, normalizedLanguage, runRequestId, scheduleStateUpdate, stdinValue]);
+    return enqueueExecution(trimmed, inputSnapshot);
+  }, [autorunEnabled, code, enqueueExecution, normalizedLanguage, runRequestId, stdinValue]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
