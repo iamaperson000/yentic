@@ -31,6 +31,12 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
                 </Link>
               ))}
               <Link
+                href="/signup"
+                className="rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white/80 transition hover:border-white/40 hover:text-white"
+              >
+                Sign up
+              </Link>
+              <Link
                 href="/ide"
                 className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
               >
@@ -55,6 +61,14 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               </a>{' '}
               to follow the journey.
             </p>
+            <div className="flex flex-wrap gap-4 text-xs text-white/40">
+              <Link className="transition hover:text-white" href="/terms">
+                Terms &amp; Conditions
+              </Link>
+              <Link className="transition hover:text-white" href="/privacy">
+                Privacy Policy
+              </Link>
+            </div>
           </div>
         </footer>
       </div>
