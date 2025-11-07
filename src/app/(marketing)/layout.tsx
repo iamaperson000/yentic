@@ -61,6 +61,14 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
               </a>{' '}
               to follow the journey.
             </p>
+            <div className="flex flex-wrap gap-4 text-xs text-white/40">
+              <Link className="transition hover:text-white" href="/terms">
+                Terms &amp; Conditions
+              </Link>
+              <Link className="transition hover:text-white" href="/privacy">
+                Privacy Policy
+              </Link>
+            </div>
           </div>
         </footer>
       </div>
