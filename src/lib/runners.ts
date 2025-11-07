@@ -151,21 +151,27 @@ function normalizeCSourceForInterpreter(source: string): string {
   return source.replace(/\(\s*void\s*\)/g, '()');
 }
 
-type ProcessStub = { stdout?: { write?: (chunk: string) => void } };
+type ProcessStub = {
+  stdout?: {
+    write?: (chunk: string) => boolean;
+  };
+};
 
 function ensureProcessStdout(): () => void {
-  const globalObject = globalThis as typeof globalThis & { process?: ProcessStub };
+  const globalObject = globalThis as Omit<typeof globalThis, 'process'> & {
+    process?: ProcessStub;
+  };
   const existingProcess = globalObject.process;
 
   if (!existingProcess) {
-    globalObject.process = { stdout: { write: () => {} } };
+    globalObject.process = { stdout: { write: () => true } };
     return () => {
       delete globalObject.process;
     };
   }
 
   if (!existingProcess.stdout) {
-    existingProcess.stdout = { write: () => {} };
+    existingProcess.stdout = { write: () => true };
     return () => {
       delete existingProcess.stdout;
     };
@@ -173,7 +179,7 @@ function ensureProcessStdout(): () => void {
 
   if (typeof existingProcess.stdout.write !== 'function') {
     const previousWrite = existingProcess.stdout.write;
-    existingProcess.stdout.write = () => {};
+    existingProcess.stdout.write = () => true;
     return () => {
       if (previousWrite === undefined) {
         delete existingProcess.stdout!.write;
@@ -186,19 +192,17 @@ function ensureProcessStdout(): () => void {
   return () => {};
 }
 
-function executeC(source: string): RunResult {
+function executeC(source: string, stdin: string = ''): RunResult {
   const restoreProcess = ensureProcessStdout();
   const normalizedSource = normalizeCSourceForInterpreter(source);
   let stdout = '';
 
   try {
-    const exitCode = JSCPP.run(normalizedSource, '', {
+    const exitCode = JSCPP.run(normalizedSource, stdin, {
       stdio: {
         write(chunk: string) {
           stdout += chunk;
-        },
-        drain() {
-          return '';
+          return true;
         }
       }
     });
@@ -210,7 +214,10 @@ function executeC(source: string): RunResult {
     return { stdout, stderr: '' };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { stdout, stderr: message };
+    const normalizedMessage = message.includes('Memory overflow')
+      ? 'Program terminated with a memory overflow. Provide any required stdin input or review pointer usage.'
+      : message;
+    return { stdout, stderr: normalizedMessage };
   } finally {
     restoreProcess();
   }
@@ -465,7 +472,11 @@ async function executePython(source: string): Promise<RunResult> {
   }
 }
 
-export async function executeCode(language: ExecutableLanguage, source: string): Promise<RunResult> {
+export async function executeCode(
+  language: ExecutableLanguage,
+  source: string,
+  stdin: string = ''
+): Promise<RunResult> {
   if (!supportedLanguages.has(language)) {
     throw new Error(`Unsupported language: ${language}`);
   }
@@ -473,7 +484,7 @@ export async function executeCode(language: ExecutableLanguage, source: string):
     return executePython(source);
   }
   if (language === 'c') {
-    return executeC(source);
+    return executeC(source, stdin);
   }
   if (language === 'cpp') {
     return executeCpp(source);
