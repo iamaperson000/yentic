@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+import { useEffect, useRef, useState } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 
 function getInitials(value: string) {
@@ -13,6 +15,22 @@ function getInitials(value: string) {
 
 export default function AuthStatus() {
   const { data: session, status } = useSession()
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    function handleClick(event: MouseEvent) {
+      if (!menuRef.current) return
+      if (!menuRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
 
   if (status === 'loading') {
     return (
@@ -26,38 +44,81 @@ export default function AuthStatus() {
   if (session?.user) {
     const displayName = session.user.name ?? session.user.email ?? 'Account'
     const initials = getInitials(displayName || '') || 'Y'
+    const username = session.user.username ?? session.user.email ?? 'account'
+    const profileHref = session.user.username ? `/u/${session.user.username}` : '/setup-profile'
 
     return (
-      <div className="flex items-center gap-4 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 shadow-lg shadow-emerald-500/10 backdrop-blur">
-        {session.user.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={session.user.image}
-            alt={displayName}
-            className="h-9 w-9 rounded-full border border-white/20 object-cover"
-          />
-        ) : (
-          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-xs font-semibold text-white">
-            {initials}
+      <div className="relative" ref={menuRef}>
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-left text-sm text-white/80 shadow-lg shadow-emerald-500/10 backdrop-blur transition hover:border-emerald-300/60 hover:text-white"
+        >
+          {session.user.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={session.user.image}
+              alt={displayName}
+              className="h-9 w-9 rounded-full border border-white/20 object-cover"
+            />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-xs font-semibold text-white">
+              {initials}
+            </div>
+          )}
+          <div className="flex flex-col leading-tight">
+            <span className="text-[10px] uppercase tracking-[0.4em] text-white/50">Signed in</span>
+            <span className="font-semibold text-white">@{username}</span>
+          </div>
+          <svg
+            className={`h-4 w-4 text-white/50 transition ${open ? 'rotate-180 text-white' : ''}`}
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              d="m6 9 6 6 6-6"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.5"
+            />
+          </svg>
+        </button>
+        {open && (
+          <div className="absolute right-0 z-50 mt-3 w-48 overflow-hidden rounded-xl border border-white/10 bg-slate-900/90 p-2 text-sm text-white shadow-emerald-500/20 backdrop-blur">
+            <Link
+              href="/dashboard"
+              className="block rounded-lg px-3 py-2 text-white/80 transition hover:bg-white/10 hover:text-white"
+              onClick={() => setOpen(false)}
+            >
+              Dashboard
+            </Link>
+            <Link
+              href={profileHref}
+              className="block rounded-lg px-3 py-2 text-white/80 transition hover:bg-white/10 hover:text-white"
+              onClick={() => setOpen(false)}
+            >
+              {session.user.username ? 'Profile' : 'Finish profile'}
+            </Link>
+            <button
+              onClick={() => {
+                setOpen(false)
+                void signOut()
+              }}
+              className="block w-full rounded-lg px-3 py-2 text-left text-white/80 transition hover:bg-white/10 hover:text-white"
+            >
+              Logout
+            </button>
           </div>
         )}
-        <div className="flex flex-col leading-tight">
-          <span className="text-[10px] uppercase tracking-[0.4em] text-white/50">Signed in</span>
-          <span className="font-semibold text-white">{displayName}</span>
-        </div>
-        <button
-          onClick={() => signOut()}
-          className="ml-auto rounded-full border border-white/20 px-3 py-1 text-xs font-medium text-white/80 transition hover:border-white/40 hover:text-white"
-        >
-          Sign out
-        </button>
       </div>
     )
   }
 
   return (
     <button
-      onClick={() => signIn('google')}
+      onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
       className="group flex items-center gap-4 rounded-full border border-white/10 bg-white/5 px-5 py-2 text-left text-sm text-white/90 shadow-lg shadow-emerald-500/10 transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/10 hover:text-white hover:shadow-emerald-500/20"
     >
       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-md shadow-emerald-500/20">
@@ -75,7 +136,7 @@ export default function AuthStatus() {
             fill="#EA4335"
           />
           <path
-            d="M12.17 18.9c1.94 0 3.56-.64 4.75-1.73l-2.15-2.05c-.58.4-1.36.67-2.6.67-1.53 0-3.19-1.44-3.8-3.24l-2.45 1.89c1.32 2.58 4.08 4.46 7.25 4.46z"
+            d="M12.17 18.9c1.94 0 3.56-.64 4.75-1.73l-2.15-2.05c-.58.4-1.36.67-2.6.67-1.53 0-3.19-1.44-3.8-3.24l-2.45 1.89c1.322.58 4.08 4.46 7.25 4.46z"
             fill="#34A853"
           />
         </svg>
