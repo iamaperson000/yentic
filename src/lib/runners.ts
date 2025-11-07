@@ -151,21 +151,27 @@ function normalizeCSourceForInterpreter(source: string): string {
   return source.replace(/\(\s*void\s*\)/g, '()');
 }
 
-type ProcessStub = { stdout?: { write?: (chunk: string) => void } };
+type ProcessStub = {
+  stdout?: {
+    write?: (chunk: string) => boolean;
+  };
+};
 
 function ensureProcessStdout(): () => void {
-  const globalObject = globalThis as typeof globalThis & { process?: ProcessStub };
+  const globalObject = globalThis as Omit<typeof globalThis, 'process'> & {
+    process?: ProcessStub;
+  };
   const existingProcess = globalObject.process;
 
   if (!existingProcess) {
-    globalObject.process = { stdout: { write: () => {} } };
+    globalObject.process = { stdout: { write: () => true } };
     return () => {
       delete globalObject.process;
     };
   }
 
   if (!existingProcess.stdout) {
-    existingProcess.stdout = { write: () => {} };
+    existingProcess.stdout = { write: () => true };
     return () => {
       delete existingProcess.stdout;
     };
@@ -173,7 +179,7 @@ function ensureProcessStdout(): () => void {
 
   if (typeof existingProcess.stdout.write !== 'function') {
     const previousWrite = existingProcess.stdout.write;
-    existingProcess.stdout.write = () => {};
+    existingProcess.stdout.write = () => true;
     return () => {
       if (previousWrite === undefined) {
         delete existingProcess.stdout!.write;
