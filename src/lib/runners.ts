@@ -113,6 +113,17 @@ function formatCPrintf(template: unknown, args: unknown[]): string {
   return remaining.length ? `${formatted} ${remaining.join(' ')}` : formatted;
 }
 
+function normalizeCFunctionParameters(params: string, options: { stripTypes?: boolean } = {}): string {
+  const trimmed = params.trim();
+  if (!trimmed || /^void\s*$/.test(trimmed)) {
+    return '';
+  }
+  if (options.stripTypes) {
+    return params.replace(/\b(int|float|double|long|short|char|bool)\s+/g, '').trim();
+  }
+  return trimmed;
+}
+
 function transpileCToJavaScript(source: string): string {
   let code = source;
   code = code.replace(/#include[^\n]*\n/g, '\n');
@@ -122,9 +133,9 @@ function transpileCToJavaScript(source: string): string {
   code = code.replace(/\b(int|float|double|long|short|char|bool)\s+\*/g, 'let ');
   code = code.replace(/\b(void|int|float|double|long|short|char|bool)\s+([A-Za-z_][\w]*)\s*\(([^)]*)\)/g, (_match, _type, name, params) => {
     if (name === 'main') {
-      return `function main(${params})`;
+      return `function main(${normalizeCFunctionParameters(params)})`;
     }
-    const updatedParams = params.replace(/\b(int|float|double|long|short|char|bool)\s+/g, '');
+    const updatedParams = normalizeCFunctionParameters(params, { stripTypes: true });
     return `function ${name}(${updatedParams})`;
   });
   code = code.replace(/\b(int|float|double|long|short|char|bool)\s+([A-Za-z_][\w]*)/g, 'let $2');
