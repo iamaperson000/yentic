@@ -4,8 +4,8 @@ declare module 'JSCPP' {
     stdin?: string,
     options?: {
       stdio?: {
-        write?(chunk: string): void;
-        drain?(): string | void;
+        write?(chunk: string): boolean | void;
+        drain?(): string | null | void;
       };
     }
   ): number | void;
