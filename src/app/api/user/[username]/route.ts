@@ -20,7 +20,7 @@ export async function GET(
     return NextResponse.json({ error: "Username is required" }, { status: 400 })
   }
 
-  const user = await prisma.user.findUnique({
+  const user = await prisma.user.findFirst({
     where: { username },
     select: {
       id: true,
