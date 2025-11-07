@@ -6,6 +6,13 @@ export async function GET(
   _: NextRequest,
   { params }: { params: Promise<{ username: string }> },
 ) {
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      { error: "Database connection is not configured" },
+      { status: 503 },
+    )
+  }
+
   const { username: rawUsername } = await params
   const username = rawUsername?.toLowerCase()
 

@@ -13,6 +13,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      { error: "Database connection is not configured" },
+      { status: 503 },
+    )
+  }
+
   const body = await request.json().catch(() => null)
 
   if (!body || typeof body.username !== "string") {

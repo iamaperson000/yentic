@@ -8,8 +8,18 @@ interface ProfilePageProps {
 }
 
 export default async function UserProfilePage({ params }: ProfilePageProps) {
+  if (!process.env.DATABASE_URL) {
+    notFound()
+  }
+
+  const username = params.username?.toLowerCase()
+
+  if (!username) {
+    notFound()
+  }
+
   const profile = await prisma.user.findUnique({
-    where: { username: params.username },
+    where: { username },
     select: {
       name: true,
       username: true,
