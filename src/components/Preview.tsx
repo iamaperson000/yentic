@@ -53,9 +53,11 @@ function RuntimePreview({
   const [status, setStatus] = useState<RuntimeStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasPendingChanges, setHasPendingChanges] = useState<boolean>(false);
+  const [stdinValue, setStdinValue] = useState<string>('');
   const runId = useRef(0);
   const lastProcessedRun = useRef<number>(0);
   const lastExecutedSource = useRef<string>('');
+  const lastExecutedInput = useRef<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const normalizedLanguage = runtimeLanguages.has(language as ExecutableLanguage)
@@ -70,12 +72,72 @@ function RuntimePreview({
     }
   }, []);
 
+  const enqueueExecution = useCallback(
+    (trimmed: string, inputSnapshot: string): (() => void) | undefined => {
+      if (!normalizedLanguage) {
+        return undefined;
+      }
+
+      const nextId = runId.current + 1;
+      runId.current = nextId;
+
+      if (!trimmed) {
+        lastExecutedSource.current = '';
+        lastExecutedInput.current = inputSnapshot;
+        scheduleStateUpdate(() => {
+          setStatus('idle');
+          setStdout('');
+          setStderr('');
+          setErrorMessage(null);
+          setHasPendingChanges(false);
+        });
+        return undefined;
+      }
+
+      lastExecutedSource.current = trimmed;
+      lastExecutedInput.current = inputSnapshot;
+
+      scheduleStateUpdate(() => {
+        setStatus('running');
+        setErrorMessage(null);
+      });
+
+      const timeout = window.setTimeout(async () => {
+        try {
+          const result = await executeCode(normalizedLanguage, trimmed, inputSnapshot);
+          if (runId.current !== nextId) {
+            return;
+          }
+          setStdout(result.stdout);
+          setStderr(result.stderr);
+          setStatus(result.stderr ? 'error' : 'ready');
+          setHasPendingChanges(false);
+        } catch (error) {
+          if (runId.current !== nextId) {
+            return;
+          }
+          setStatus('error');
+          setStdout('');
+          setStderr('');
+          setErrorMessage(error instanceof Error ? error.message : String(error));
+          setHasPendingChanges(false);
+        }
+      }, 150);
+
+      return () => {
+        window.clearTimeout(timeout);
+      };
+    },
+    [normalizedLanguage, scheduleStateUpdate]
+  );
+
   useEffect(() => {
     if (!normalizedLanguage) {
       scheduleStateUpdate(() => {
         setHasPendingChanges(false);
       });
       lastExecutedSource.current = '';
+      lastExecutedInput.current = '';
       return;
     }
 
@@ -88,12 +150,19 @@ function RuntimePreview({
 
     const trimmed = code.trim();
     scheduleStateUpdate(() => {
-      setHasPendingChanges(trimmed !== lastExecutedSource.current);
+      setHasPendingChanges(
+        trimmed !== lastExecutedSource.current || stdinValue !== lastExecutedInput.current
+      );
     });
-  }, [autorunEnabled, code, normalizedLanguage, scheduleStateUpdate]);
+  }, [autorunEnabled, code, normalizedLanguage, scheduleStateUpdate, stdinValue]);
 
   useEffect(() => {
     if (!normalizedLanguage) {
+      lastProcessedRun.current = runRequestId;
+      return;
+    }
+
+    if (autorunEnabled) {
       lastProcessedRun.current = runRequestId;
       return;
     }
@@ -105,53 +174,28 @@ function RuntimePreview({
     lastProcessedRun.current = runRequestId;
 
     const trimmed = code.trim();
-    if (!trimmed) {
-      scheduleStateUpdate(() => {
-        setStatus('idle');
-        setStdout('');
-        setStderr('');
-        setErrorMessage(null);
-        lastExecutedSource.current = '';
-        setHasPendingChanges(false);
-      });
+    const inputSnapshot = stdinValue;
+    return enqueueExecution(trimmed, inputSnapshot);
+  }, [autorunEnabled, code, enqueueExecution, normalizedLanguage, runRequestId, stdinValue]);
+
+  useEffect(() => {
+    if (!normalizedLanguage || !autorunEnabled) {
       return;
     }
 
-    const nextId = runId.current + 1;
-    runId.current = nextId;
-    scheduleStateUpdate(() => {
-      setStatus('running');
-      setErrorMessage(null);
-    });
+    lastProcessedRun.current = runRequestId;
 
-    const timeout = window.setTimeout(async () => {
-      try {
-        const result = await executeCode(normalizedLanguage, trimmed);
-        if (runId.current !== nextId) {
-          return;
-        }
-        lastExecutedSource.current = trimmed;
-        setStdout(result.stdout);
-        setStderr(result.stderr);
-        setStatus(result.stderr ? 'error' : 'ready');
-        setHasPendingChanges(false);
-      } catch (error) {
-        if (runId.current !== nextId) {
-          return;
-        }
-        lastExecutedSource.current = trimmed;
-        setStatus('error');
-        setStdout('');
-        setStderr('');
-        setErrorMessage(error instanceof Error ? error.message : String(error));
-        setHasPendingChanges(false);
-      }
-    }, 150);
+    const trimmed = code.trim();
+    const inputSnapshot = stdinValue;
+    if (
+      trimmed === lastExecutedSource.current &&
+      inputSnapshot === lastExecutedInput.current
+    ) {
+      return;
+    }
 
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [autorunEnabled, code, normalizedLanguage, runRequestId, scheduleStateUpdate]);
+    return enqueueExecution(trimmed, inputSnapshot);
+  }, [autorunEnabled, code, enqueueExecution, normalizedLanguage, runRequestId, stdinValue]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -209,6 +253,21 @@ function RuntimePreview({
               {computedErrorMessage}
             </div>
           ) : null}
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+            <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
+              Standard Input
+            </div>
+            <textarea
+              value={stdinValue}
+              onChange={event => setStdinValue(event.target.value)}
+              className="min-h-[80px] flex-1 bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30 disabled:text-white/30"
+              placeholder={isRunnable ? 'Provide input for scanf or other stdin reads…' : 'Select a runnable file to provide input.'}
+              disabled={!isRunnable}
+            />
+            <div className="border-t border-white/5 bg-black/20 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white/30">
+              Passed to program via stdin before execution
+            </div>
+          </div>
           <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
             <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
               Output
