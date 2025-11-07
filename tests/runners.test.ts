@@ -22,3 +22,10 @@ test('C runner normalizes void parameters in helper functions', async () => {
   assert.equal(result.stderr, '');
   assert.equal(result.stdout, '');
 });
+
+test('C runner accepts stdin for scanf usage', async () => {
+  const source = `#include <stdio.h>\nint main(void) { int n; scanf("%d", &n); printf("%d\\n", n * 2); return 0; }`;
+  const result = await executeCode('c', source, '7\n');
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout, '14\n');
+});

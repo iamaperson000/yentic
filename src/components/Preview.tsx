@@ -53,9 +53,11 @@ function RuntimePreview({
   const [status, setStatus] = useState<RuntimeStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasPendingChanges, setHasPendingChanges] = useState<boolean>(false);
+  const [stdinValue, setStdinValue] = useState<string>('');
   const runId = useRef(0);
   const lastProcessedRun = useRef<number>(0);
   const lastExecutedSource = useRef<string>('');
+  const lastExecutedInput = useRef<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const normalizedLanguage = runtimeLanguages.has(language as ExecutableLanguage)
@@ -76,6 +78,7 @@ function RuntimePreview({
         setHasPendingChanges(false);
       });
       lastExecutedSource.current = '';
+      lastExecutedInput.current = '';
       return;
     }
 
@@ -88,9 +91,11 @@ function RuntimePreview({
 
     const trimmed = code.trim();
     scheduleStateUpdate(() => {
-      setHasPendingChanges(trimmed !== lastExecutedSource.current);
+      setHasPendingChanges(
+        trimmed !== lastExecutedSource.current || stdinValue !== lastExecutedInput.current
+      );
     });
-  }, [autorunEnabled, code, normalizedLanguage, scheduleStateUpdate]);
+  }, [autorunEnabled, code, normalizedLanguage, scheduleStateUpdate, stdinValue]);
 
   useEffect(() => {
     if (!normalizedLanguage) {
@@ -105,6 +110,7 @@ function RuntimePreview({
     lastProcessedRun.current = runRequestId;
 
     const trimmed = code.trim();
+    const inputSnapshot = stdinValue;
     if (!trimmed) {
       scheduleStateUpdate(() => {
         setStatus('idle');
@@ -112,6 +118,7 @@ function RuntimePreview({
         setStderr('');
         setErrorMessage(null);
         lastExecutedSource.current = '';
+        lastExecutedInput.current = '';
         setHasPendingChanges(false);
       });
       return;
@@ -126,11 +133,12 @@ function RuntimePreview({
 
     const timeout = window.setTimeout(async () => {
       try {
-        const result = await executeCode(normalizedLanguage, trimmed);
+        const result = await executeCode(normalizedLanguage, trimmed, inputSnapshot);
         if (runId.current !== nextId) {
           return;
         }
         lastExecutedSource.current = trimmed;
+        lastExecutedInput.current = inputSnapshot;
         setStdout(result.stdout);
         setStderr(result.stderr);
         setStatus(result.stderr ? 'error' : 'ready');
@@ -140,6 +148,7 @@ function RuntimePreview({
           return;
         }
         lastExecutedSource.current = trimmed;
+        lastExecutedInput.current = inputSnapshot;
         setStatus('error');
         setStdout('');
         setStderr('');
@@ -151,7 +160,7 @@ function RuntimePreview({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [autorunEnabled, code, normalizedLanguage, runRequestId, scheduleStateUpdate]);
+  }, [autorunEnabled, code, normalizedLanguage, runRequestId, scheduleStateUpdate, stdinValue]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -209,6 +218,21 @@ function RuntimePreview({
               {computedErrorMessage}
             </div>
           ) : null}
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+            <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
+              Standard Input
+            </div>
+            <textarea
+              value={stdinValue}
+              onChange={event => setStdinValue(event.target.value)}
+              className="min-h-[80px] flex-1 bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30 disabled:text-white/30"
+              placeholder={isRunnable ? 'Provide input for scanf or other stdin reads…' : 'Select a runnable file to provide input.'}
+              disabled={!isRunnable}
+            />
+            <div className="border-t border-white/5 bg-black/20 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white/30">
+              Passed to program via stdin before execution
+            </div>
+          </div>
           <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
             <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
               Output
