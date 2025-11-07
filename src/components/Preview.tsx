@@ -31,6 +31,12 @@ const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'jav
 
 type RuntimeStatus = 'idle' | 'running' | 'ready' | 'error';
 
+type SandpackErrorNotification = {
+  title?: unknown;
+  message?: unknown;
+  body?: unknown;
+};
+
 function RuntimePreview({
   code,
   language,
@@ -494,13 +500,14 @@ function SandpackPreviewPane({ isVisible }: { isVisible: boolean }) {
         message.action === 'notification' &&
         message.notificationType === 'error'
       ) {
-        const title = typeof (message as any).title === 'string' ? (message as any).title.trim() : '';
-const body =
-  typeof (message as any).message === 'string'
-    ? (message as any).message
-    : typeof (message as any).body === 'string'
-    ? (message as any).body
-    : '';
+        const notification = message as SandpackErrorNotification;
+        const title = typeof notification.title === 'string' ? notification.title.trim() : '';
+        const body =
+          typeof notification.message === 'string'
+            ? notification.message
+            : typeof notification.body === 'string'
+              ? notification.body
+              : '';
 
         const combined = [title, body]
           .map(segment => segment.trim())

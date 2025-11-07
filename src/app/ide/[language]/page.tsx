@@ -283,7 +283,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       });
 
       if (res.ok) {
-        const savedProject = await res.json();
+        await res.json();
         setLastSavedAt(new Date());
         setIsSaving(false);
         pushToast({

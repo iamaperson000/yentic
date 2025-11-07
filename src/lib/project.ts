@@ -25,7 +25,7 @@ export type WorkspaceConfig = {
   defaultActivePath: string;
   newFilePlaceholder: string;
   previewTemplate?: 'vanilla';
-  previewMode?: 'sandpack' | 'code';
+  previewMode?: 'sandpack' | 'code' | 'runtime';
   previewMessage?: string;
   starter: ProjectFileMap;
 };
@@ -171,7 +171,7 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'sky',
     defaultActivePath: 'main.py',
     newFilePlaceholder: 'script.py',
-    previewMode: 'sandpack',
+    previewMode: 'runtime',
     starter: pythonStarter
   },
   c: {
@@ -181,7 +181,7 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'violet',
     defaultActivePath: 'main.c',
     newFilePlaceholder: 'program.c',
-    previewMode: 'sandpack',
+    previewMode: 'runtime',
     starter: cStarter
   },
   cpp: {
@@ -191,7 +191,7 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'violet',
     defaultActivePath: 'main.cpp',
     newFilePlaceholder: 'program.cpp',
-    previewMode: 'sandpack',
+    previewMode: 'runtime',
     starter: cppStarter
   },
   java: {
@@ -201,7 +201,7 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
     accent: 'amber',
     defaultActivePath: 'Main.java',
     newFilePlaceholder: 'App.java',
-    previewMode: 'sandpack',
+    previewMode: 'runtime',
     starter: javaStarter
   }
 };
