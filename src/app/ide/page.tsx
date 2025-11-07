@@ -1,7 +1,10 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { getServerSession } from 'next-auth';
 
-import { workspaceList } from '@/lib/project';
+import { authOptions } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+import { resolveWorkspaceSlugFromLanguage, workspaceConfigs, workspaceList } from '@/lib/project';
 
 const languageIcons: Record<string, ReactNode> = {
   web: (
@@ -89,7 +92,39 @@ const highlights = [
   'Instant project scaffolding'
 ];
 
-export default function WorkspacePicker() {
+function formatTimeAgo(value: Date): string {
+  const diff = Date.now() - value.getTime();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < minute) return 'just now';
+  if (diff < hour) return `${Math.round(diff / minute)} min ago`;
+  if (diff < day) return `${Math.round(diff / hour)} hr ago`;
+  return `${Math.round(diff / day)} day${diff >= 2 * day ? 's' : ''} ago`;
+}
+
+export default async function WorkspacePicker() {
+  const session = await getServerSession(authOptions);
+  const savedProjects = session?.user?.email
+    ? await prisma.project.findMany({
+        where: { user: { email: session.user.email } },
+        orderBy: { updatedAt: 'desc' },
+      })
+    : [];
+
+  const savedProjectCards = savedProjects.map(project => {
+    const slug = resolveWorkspaceSlugFromLanguage(project.language);
+    const workspace = workspaceConfigs[slug];
+    return {
+      id: project.id,
+      name: project.name,
+      slug,
+      workspaceTitle: workspace.title,
+      updatedAt: project.updatedAt,
+    };
+  });
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#04060d] via-[#080c1a] to-[#05060a] text-white">
       <div className="pointer-events-none absolute inset-0 -z-10">
@@ -156,7 +191,7 @@ export default function WorkspacePicker() {
             return (
               <Link
                 key={workspace.slug}
-                href={`/ide/${workspace.slug}`}
+                href={`/ide/${workspace.slug}?new=1`}
                 className={`group relative flex min-h-[220px] flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 transition duration-300 hover:-translate-y-1.5 hover:border-white/20 hover:bg-white/10 ${glow}`}
               >
                 <div
@@ -182,6 +217,68 @@ export default function WorkspacePicker() {
               </Link>
             );
           })}
+        </section>
+
+        <section
+          id="saved-projects"
+          className="rounded-3xl border border-white/10 bg-black/35 p-6 sm:p-8"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold text-white">Saved projects</h2>
+              <p className="text-sm text-white/60">
+                Cloud saves bundle every file in your workspace so you can reload an entire project instantly.
+              </p>
+            </div>
+            {session?.user ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
+                {savedProjectCards.length} saved
+              </span>
+            ) : (
+              <Link
+                href="/api/auth/signin"
+                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
+              >
+                Sign in to sync
+              </Link>
+            )}
+          </div>
+
+          {session?.user ? (
+            savedProjectCards.length ? (
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {savedProjectCards.map(project => (
+                  <Link
+                    key={project.id}
+                    href={`/ide/${project.slug}?projectId=${project.id}`}
+                    className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-6 transition hover:-translate-y-1 hover:border-white/20 hover:bg-black/50"
+                  >
+                    <div className="space-y-2">
+                      <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/40">
+                        Cloud project
+                      </span>
+                      <h3 className="truncate text-lg font-semibold text-white">{project.name}</h3>
+                      <p className="text-xs text-white/50">
+                        Updated {formatTimeAgo(project.updatedAt)} · {project.workspaceTitle}
+                      </p>
+                    </div>
+                    <div className="mt-auto inline-flex items-center gap-2 text-sm font-semibold text-emerald-200">
+                      Resume in {project.workspaceTitle}
+                      <span aria-hidden className="transition group-hover:translate-x-1">→</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-6 rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-sm text-white/60">
+                No saved projects yet—create a project and we&apos;ll store the entire workspace here.
+              </div>
+            )
+          ) : (
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-white/70">
+              Sign in to see cloud projects that bundle all of your files together.
+            </div>
+          )}
         </section>
 
         <footer className="flex flex-col items-center gap-4 pb-6 text-center text-xs text-white/50 sm:flex-row sm:justify-between sm:text-left">

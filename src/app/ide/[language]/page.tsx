@@ -8,10 +8,12 @@ import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
 import { Preview } from '@/components/Preview';
 import {
+  clearProject,
   ensureUniquePath,
   getStarterProject,
   inferLanguage,
   loadProject,
+  resolveWorkspaceSlugFromLanguage,
   saveProject,
   scaffoldFor,
   type ProjectFileMap,
@@ -51,7 +53,7 @@ function resolveWorkspaceFromProject(language: string, fallback: WorkspaceSlug):
   }
   if (['html', 'css', 'javascript'].includes(language)) {
     return 'web';
-  }
+  } 
   if (language === 'python') return 'python';
   if (language === 'c') return 'c';
   if (language === 'cpp') return 'cpp';
@@ -115,6 +117,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   });
   const [projectNameDraft, setProjectNameDraft] = useState<string>(projectMeta.name);
   const [isRenamingProject, setIsRenamingProject] = useState(false);
+  const [isNameRequired, setIsNameRequired] = useState(false);
   const [cloudAuthRequired, setCloudAuthRequired] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [isLoadingCloudProject, setIsLoadingCloudProject] = useState(false);
@@ -122,11 +125,27 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const autoSaveSkipRef = useRef(true);
   const cloudWarningShownRef = useRef(false);
   const loadedCloudProjectIdRef = useRef<string | null>(null);
+  const namePromptInitializedRef = useRef(false);
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    if (isNameRequired) {
+      return;
+    }
     setProjectNameDraft(projectMeta.name);
-  }, [projectMeta.name]);
+  }, [projectMeta.name, isNameRequired]);
+
+  useEffect(() => {
+    if (namePromptInitializedRef.current) {
+      return;
+    }
+    if (!projectMeta.id && projectMeta.name === defaultProjectName) {
+      namePromptInitializedRef.current = true;
+      setIsNameRequired(true);
+      setIsRenamingProject(true);
+      setProjectNameDraft('');
+    }
+  }, [defaultProjectName, projectMeta.id, projectMeta.name]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -145,6 +164,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         setProjectMeta({ id: null, name: defaultProjectName });
         setCloudAuthRequired(false);
         setCloudError(null);
+        setIsNameRequired(false);
         return;
       }
       const parsed = JSON.parse(raw) as Partial<ProjectMeta>;
@@ -154,10 +174,12 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       });
       setCloudAuthRequired(false);
       setCloudError(null);
+      setIsNameRequired(false);
     } catch {
       setProjectMeta({ id: null, name: defaultProjectName });
       setCloudAuthRequired(false);
       setCloudError(null);
+      setIsNameRequired(false);
     }
   }, [metaStorageKey, defaultProjectName]);
 
@@ -176,6 +198,45 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       setActivePath(config.defaultActivePath);
     }
   }, [slug, config.defaultActivePath]);
+
+  useEffect(() => {
+    const intent = searchParams?.get('new');
+    if (intent !== '1') {
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      clearProject(slug);
+      window.localStorage.removeItem(metaStorageKey);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('new');
+      window.history.replaceState(null, '', url.toString());
+    }
+
+    namePromptInitializedRef.current = false;
+    autoSaveSkipRef.current = true;
+    const starter = getStarterProject(slug);
+    setFiles(starter);
+    setActivePath(config.defaultActivePath);
+    setProjectMeta({ id: null, name: defaultProjectName });
+    setProjectNameDraft('');
+    setIsNameRequired(true);
+    setIsRenamingProject(true);
+    setLastSavedAt(null);
+    setCloudError(null);
+    setCloudAuthRequired(false);
+    setIsSaving(false);
+    setIsLoadingCloudProject(false);
+    setRecentlyCreatedPath(null);
+    cloudWarningShownRef.current = false;
+    loadedCloudProjectIdRef.current = null;
+  }, [
+    config.defaultActivePath,
+    defaultProjectName,
+    metaStorageKey,
+    searchParams,
+    slug,
+  ]);
 
   const code = files[activePath]?.code ?? '';
   const lang = files[activePath]?.language ?? 'javascript';
@@ -295,6 +356,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       setActivePath(firstPath);
       const normalizedName = project.name.trim() || defaultProjectName;
       setProjectMeta({ id: project.id, name: normalizedName });
+      setIsNameRequired(false);
       setLastSavedAt(new Date(project.updatedAt ?? Date.now()));
       setCloudAuthRequired(false);
       setCloudError(null);
@@ -371,6 +433,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         setCloudAuthRequired(false);
         setCloudError(null);
         cloudWarningShownRef.current = false;
+        setIsNameRequired(false);
         return { ok: true as const, project };
       } catch (error) {
         console.error('Save failed:', error);
@@ -409,14 +472,20 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     if (isRenamingProject) {
       return;
     }
+    setIsNameRequired(false);
     setProjectNameDraft(projectMeta.name);
     setIsRenamingProject(true);
   }, [isRenamingProject, projectMeta.name]);
 
   const cancelProjectRename = useCallback(() => {
+    if (isNameRequired) {
+      pushToast({ kind: 'error', message: 'Name your project to continue.' });
+      setIsRenamingProject(true);
+      return;
+    }
     setIsRenamingProject(false);
     setProjectNameDraft(projectMeta.name);
-  }, [projectMeta.name]);
+  }, [isNameRequired, projectMeta.name, pushToast]);
 
   const commitProjectRename = useCallback(() => {
     const trimmed = projectNameDraft.trim();
@@ -428,12 +497,17 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     }
     if (trimmed === projectMeta.name) {
       setIsRenamingProject(false);
+      setIsNameRequired(false);
       return;
     }
     setProjectMeta(prev => ({ ...prev, name: trimmed }));
     setIsRenamingProject(false);
-    pushToast({ kind: 'success', message: `Renamed project to ${trimmed}` });
-  }, [projectNameDraft, projectMeta.name, pushToast]);
+    setIsNameRequired(false);
+    pushToast({
+      kind: 'success',
+      message: isNameRequired ? `Project named ${trimmed}` : `Renamed project to ${trimmed}`,
+    });
+  }, [isNameRequired, projectNameDraft, projectMeta.name, pushToast]);
 
   useEffect(() => {
     const projectId = searchParams?.get('projectId');
@@ -472,7 +546,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
           return;
         }
         const project = (await res.json()) as CloudProject;
-        const targetSlug = resolveWorkspaceFromProject(project.language, slug);
+        const targetSlug = resolveWorkspaceSlugFromLanguage(project.language, slug);
         if (targetSlug !== slug) {
           if (!cancelled) {
             pushToast({ kind: 'error', message: '❌ Project belongs to a different workspace.' });
@@ -634,6 +708,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                           }
                         }}
                         autoFocus
+                        placeholder={isNameRequired ? 'Name your project' : 'Project name'}
                         className="w-full min-w-[160px] max-w-[260px] rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
                       />
                       <button
@@ -643,13 +718,15 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                       >
                         Save
                       </button>
-                      <button
-                        type="button"
-                        onClick={cancelProjectRename}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:border-white/35 hover:text-white"
-                      >
-                        Cancel
-                      </button>
+                      {isNameRequired ? null : (
+                        <button
+                          type="button"
+                          onClick={cancelProjectRename}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:border-white/35 hover:text-white"
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
