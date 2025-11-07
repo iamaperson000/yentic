@@ -2,15 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { ConsoleInputPanel } from '@/components/ConsoleInputPanel';
+
 import type { ExecutableLanguage } from '@/lib/runners';
 import { executeCode } from '@/lib/runners';
 
-const standardInputLanguages: ReadonlySet<ExecutableLanguage> = new Set([
-  'python',
-  'c',
-  'cpp',
-  'java'
-]);
+const consoleInputLanguages: ReadonlySet<ExecutableLanguage> = new Set(['python']);
+
+const textareaInputLanguages: ReadonlySet<ExecutableLanguage> = new Set(['c', 'cpp', 'java']);
 
 type ExecutablePreviewProps = {
   code: string;
@@ -28,12 +27,23 @@ const RUN_DEBOUNCE_MS = 600;
 export function ExecutablePreview({ code, language, path }: ExecutablePreviewProps) {
   const [state, setState] = useState<RunState>({ status: 'idle', output: '', error: '' });
   const [autoRun, setAutoRun] = useState(true);
-  const [stdinValue, setStdinValue] = useState('');
+  const [consoleInputs, setConsoleInputs] = useState<Partial<Record<ExecutableLanguage, string>>>({});
+  const [textInputs, setTextInputs] = useState<Partial<Record<ExecutableLanguage, string>>>({});
   const latestCode = useRef(code);
-  const latestInput = useRef(stdinValue);
+  const latestInput = useRef('');
   const pendingRun = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const supportsStandardInput = standardInputLanguages.has(language);
+  const supportsConsoleInput = consoleInputLanguages.has(language);
+  const supportsTextareaInput = textareaInputLanguages.has(language);
+  const supportsAnyInput = supportsConsoleInput || supportsTextareaInput;
+
+  const consoleInputValue = supportsConsoleInput ? consoleInputs[language] ?? '' : '';
+  const textInputValue = supportsTextareaInput ? textInputs[language] ?? '' : '';
+  const effectiveInput = supportsConsoleInput
+    ? consoleInputValue
+    : supportsTextareaInput
+      ? textInputValue
+      : '';
 
   const label = useMemo(() => {
     switch (language) {
@@ -77,14 +87,14 @@ export function ExecutablePreview({ code, language, path }: ExecutablePreviewPro
       pendingRun.current = null;
     }
     latestCode.current = code;
-    const inputSnapshot = supportsStandardInput ? stdinValue : '';
+    const inputSnapshot = supportsAnyInput ? effectiveInput : '';
     latestInput.current = inputSnapshot;
     void run(code, inputSnapshot);
-  }, [code, run, stdinValue, supportsStandardInput]);
+  }, [code, effectiveInput, run, supportsAnyInput]);
 
   useEffect(() => {
     latestCode.current = code;
-    latestInput.current = supportsStandardInput ? stdinValue : '';
+    latestInput.current = supportsAnyInput ? effectiveInput : '';
     if (!autoRun) {
       if (pendingRun.current) {
         clearTimeout(pendingRun.current);
@@ -105,7 +115,7 @@ export function ExecutablePreview({ code, language, path }: ExecutablePreviewPro
         pendingRun.current = null;
       }
     };
-  }, [autoRun, code, run, stdinValue, supportsStandardInput]);
+  }, [autoRun, code, effectiveInput, run, supportsAnyInput]);
 
   const statusLabel = state.status === 'running' ? 'Running…' : state.status === 'ready' ? 'Output' : 'Idle';
 
@@ -146,14 +156,24 @@ export function ExecutablePreview({ code, language, path }: ExecutablePreviewPro
           )}
         </div>
         <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm text-white/80">
-          {supportsStandardInput ? (
+          {supportsConsoleInput ? (
+            <ConsoleInputPanel
+              key={language}
+              value={consoleInputValue}
+              onChange={nextValue =>
+                setConsoleInputs(previous => ({ ...previous, [language]: nextValue }))
+              }
+            />
+          ) : supportsTextareaInput ? (
             <div className="rounded-2xl border border-white/10 bg-black/40">
               <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
                 Standard Input
               </div>
               <textarea
-                value={stdinValue}
-                onChange={event => setStdinValue(event.target.value)}
+                value={textInputValue}
+                onChange={event =>
+                  setTextInputs(previous => ({ ...previous, [language]: event.target.value }))
+                }
                 className="min-h-[72px] w-full bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30"
                 placeholder="Provide input that your program reads from stdin…"
               />
