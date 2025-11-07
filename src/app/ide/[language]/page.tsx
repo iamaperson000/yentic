@@ -122,6 +122,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [isLoadingCloudProject, setIsLoadingCloudProject] = useState(false);
   const toastTimeoutRef = useRef<number | null>(null);
+  const projectNameInputRef = useRef<HTMLInputElement | null>(null);
   const autoSaveSkipRef = useRef(true);
   const cloudWarningShownRef = useRef(false);
   const loadedCloudProjectIdRef = useRef<string | null>(null);
@@ -146,6 +147,17 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       setProjectNameDraft('');
     }
   }, [defaultProjectName, projectMeta.id, projectMeta.name]);
+
+  useEffect(() => {
+    if (!isRenamingProject || typeof window === 'undefined') {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      projectNameInputRef.current?.focus();
+      projectNameInputRef.current?.select();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isRenamingProject]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -491,6 +503,16 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     const trimmed = projectNameDraft.trim();
     if (!trimmed) {
       pushToast({ kind: 'error', message: 'Project name cannot be empty.' });
+      if (isNameRequired) {
+        setProjectNameDraft('');
+        setIsRenamingProject(true);
+        if (typeof window !== 'undefined') {
+          window.requestAnimationFrame(() => {
+            projectNameInputRef.current?.focus();
+          });
+        }
+        return;
+      }
       setProjectNameDraft(projectMeta.name);
       setIsRenamingProject(false);
       return;
@@ -602,15 +624,15 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }
 
   const statusBadgeClass = cloudAuthRequired
-    ? 'inline-flex items-center gap-2 rounded-full border border-amber-400/70 bg-amber-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-100'
+    ? 'inline-flex items-center gap-1.5 rounded-full border border-amber-400/70 bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-amber-100'
     : cloudError
-      ? 'inline-flex items-center gap-2 rounded-full border border-rose-400/60 bg-rose-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-rose-100'
+      ? 'inline-flex items-center gap-1.5 rounded-full border border-rose-400/60 bg-rose-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-rose-100'
       : isSaving || isLoadingCloudProject
-        ? 'inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-amber-400/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-100'
-        : 'inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-100';
+        ? 'inline-flex items-center gap-1.5 rounded-full border border-amber-300/60 bg-amber-400/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-amber-100'
+        : 'inline-flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-emerald-100';
 
   const actionButtonBaseClass =
-    'inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70';
+    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70';
   const primaryActionClass =
     `${actionButtonBaseClass} bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 hover:bg-emerald-400`;
   const subtleActionClass =
@@ -662,112 +684,79 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     <div className="relative min-h-screen bg-gradient-to-b from-[#06070d] via-[#090b19] to-[#040509] text-white">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.25),_transparent_60%)]" />
       <div className="relative flex min-h-screen flex-col">
-        <header className="border-b border-white/10 bg-black/40 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
-            <div className="flex min-w-0 flex-1 items-start gap-4">
-              <Link
-                href="/"
-                className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
-              >
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10">
-                  <svg viewBox="0 0 20 20" aria-hidden className="h-3.5 w-3.5">
-                    <path
-                      d="M11.75 5.75 8 9.5l3.75 3.75"
-                      className="fill-none stroke-current stroke-[1.5]"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </span>
-                <span className="hidden sm:inline">Back to home</span>
-                <span className="sm:hidden">Home</span>
-              </Link>
-              <div className="min-w-0 flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-white/50">
-                    Workspace
-                  </span>
-                  <span className="truncate text-base font-semibold text-white sm:text-lg">{config.title}</span>
-                </div>
-                <p className="max-w-xl text-xs text-white/55 sm:text-sm">{config.description}</p>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <span className="text-[10px] uppercase tracking-[0.35em] text-white/40">Project</span>
-                  {isRenamingProject ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        value={projectNameDraft}
-                        onChange={event => setProjectNameDraft(event.target.value)}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            commitProjectRename();
-                          }
-                          if (event.key === 'Escape') {
-                            event.preventDefault();
-                            cancelProjectRename();
-                          }
-                        }}
-                        autoFocus
-                        placeholder={isNameRequired ? 'Name your project' : 'Project name'}
-                        className="w-full min-w-[160px] max-w-[260px] rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
-                      />
-                      <button
-                        type="button"
-                        onClick={commitProjectRename}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
-                      >
-                        Save
-                      </button>
-                      {isNameRequired ? null : (
-                        <button
-                          type="button"
-                          onClick={cancelProjectRename}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:border-white/35 hover:text-white"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onDoubleClick={beginProjectRename}
-                        onClick={beginProjectRename}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            beginProjectRename();
-                          }
-                        }}
-                        className="group inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300/60"
-                        title="Double-click to rename project"
-                      >
-                        <span className="truncate max-w-[220px] sm:max-w-[260px]">{projectMeta.name}</span>
-                        <span className="text-[10px] uppercase tracking-[0.35em] text-white/35 group-hover:text-white/60">Edit</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={beginProjectRename}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:border-white/30 hover:text-white"
-                        aria-label="Rename project"
-                      >
-                        ✎
-                      </button>
-                    </div>
-                  )}
-                </div>
+        <header className="border-b border-white/10 bg-black/30 backdrop-blur">
+          <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-3 px-4 py-3 lg:px-8">
+            <Link
+              href="/"
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-[13px] font-semibold text-white/75 transition hover:border-white/25 hover:bg-white/10 hover:text-white"
+            >
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10">
+                <svg viewBox="0 0 20 20" aria-hidden className="h-3.5 w-3.5">
+                  <path
+                    d="M11.75 5.75 8 9.5l3.75 3.75"
+                    className="fill-none stroke-current stroke-[1.5]"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+              <span className="hidden sm:inline">Back to home</span>
+              <span className="sm:hidden">Home</span>
+            </Link>
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Workspace</p>
+                <p className="truncate text-sm font-semibold text-white sm:text-base">{config.title}</p>
               </div>
+              <p className="hidden min-w-0 truncate text-xs text-white/50 sm:block">{config.description}</p>
             </div>
-            <div className="flex flex-1 flex-wrap items-end justify-end gap-3 text-xs text-white/60">
+            <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-white/60">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">Project</span>
+                {isRenamingProject ? (
+                  <input
+                    ref={projectNameInputRef}
+                    value={projectNameDraft}
+                    onChange={event => setProjectNameDraft(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        commitProjectRename();
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        cancelProjectRename();
+                      }
+                    }}
+                    onBlur={commitProjectRename}
+                    autoFocus
+                    placeholder={isNameRequired ? 'Name your project' : 'Project name'}
+                    className="w-[180px] rounded-md border border-white/20 bg-black/60 px-2.5 py-1 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onDoubleClick={beginProjectRename}
+                    onClick={beginProjectRename}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        beginProjectRename();
+                      }
+                    }}
+                    className="truncate max-w-[220px] rounded-full border border-white/15 bg-white/5 px-3 py-1 text-sm font-medium text-white/75 transition hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300/60"
+                    title="Double-click to rename project"
+                  >
+                    {projectMeta.name}
+                  </button>
+                )}
+              </div>
               <span className={statusBadgeClass}>
                 <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
                 {savedLabel}
               </span>
-              {cloudError ? (
-                <span className="text-[11px] text-rose-200">{cloudError}</span>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-2">
+              {cloudError ? <span className="text-[11px] text-rose-200">{cloudError}</span> : null}
+              <div className="flex items-center gap-1.5">
                 <button onClick={createSmartFile} className={primaryActionClass}>
                   New file
                 </button>
@@ -781,9 +770,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
             </div>
           </div>
         </header>
-        <main className="flex flex-1 flex-col px-4 pb-8 pt-6 lg:px-8">
-          <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-4 md:gap-5 lg:grid-cols-[220px_minmax(0,1.9fr)_minmax(0,1.1fr)] xl:grid-cols-[230px_minmax(0,2fr)_minmax(0,1.1fr)]">
-            <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/35">
+        <main className="flex flex-1 flex-col px-4 pb-6 pt-4 lg:px-8">
+          <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-3 md:gap-4 lg:grid-cols-[200px_minmax(0,2fr)_minmax(0,1.05fr)] xl:grid-cols-[220px_minmax(0,2.1fr)_minmax(0,1.05fr)]">
+            <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/30">
               <div className="flex flex-1 flex-col overflow-hidden">
                 <FileExplorer
                   files={files}
