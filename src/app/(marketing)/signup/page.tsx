@@ -57,14 +57,14 @@ export default function SignUpPage() {
           <p className="text-xs text-white/50">
             By continuing you agree to our{' '}
             <Link
-              href="/legal/terms"
+              href="/terms"
               className="underline decoration-emerald-300/60 underline-offset-4 transition hover:text-white"
             >
               terms of service
             </Link>{' '}
             and{' '}
             <Link
-              href="/legal/privacy"
+              href="/privacy"
               className="underline decoration-emerald-300/60 underline-offset-4 transition hover:text-white"
             >
               privacy policy
