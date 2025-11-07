@@ -1,17 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, useSearchParams } from 'next/navigation';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
 import { Preview } from '@/components/Preview';
 import {
+  clearProject,
   ensureUniquePath,
   getStarterProject,
   inferLanguage,
   loadProject,
+  resolveWorkspaceSlugFromLanguage,
   saveProject,
   scaffoldFor,
   type ProjectFileMap,
@@ -49,12 +51,17 @@ type WorkspacePageProps = {
   params: Promise<{ language: string }>;
 };
 
-type SavedProject = {
+type CloudProject = {
   id: string;
   name: string;
   language: string;
   files: ProjectFileMap;
   updatedAt: string;
+};
+
+type ProjectMeta = {
+  id: string | null;
+  name: string;
 };
 
 export default function WorkspacePage({ params }: WorkspacePageProps) {
@@ -74,11 +81,96 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [recentlyCreatedPath, setRecentlyCreatedPath] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
-  const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const metaStorageKey = `yentic.project.meta:${slug}`;
+  const defaultProjectName = `${config.title} project`;
+  const [projectMeta, setProjectMeta] = useState<ProjectMeta>(() => {
+    if (typeof window === 'undefined') {
+      return { id: null, name: defaultProjectName };
+    }
+    try {
+      const raw = window.localStorage.getItem(metaStorageKey);
+      if (!raw) {
+        return { id: null, name: defaultProjectName };
+      }
+      const parsed = JSON.parse(raw) as Partial<ProjectMeta>;
+      const storedName = typeof parsed.name === 'string' && parsed.name.trim()
+        ? parsed.name.trim()
+        : defaultProjectName;
+      return { id: parsed.id ?? null, name: storedName };
+    } catch {
+      return { id: null, name: defaultProjectName };
+    }
+  });
+  const [projectNameDraft, setProjectNameDraft] = useState<string>(projectMeta.name);
+  const [isRenamingProject, setIsRenamingProject] = useState(false);
+  const [isNameRequired, setIsNameRequired] = useState(false);
+  const [cloudAuthRequired, setCloudAuthRequired] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const [isLoadingCloudProject, setIsLoadingCloudProject] = useState(false);
   const toastTimeoutRef = useRef<number | null>(null);
+  const autoSaveSkipRef = useRef(true);
+  const cloudWarningShownRef = useRef(false);
+  const loadedCloudProjectIdRef = useRef<string | null>(null);
+  const namePromptInitializedRef = useRef(false);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
+    if (isNameRequired) {
+      return;
+    }
+    setProjectNameDraft(projectMeta.name);
+  }, [projectMeta.name, isNameRequired]);
+
+  useEffect(() => {
+    if (namePromptInitializedRef.current) {
+      return;
+    }
+    if (!projectMeta.id && projectMeta.name === defaultProjectName) {
+      namePromptInitializedRef.current = true;
+      setIsNameRequired(true);
+      setIsRenamingProject(true);
+      setProjectNameDraft('');
+    }
+  }, [defaultProjectName, projectMeta.id, projectMeta.name]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.localStorage.setItem(metaStorageKey, JSON.stringify(projectMeta));
+  }, [metaStorageKey, projectMeta]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(metaStorageKey);
+      if (!raw) {
+        setProjectMeta({ id: null, name: defaultProjectName });
+        setCloudAuthRequired(false);
+        setCloudError(null);
+        setIsNameRequired(false);
+        return;
+      }
+      const parsed = JSON.parse(raw) as Partial<ProjectMeta>;
+      setProjectMeta({
+        id: parsed.id ?? null,
+        name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : defaultProjectName,
+      });
+      setCloudAuthRequired(false);
+      setCloudError(null);
+      setIsNameRequired(false);
+    } catch {
+      setProjectMeta({ id: null, name: defaultProjectName });
+      setCloudAuthRequired(false);
+      setCloudError(null);
+      setIsNameRequired(false);
+    }
+  }, [metaStorageKey, defaultProjectName]);
+
+  useEffect(() => {
+    autoSaveSkipRef.current = true;
     const stored = loadProject(slug);
     if (stored && Object.keys(stored).length) {
       setFiles(stored);
@@ -94,68 +186,43 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [slug, config.defaultActivePath]);
 
   useEffect(() => {
-    async function loadProjects() {
-      try {
-        setIsLoadingProjects(true);
-        const res = await fetch("/api/projects");
-        if (res.ok) {
-          const data = await res.json();
-          setSavedProjects(data);
-          console.log("Loaded projects:", data);
-        } else {
-          console.warn("Failed to load projects");
-        }
-      } catch (err) {
-        console.error("Error loading projects:", err);
-      } finally {
-        setIsLoadingProjects(false);
-      }
+    const intent = searchParams?.get('new');
+    if (intent !== '1') {
+      return;
     }
 
-    loadProjects();
+    if (typeof window !== 'undefined') {
+      clearProject(slug);
+      window.localStorage.removeItem(metaStorageKey);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('new');
+      window.history.replaceState(null, '', url.toString());
+    }
 
-    const interval = setInterval(loadProjects, 5000); // refresh every 5s
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (!files || !Object.keys(files).length) return;
-    const timeout = window.setTimeout(async () => {
-      setIsSaving(true);
-      try {
-        // Save to localStorage first (backup)
-        saveProject(slug, files);
-        
-        // Then auto-save to cloud
-        const payload = {
-          name: activePath || "Untitled Project",
-          language: files[activePath]?.language || "javascript",
-          files,
-        };
-        const res = await fetch("/api/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          setLastSavedAt(new Date());
-          // Refresh projects list
-          const projectsRes = await fetch("/api/projects");
-          if (projectsRes.ok) {
-            const projectsData = await projectsRes.json();
-            setSavedProjects(projectsData);
-          }
-        } else {
-          console.warn("Auto-save failed:", await res.text());
-        }
-      } catch (err) {
-        console.error("Auto-save error:", err);
-      } finally {
-        setIsSaving(false);
-      }
-    }, 800); // slightly longer delay so it doesn't spam
-    return () => window.clearTimeout(timeout);
-  }, [files, slug, activePath]);
+    namePromptInitializedRef.current = false;
+    autoSaveSkipRef.current = true;
+    const starter = getStarterProject(slug);
+    setFiles(starter);
+    setActivePath(config.defaultActivePath);
+    setProjectMeta({ id: null, name: defaultProjectName });
+    setProjectNameDraft('');
+    setIsNameRequired(true);
+    setIsRenamingProject(true);
+    setLastSavedAt(null);
+    setCloudError(null);
+    setCloudAuthRequired(false);
+    setIsSaving(false);
+    setIsLoadingCloudProject(false);
+    setRecentlyCreatedPath(null);
+    cloudWarningShownRef.current = false;
+    loadedCloudProjectIdRef.current = null;
+  }, [
+    config.defaultActivePath,
+    defaultProjectName,
+    metaStorageKey,
+    searchParams,
+    slug,
+  ]);
 
   const code = files[activePath]?.code ?? '';
   const lang = files[activePath]?.language ?? 'javascript';
@@ -236,24 +303,24 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [activePath, slug, config.defaultActivePath]);
 
   const onCreate = useCallback((rawPath: string): string => {
-      const desired = rawPath.trim() || config.newFilePlaceholder;
-      let nextPath = desired;
-      setFiles(prev => {
-        const safePath = ensureUniquePath(desired, prev);
-        nextPath = safePath;
-        const fileLanguage = inferLanguage(safePath);
-        return {
-          ...prev,
-          [safePath]: {
-            path: safePath,
-            language: fileLanguage,
-            code: scaffoldFor(safePath, fileLanguage)
-          }
-        };
-      });
-      setActivePath(nextPath);
-      return nextPath;
-    }, [config.newFilePlaceholder]);
+    const desired = rawPath.trim() || config.newFilePlaceholder;
+    let nextPath = desired;
+    setFiles(prev => {
+      const safePath = ensureUniquePath(desired, prev);
+      nextPath = safePath;
+      const fileLanguage = inferLanguage(safePath);
+      return {
+        ...prev,
+        [safePath]: {
+          path: safePath,
+          language: fileLanguage,
+          code: scaffoldFor(safePath, fileLanguage),
+        },
+      };
+    });
+    setActivePath(nextPath);
+    return nextPath;
+  }, [config.newFilePlaceholder]);
 
   const pushToast = useCallback((next: { kind: 'success' | 'error'; message: string }) => {
     setToast(next);
@@ -266,64 +333,233 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     }, 3600);
   }, []);
 
-  const handleSave = useCallback(async () => {
-    setIsSaving(true);
-    
-    try {
-      const payload = {
-        name: activePath || "Untitled Project",
-        language: lang || "javascript",
-        files: files,
-      };
-
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        await res.json();
-        setLastSavedAt(new Date());
-        setIsSaving(false);
-        pushToast({
-          kind: "success",
-          message: `✅ Project saved to cloud workspace!`,
-        });
-        
-        // Reload projects list
-        const projectsRes = await fetch("/api/projects");
-        if (projectsRes.ok) {
-          const projectsData = await projectsRes.json();
-          setSavedProjects(projectsData);
-        }
-      } else {
-        const error = await res.json();
-        setIsSaving(false);
-        pushToast({
-          kind: "error",
-          message: `❌ Save failed: ${error.error || "Unknown error"}`,
-        });
+  const applyCloudProject = useCallback(
+    (project: CloudProject, options?: { silent?: boolean }) => {
+      autoSaveSkipRef.current = true;
+      saveProject(slug, project.files);
+      setFiles(project.files);
+      const firstPath = Object.keys(project.files).sort()[0] || config.defaultActivePath;
+      setActivePath(firstPath);
+      const normalizedName = project.name.trim() || defaultProjectName;
+      setProjectMeta({ id: project.id, name: normalizedName });
+      setIsNameRequired(false);
+      setLastSavedAt(new Date(project.updatedAt ?? Date.now()));
+      setCloudAuthRequired(false);
+      setCloudError(null);
+      if (!options?.silent) {
+        pushToast({ kind: 'success', message: `✅ Loaded project: ${normalizedName}` });
       }
-    } catch (err) {
-      console.error("Save failed:", err);
-      setIsSaving(false);
-      pushToast({
-        kind: "error",
-        message: "❌ Save failed: network or auth issue",
-      });
-    }
-  }, [files, lang, activePath, pushToast]);
+    },
+    [config.defaultActivePath, defaultProjectName, pushToast, slug]
+  );
 
-  const loadSavedProject = useCallback((project: SavedProject) => {
-    setFiles(project.files);
-    const firstPath = Object.keys(project.files).sort()[0] || config.defaultActivePath;
-    setActivePath(firstPath);
+  const persistProject = useCallback(
+    async (context: 'auto' | 'manual' | 'rename') => {
+      if (!files || !Object.keys(files).length) {
+        return { ok: false as const, reason: 'empty' as const };
+      }
+
+      const normalizedName = projectMeta.name.trim() || defaultProjectName;
+      if (normalizedName !== projectMeta.name) {
+        setProjectMeta(prev => ({ ...prev, name: normalizedName }));
+      }
+
+      saveProject(slug, files);
+
+      setIsSaving(true);
+      try {
+        const res = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: projectMeta.id ?? undefined,
+            name: normalizedName,
+            language: slug,
+            files,
+          }),
+        });
+
+        if (res.status === 401) {
+          setCloudAuthRequired(true);
+          setCloudError('Sign in to sync projects.');
+          if (!cloudWarningShownRef.current) {
+            cloudWarningShownRef.current = true;
+            pushToast({ kind: 'error', message: '❌ Sign in to sync projects to the cloud.' });
+          }
+          return { ok: false as const, reason: 'unauthorized' as const };
+        }
+
+        if (!res.ok) {
+          const raw = await res.text();
+          let message = raw;
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              if (typeof (parsed as { error?: unknown }).error === 'string') {
+                message = (parsed as { error: string }).error;
+              } else if (typeof (parsed as { message?: unknown }).message === 'string') {
+                message = (parsed as { message: string }).message;
+              }
+            }
+          } catch {
+            // ignore parse errors
+          }
+          message = message || 'Save failed';
+          setCloudError(message);
+          if (context !== 'auto') {
+            pushToast({ kind: 'error', message: `❌ Save failed: ${message}` });
+          }
+          return { ok: false as const, reason: 'error' as const, message };
+        }
+
+        const project = (await res.json()) as CloudProject;
+        const syncedName = project.name.trim() || normalizedName;
+        setProjectMeta({ id: project.id, name: syncedName });
+        setLastSavedAt(new Date(project.updatedAt ?? Date.now()));
+        setCloudAuthRequired(false);
+        setCloudError(null);
+        cloudWarningShownRef.current = false;
+        setIsNameRequired(false);
+        return { ok: true as const, project };
+      } catch (error) {
+        console.error('Save failed:', error);
+        setCloudError('Network error');
+        if (context !== 'auto') {
+          pushToast({ kind: 'error', message: '❌ Save failed: network or auth issue' });
+        }
+        return { ok: false as const, reason: 'error' as const, message: 'network' };
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [defaultProjectName, files, projectMeta.id, projectMeta.name, pushToast, slug]
+  );
+
+  useEffect(() => {
+    if (!files || !Object.keys(files).length) return;
+    if (autoSaveSkipRef.current) {
+      autoSaveSkipRef.current = false;
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      void persistProject('auto');
+    }, 800);
+    return () => window.clearTimeout(timeout);
+  }, [files, persistProject, projectMeta.name]);
+
+  const handleSave = useCallback(async () => {
+    const result = await persistProject('manual');
+    if (result.ok) {
+      pushToast({ kind: 'success', message: `✅ Project synced to the cloud` });
+    }
+  }, [persistProject, pushToast]);
+
+  const beginProjectRename = useCallback(() => {
+    if (isRenamingProject) {
+      return;
+    }
+    setIsNameRequired(false);
+    setProjectNameDraft(projectMeta.name);
+    setIsRenamingProject(true);
+  }, [isRenamingProject, projectMeta.name]);
+
+  const cancelProjectRename = useCallback(() => {
+    if (isNameRequired) {
+      pushToast({ kind: 'error', message: 'Name your project to continue.' });
+      setIsRenamingProject(true);
+      return;
+    }
+    setIsRenamingProject(false);
+    setProjectNameDraft(projectMeta.name);
+  }, [isNameRequired, projectMeta.name, pushToast]);
+
+  const commitProjectRename = useCallback(() => {
+    const trimmed = projectNameDraft.trim();
+    if (!trimmed) {
+      pushToast({ kind: 'error', message: 'Project name cannot be empty.' });
+      setProjectNameDraft(projectMeta.name);
+      setIsRenamingProject(false);
+      return;
+    }
+    if (trimmed === projectMeta.name) {
+      setIsRenamingProject(false);
+      setIsNameRequired(false);
+      return;
+    }
+    setProjectMeta(prev => ({ ...prev, name: trimmed }));
+    setIsRenamingProject(false);
+    setIsNameRequired(false);
     pushToast({
-      kind: "success",
-      message: `✅ Loaded project: ${project.name}`,
+      kind: 'success',
+      message: isNameRequired ? `Project named ${trimmed}` : `Renamed project to ${trimmed}`,
     });
-  }, [config.defaultActivePath, pushToast]);
+  }, [isNameRequired, projectNameDraft, projectMeta.name, pushToast]);
+
+  useEffect(() => {
+    const projectId = searchParams?.get('projectId');
+    if (!projectId || loadedCloudProjectIdRef.current === projectId) {
+      return;
+    }
+
+    loadedCloudProjectIdRef.current = projectId;
+    autoSaveSkipRef.current = true;
+    let cancelled = false;
+    setIsLoadingCloudProject(true);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}`, { cache: 'no-store' });
+        if (res.status === 401) {
+          if (!cancelled) {
+            setCloudAuthRequired(true);
+            pushToast({ kind: 'error', message: '❌ Sign in to load cloud projects.' });
+            loadedCloudProjectIdRef.current = null;
+          }
+          return;
+        }
+        if (res.status === 404) {
+          if (!cancelled) {
+            pushToast({ kind: 'error', message: '❌ Project not found or inaccessible.' });
+            loadedCloudProjectIdRef.current = null;
+          }
+          return;
+        }
+        if (!res.ok) {
+          if (!cancelled) {
+            pushToast({ kind: 'error', message: '❌ Failed to load project from cloud.' });
+            loadedCloudProjectIdRef.current = null;
+          }
+          return;
+        }
+        const project = (await res.json()) as CloudProject;
+        const targetSlug = resolveWorkspaceSlugFromLanguage(project.language, slug);
+        if (targetSlug !== slug) {
+          if (!cancelled) {
+            pushToast({ kind: 'error', message: '❌ Project belongs to a different workspace.' });
+            loadedCloudProjectIdRef.current = null;
+          }
+          return;
+        }
+        if (!cancelled) {
+          applyCloudProject(project);
+        }
+      } catch (error) {
+        console.error('Failed to load project:', error);
+        if (!cancelled) {
+          pushToast({ kind: 'error', message: '❌ Failed to load project from cloud.' });
+          loadedCloudProjectIdRef.current = null;
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingCloudProject(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyCloudProject, pushToast, searchParams, slug]);
 
   const sandpackFiles = useMemo(() => {
     const map: Record<string, { code: string }> = {};
@@ -334,11 +570,30 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [files]);
 
   const formattedTime = formatTime(lastSavedAt);
-  const savedLabel = isSaving ? 'Saving…' : formattedTime ? `Saved at ${formattedTime}` : 'Synced';
+  let savedLabel: string;
+  if (isLoadingCloudProject) {
+    savedLabel = 'Loading project…';
+  } else if (cloudAuthRequired) {
+    savedLabel = 'Not syncing (sign in)';
+  } else if (cloudError) {
+    savedLabel = 'Sync issue';
+  } else if (isSaving) {
+    savedLabel = 'Saving…';
+  } else if (formattedTime) {
+    savedLabel = `Saved at ${formattedTime}`;
+  } else if (lastSavedAt) {
+    savedLabel = 'Synced to cloud';
+  } else {
+    savedLabel = 'Local backup only';
+  }
 
-  const statusBadgeClass = isSaving
-    ? 'inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-amber-400/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-100'
-    : 'inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-100';
+  const statusBadgeClass = cloudAuthRequired
+    ? 'inline-flex items-center gap-2 rounded-full border border-amber-400/70 bg-amber-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-100'
+    : cloudError
+      ? 'inline-flex items-center gap-2 rounded-full border border-rose-400/60 bg-rose-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-rose-100'
+      : isSaving || isLoadingCloudProject
+        ? 'inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-amber-400/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-amber-100'
+        : 'inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-100';
 
   const actionButtonBaseClass =
     'inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70';
@@ -355,7 +610,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     const placeholder = smartPlaceholder(config.newFilePlaceholder, activeLanguage);
     const createdPath = onCreate(placeholder);
     setRecentlyCreatedPath(createdPath);
-    pushToast({ kind: 'success', message: `Created ${createdPath}` });
+    pushToast({ kind: 'success', message: `Created file ${createdPath}` });
   }, [files, activePath, config.newFilePlaceholder, onCreate, pushToast]);
 
   const resetWorkspace = useCallback(() => {
@@ -366,11 +621,13 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       return;
     }
     const starter = getStarterProject(slug);
+    autoSaveSkipRef.current = true;
     setFiles(starter);
     setActivePath(config.defaultActivePath);
     saveProject(slug, starter);
     setLastSavedAt(new Date());
     setIsSaving(false);
+    setCloudError(null);
   }, [slug, config.defaultActivePath]);
 
   useEffect(() => {
@@ -393,7 +650,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       <div className="relative flex min-h-screen flex-col">
         <header className="border-b border-white/10 bg-black/40 backdrop-blur">
           <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
-            <div className="flex min-w-0 flex-1 items-center gap-4">
+            <div className="flex min-w-0 flex-1 items-start gap-4">
               <Link
                 href="/"
                 className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
@@ -411,33 +668,108 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                 <span className="hidden sm:inline">Back to home</span>
                 <span className="sm:hidden">Home</span>
               </Link>
-              <div className="min-w-0">
-                <h1 className="truncate text-lg font-semibold text-white sm:text-xl">{config.title} workspace</h1>
-                <p className="mt-1 truncate text-sm text-white/60">{config.description}</p>
+              <div className="min-w-0 flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-white/50">
+                    Workspace
+                  </span>
+                  <span className="truncate text-base font-semibold text-white sm:text-lg">{config.title}</span>
+                </div>
+                <p className="max-w-xl text-xs text-white/55 sm:text-sm">{config.description}</p>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-[10px] uppercase tracking-[0.35em] text-white/40">Project</span>
+                  {isRenamingProject ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        value={projectNameDraft}
+                        onChange={event => setProjectNameDraft(event.target.value)}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            commitProjectRename();
+                          }
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            cancelProjectRename();
+                          }
+                        }}
+                        autoFocus
+                        placeholder={isNameRequired ? 'Name your project' : 'Project name'}
+                        className="w-full min-w-[160px] max-w-[260px] rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
+                      />
+                      <button
+                        type="button"
+                        onClick={commitProjectRename}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
+                      >
+                        Save
+                      </button>
+                      {isNameRequired ? null : (
+                        <button
+                          type="button"
+                          onClick={cancelProjectRename}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:border-white/35 hover:text-white"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onDoubleClick={beginProjectRename}
+                        onClick={beginProjectRename}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            beginProjectRename();
+                          }
+                        }}
+                        className="group inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300/60"
+                        title="Double-click to rename project"
+                      >
+                        <span className="truncate max-w-[220px] sm:max-w-[260px]">{projectMeta.name}</span>
+                        <span className="text-[10px] uppercase tracking-[0.35em] text-white/35 group-hover:text-white/60">Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={beginProjectRename}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:border-white/30 hover:text-white"
+                        aria-label="Rename project"
+                      >
+                        ✎
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-white/60">
+            <div className="flex flex-1 flex-wrap items-end justify-end gap-3 text-xs text-white/60">
               <span className={statusBadgeClass}>
                 <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
                 {savedLabel}
               </span>
+              {cloudError ? (
+                <span className="text-[11px] text-rose-200">{cloudError}</span>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <button onClick={createSmartFile} className={primaryActionClass}>
                   New file
                 </button>
                 <button onClick={handleSave} className={subtleActionClass}>
-                  Save now
+                  Sync now
                 </button>
                 <button onClick={resetWorkspace} className={dangerActionClass}>
-                  Reset
+                  Reset workspace
                 </button>
               </div>
             </div>
           </div>
         </header>
         <main className="flex flex-1 flex-col px-4 pb-8 pt-6 lg:px-8">
-          <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-4 md:gap-5 lg:grid-cols-[240px_minmax(0,1.8fr)_minmax(0,1.2fr)] xl:grid-cols-[260px_minmax(0,1.9fr)_minmax(0,1.2fr)]">
-            <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/40">
+          <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-4 md:gap-5 lg:grid-cols-[220px_minmax(0,1.9fr)_minmax(0,1.1fr)] xl:grid-cols-[230px_minmax(0,2fr)_minmax(0,1.1fr)]">
+            <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/35">
               <div className="flex flex-1 flex-col overflow-hidden">
                 <FileExplorer
                   files={files}
@@ -451,27 +783,6 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                   placeholder={config.newFilePlaceholder}
                 />
               </div>
-              <section className="border-t border-white/10 p-3">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60 mb-2">Saved Projects</h3>
-                <ul className="space-y-1 text-xs">
-                  {isLoadingProjects ? (
-                    <li className="text-white/40">Loading…</li>
-                  ) : savedProjects.length === 0 ? (
-                    <li className="text-white/40">No saved projects yet</li>
-                  ) : (
-                    savedProjects.map((p) => (
-                      <li
-                        key={p.id}
-                        className="cursor-pointer px-2 py-1 rounded hover:bg-white/10 transition text-white/70 hover:text-emerald-400"
-                        onClick={() => loadSavedProject(p)}
-                      >
-                        <div className="truncate font-medium">{p.name}</div>
-                        <div className="text-white/40 text-[10px]">{p.language}</div>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </section>
             </div>
             <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/40">
               <Editor value={code} language={lang} onChange={setActiveCode} />

@@ -37,13 +37,41 @@ export async function POST(req: Request) {
     },
   });
 
-  const { name, language, files } = await req.json();
+  const { id, name, language, files } = await req.json();
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return NextResponse.json({ error: 'Project name is required' }, { status: 400 });
+  }
+
+  if (id) {
+    const existing = await prisma.project.findFirst({
+      where: {
+        id,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    const project = await prisma.project.update({
+      where: { id: existing.id },
+      data: {
+        name: name.trim(),
+        language,
+        files,
+      },
+    });
+
+    return NextResponse.json(project);
+  }
 
   const project = await prisma.project.upsert({
     where: {
       userId_name: {
         userId: user.id,
-        name,
+        name: name.trim(),
       },
     },
     update: {
@@ -52,7 +80,7 @@ export async function POST(req: Request) {
       updatedAt: new Date(),
     },
     create: {
-      name,
+      name: name.trim(),
       language,
       files,
       userId: user.id,

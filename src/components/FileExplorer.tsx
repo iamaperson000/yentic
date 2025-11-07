@@ -81,16 +81,16 @@ export function FileExplorer({
 
   return (
     <div className="flex h-full flex-col text-sm text-white/80">
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/40 px-3 py-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Files</p>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2 border-b border-white/10 bg-black/30 px-3 py-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/50">Files</p>
+        <div className="ml-auto flex items-center gap-2">
           {onCreateFile ? (
             <button
               type="button"
               onClick={onCreateFile}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-white/70 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
             >
-              <span aria-hidden className="text-base leading-none">＋</span>
+              <span aria-hidden className="text-sm leading-none">＋</span>
               New file
             </button>
           ) : null}
@@ -102,34 +102,35 @@ export function FileExplorer({
             <li
               key={f.path}
               className={clsx(
-                'rounded-2xl border px-3 py-2 transition',
+                'rounded-xl border border-transparent bg-black/20 px-2.5 py-2 transition',
                 activePath === f.path
-                  ? 'border-emerald-400/40 bg-emerald-500/10'
-                  : 'border-white/10 bg-black/30 hover:border-white/20 hover:bg-black/40'
+                  ? 'border-emerald-400/50 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(16,185,129,0.25)]'
+                  : 'hover:border-white/15 hover:bg-white/5'
               )}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => onSelect(f.path)}
+                  onDoubleClick={() => beginRename(f.path)}
                   className="flex min-w-0 flex-1 flex-col text-left"
                 >
-                  <span className="truncate text-sm font-semibold text-white">{f.path}</span>
-                  <span className="text-[11px] uppercase tracking-[0.3em] text-white/40">{f.language}</span>
+                  <span className="truncate text-[13px] font-semibold text-white">{f.path}</span>
+                  <span className="text-[10px] uppercase tracking-[0.35em] text-white/35">{f.language}</span>
                 </button>
                 <div className="flex items-center gap-1.5 text-[11px]">
                   <button
                     type="button"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/60 transition hover:border-white/40 hover:text-white"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/50 transition hover:border-white/30 hover:text-white"
                     onClick={() => beginRename(f.path)}
                     aria-label={`Rename ${f.path}`}
                   >
-                    📝
+                    ✎
                   </button>
                   <button
                     type="button"
                     className={clsx(
-                      'inline-flex h-7 w-7 items-center justify-center rounded-full border text-white/70 transition',
+                      'inline-flex h-6 w-6 items-center justify-center rounded-full border text-white/60 transition',
                       pendingDelete === f.path
                         ? 'border-rose-400/60 bg-rose-500/20 text-rose-100'
                         : 'border-rose-400/40 bg-rose-500/10 hover:border-rose-300 hover:text-rose-100'
@@ -139,14 +140,14 @@ export function FileExplorer({
                     }
                     aria-label={`Delete ${f.path}`}
                   >
-                    ✕
+                    ×
                   </button>
                 </div>
               </div>
 
               {renameTarget === f.path ? (
-                <div className="mt-2 rounded-2xl border border-white/10 bg-black/50 p-3">
-                  <label className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/50">
+                <div className="mt-2 rounded-lg border border-white/10 bg-black/60 px-3 py-2">
+                  <label className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">
                     Rename file
                   </label>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -164,20 +165,20 @@ export function FileExplorer({
                         }
                       }}
                       placeholder={placeholder ?? ''}
-                      className="flex-1 rounded-xl border border-white/20 bg-black/60 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
+                      className="flex-1 rounded-lg border border-white/15 bg-black/70 px-3 py-1.5 text-sm text-white placeholder:text-white/35 focus:border-emerald-300/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
                     />
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => submitRename(f.path)}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
                       >
                         Save
                       </button>
                       <button
                         type="button"
                         onClick={cancelRename}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:border-white/40 hover:text-white"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:border-white/35 hover:text-white"
                       >
                         Cancel
                       </button>
@@ -187,8 +188,8 @@ export function FileExplorer({
               ) : null}
 
               {pendingDelete === f.path ? (
-                <div className="mt-2 rounded-2xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-                  <p className="text-[11px] uppercase tracking-[0.25em] text-rose-100/80">Confirm deletion</p>
+                <div className="mt-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-rose-100/70">Confirm deletion</p>
                   <p className="mt-1 text-xs text-rose-100/70">This action cannot be undone.</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button
