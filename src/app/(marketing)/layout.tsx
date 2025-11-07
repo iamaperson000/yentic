@@ -31,6 +31,12 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
                 </Link>
               ))}
               <Link
+                href="/signup"
+                className="rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white/80 transition hover:border-white/40 hover:text-white"
+              >
+                Sign up
+              </Link>
+              <Link
                 href="/ide"
                 className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
               >
