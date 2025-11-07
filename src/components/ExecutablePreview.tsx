@@ -5,6 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ExecutableLanguage } from '@/lib/runners';
 import { executeCode } from '@/lib/runners';
 
+const standardInputLanguages: ReadonlySet<ExecutableLanguage> = new Set([
+  'python',
+  'c',
+  'cpp',
+  'java'
+]);
+
 type ExecutablePreviewProps = {
   code: string;
   language: ExecutableLanguage;
@@ -25,6 +32,8 @@ export function ExecutablePreview({ code, language, path }: ExecutablePreviewPro
   const latestCode = useRef(code);
   const latestInput = useRef(stdinValue);
   const pendingRun = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const supportsStandardInput = standardInputLanguages.has(language);
 
   const label = useMemo(() => {
     switch (language) {
@@ -68,13 +77,14 @@ export function ExecutablePreview({ code, language, path }: ExecutablePreviewPro
       pendingRun.current = null;
     }
     latestCode.current = code;
-    latestInput.current = stdinValue;
-    void run(code, stdinValue);
-  }, [code, run, stdinValue]);
+    const inputSnapshot = supportsStandardInput ? stdinValue : '';
+    latestInput.current = inputSnapshot;
+    void run(code, inputSnapshot);
+  }, [code, run, stdinValue, supportsStandardInput]);
 
   useEffect(() => {
     latestCode.current = code;
-    latestInput.current = stdinValue;
+    latestInput.current = supportsStandardInput ? stdinValue : '';
     if (!autoRun) {
       if (pendingRun.current) {
         clearTimeout(pendingRun.current);
@@ -95,7 +105,7 @@ export function ExecutablePreview({ code, language, path }: ExecutablePreviewPro
         pendingRun.current = null;
       }
     };
-  }, [autoRun, code, run, stdinValue]);
+  }, [autoRun, code, run, stdinValue, supportsStandardInput]);
 
   const statusLabel = state.status === 'running' ? 'Running…' : state.status === 'ready' ? 'Output' : 'Idle';
 
@@ -136,17 +146,19 @@ export function ExecutablePreview({ code, language, path }: ExecutablePreviewPro
           )}
         </div>
         <div className="flex h-full flex-col gap-3 overflow-auto p-4 text-sm text-white/80">
-          <div className="rounded-2xl border border-white/10 bg-black/40">
-            <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
-              Standard Input
+          {supportsStandardInput ? (
+            <div className="rounded-2xl border border-white/10 bg-black/40">
+              <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
+                Standard Input
+              </div>
+              <textarea
+                value={stdinValue}
+                onChange={event => setStdinValue(event.target.value)}
+                className="min-h-[72px] w-full bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30"
+                placeholder="Provide input that your program reads from stdin…"
+              />
             </div>
-            <textarea
-              value={stdinValue}
-              onChange={event => setStdinValue(event.target.value)}
-              className="min-h-[72px] w-full bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30"
-              placeholder="Provide input that your program reads from stdin…"
-            />
-          </div>
+          ) : null}
           {state.output && (
             <pre className="whitespace-pre-wrap break-words text-emerald-100/90">{state.output || ' '}</pre>
           )}
