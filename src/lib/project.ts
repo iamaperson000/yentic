@@ -32,6 +32,27 @@ export type WorkspaceConfig = {
 
 const KEY_PREFIX = 'yentic.project.v1';
 
+export function resolveWorkspaceSlugFromLanguage(
+  language: string,
+  fallback: WorkspaceSlug = 'web'
+): WorkspaceSlug {
+  if (language in workspaceConfigs) {
+    return language as WorkspaceSlug;
+  }
+
+  const normalized = language.toLowerCase();
+  if (['html', 'css', 'javascript', 'web'].includes(normalized)) {
+    return 'web';
+  }
+
+  if (normalized === 'python') return 'python';
+  if (normalized === 'c') return 'c';
+  if (normalized === 'cpp' || normalized === 'c++') return 'cpp';
+  if (normalized === 'java') return 'java';
+
+  return fallback;
+}
+
 export function inferLanguage(path: string): SupportedLanguage {
   const normalized = path.toLowerCase();
   if (normalized.endsWith('.html') || normalized.endsWith('.htm')) return 'html';
@@ -237,6 +258,12 @@ export function loadProject(slug: WorkspaceSlug): ProjectFileMap | null {
 export function saveProject(slug: WorkspaceSlug, files: ProjectFileMap) {
   try {
     localStorage.setItem(`${KEY_PREFIX}:${slug}`, JSON.stringify(files));
+  } catch {}
+}
+
+export function clearProject(slug: WorkspaceSlug) {
+  try {
+    localStorage.removeItem(`${KEY_PREFIX}:${slug}`);
   } catch {}
 }
 
