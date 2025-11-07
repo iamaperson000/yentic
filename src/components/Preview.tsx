@@ -13,6 +13,7 @@ import { clsx } from 'clsx';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 import type { SupportedLanguage } from '@/lib/project';
+import { ConsoleInputPanel } from '@/components/ConsoleInputPanel';
 import { executeCode, type ExecutableLanguage } from '@/lib/runners';
 
 type PreviewMode = 'sandpack' | 'code' | 'message' | 'runtime';
@@ -29,7 +30,9 @@ type PreviewProps = {
 
 const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'java']);
 
-const standardInputLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'java']);
+const consoleInputLanguages = new Set<ExecutableLanguage>(['python']);
+
+const textareaInputLanguages = new Set<ExecutableLanguage>(['c', 'cpp', 'java']);
 
 type RuntimeStatus = 'idle' | 'running' | 'ready' | 'error';
 
@@ -55,7 +58,8 @@ function RuntimePreview({
   const [status, setStatus] = useState<RuntimeStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasPendingChanges, setHasPendingChanges] = useState<boolean>(false);
-  const [stdinValue, setStdinValue] = useState<string>('');
+  const [consoleInputs, setConsoleInputs] = useState<Partial<Record<ExecutableLanguage, string>>>({});
+  const [textInputs, setTextInputs] = useState<Partial<Record<ExecutableLanguage, string>>>({});
   const runId = useRef(0);
   const lastProcessedRun = useRef<number>(0);
   const lastExecutedSource = useRef<string>('');
@@ -65,6 +69,24 @@ function RuntimePreview({
   const normalizedLanguage = runtimeLanguages.has(language as ExecutableLanguage)
     ? (language as ExecutableLanguage)
     : undefined;
+
+  const supportsConsoleInput =
+    normalizedLanguage !== undefined && consoleInputLanguages.has(normalizedLanguage);
+  const supportsTextareaInput =
+    normalizedLanguage !== undefined && textareaInputLanguages.has(normalizedLanguage);
+  const supportsAnyInput = supportsConsoleInput || supportsTextareaInput;
+
+  const consoleInputValue = supportsConsoleInput
+    ? (normalizedLanguage ? consoleInputs[normalizedLanguage] ?? '' : '')
+    : '';
+  const textInputValue = supportsTextareaInput
+    ? (normalizedLanguage ? textInputs[normalizedLanguage] ?? '' : '')
+    : '';
+  const effectiveInput = supportsConsoleInput
+    ? consoleInputValue
+    : supportsTextareaInput
+      ? textInputValue
+      : '';
 
   const scheduleStateUpdate = useCallback((updater: () => void) => {
     if (typeof queueMicrotask === 'function') {
@@ -151,12 +173,13 @@ function RuntimePreview({
     }
 
     const trimmed = code.trim();
+    const inputSnapshot = supportsAnyInput ? effectiveInput : '';
     scheduleStateUpdate(() => {
       setHasPendingChanges(
-        trimmed !== lastExecutedSource.current || stdinValue !== lastExecutedInput.current
+        trimmed !== lastExecutedSource.current || inputSnapshot !== lastExecutedInput.current
       );
     });
-  }, [autorunEnabled, code, normalizedLanguage, scheduleStateUpdate, stdinValue]);
+  }, [autorunEnabled, code, effectiveInput, normalizedLanguage, scheduleStateUpdate, supportsAnyInput]);
 
   useEffect(() => {
     if (!normalizedLanguage) {
@@ -176,9 +199,9 @@ function RuntimePreview({
     lastProcessedRun.current = runRequestId;
 
     const trimmed = code.trim();
-    const inputSnapshot = stdinValue;
+    const inputSnapshot = supportsAnyInput ? effectiveInput : '';
     return enqueueExecution(trimmed, inputSnapshot);
-  }, [autorunEnabled, code, enqueueExecution, normalizedLanguage, runRequestId, stdinValue]);
+  }, [autorunEnabled, code, effectiveInput, enqueueExecution, normalizedLanguage, runRequestId, supportsAnyInput]);
 
   useEffect(() => {
     if (!normalizedLanguage || !autorunEnabled) {
@@ -188,7 +211,7 @@ function RuntimePreview({
     lastProcessedRun.current = runRequestId;
 
     const trimmed = code.trim();
-    const inputSnapshot = stdinValue;
+    const inputSnapshot = supportsAnyInput ? effectiveInput : '';
     if (
       trimmed === lastExecutedSource.current &&
       inputSnapshot === lastExecutedInput.current
@@ -197,7 +220,7 @@ function RuntimePreview({
     }
 
     return enqueueExecution(trimmed, inputSnapshot);
-  }, [autorunEnabled, code, enqueueExecution, normalizedLanguage, runRequestId, stdinValue]);
+  }, [autorunEnabled, code, effectiveInput, enqueueExecution, normalizedLanguage, runRequestId, supportsAnyInput]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -205,8 +228,7 @@ function RuntimePreview({
   }, [stdout, stderr, status]);
 
   const isRunnable = Boolean(normalizedLanguage);
-  const supportsStandardInput =
-    normalizedLanguage !== undefined && standardInputLanguages.has(normalizedLanguage);
+  const supportsStandardInput = supportsTextareaInput;
   const runtimeLabel = normalizedLanguage ? `Live Runtime · ${normalizedLanguage.toUpperCase()}` : 'Live Runtime';
 
   const computedStatus: RuntimeStatus = !isRunnable ? 'error' : status;
@@ -257,14 +279,28 @@ function RuntimePreview({
               {computedErrorMessage}
             </div>
           ) : null}
-          {supportsStandardInput ? (
+          {supportsConsoleInput ? (
+            <ConsoleInputPanel
+              key={normalizedLanguage ?? 'runtime-console'}
+              value={consoleInputValue}
+              onChange={nextValue =>
+                normalizedLanguage
+                  ? setConsoleInputs(previous => ({ ...previous, [normalizedLanguage]: nextValue }))
+                  : void 0
+              }
+            />
+          ) : supportsStandardInput ? (
             <div className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
               <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
                 Standard Input
               </div>
               <textarea
-                value={stdinValue}
-                onChange={event => setStdinValue(event.target.value)}
+                value={textInputValue}
+                onChange={event =>
+                  normalizedLanguage
+                    ? setTextInputs(previous => ({ ...previous, [normalizedLanguage]: event.target.value }))
+                    : void 0
+                }
                 className="min-h-[80px] flex-1 bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30"
                 placeholder="Provide input for scanf or other stdin reads…"
               />
