@@ -1093,9 +1093,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
             <p className="hidden min-w-0 truncate text-xs text-white/50 sm:block">{config.description}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-white/60">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">Project</span>
-              {isRenamingProject ? (
+            {isRenamingProject ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">Project</span>
                 <input
                   ref={projectNameInputRef}
                   value={projectNameDraft}
@@ -1115,24 +1115,8 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                   placeholder={isNameRequired ? 'Name your project' : 'Project name'}
                   className="w-[180px] rounded-md border border-white/20 bg-black/60 px-2.5 py-1 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40"
                 />
-              ) : (
-                <button
-                  type="button"
-                  onDoubleClick={beginProjectRename}
-                  onClick={beginProjectRename}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      beginProjectRename();
-                    }
-                  }}
-                  className="truncate max-w-[220px] rounded-full border border-white/15 bg-white/5 px-3 py-1 text-sm font-medium text-white/75 transition hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300/60"
-                  title="Double-click to rename project"
-                >
-                  {projectMeta.name}
-                </button>
-              )}
-            </div>
+              </div>
+            ) : null}
             <span className={statusBadgeClass}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
               {savedLabel}
@@ -1142,6 +1126,32 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
               <button onClick={createSmartFile} className={primaryActionClass} disabled={!canEdit}>
                 New file
               </button>
+              {!isRenamingProject ? (
+                <button
+                  onClick={beginProjectRename}
+                  className={subtleActionClass}
+                  disabled={viewerRole !== 'owner'}
+                  title={
+                    viewerRole !== 'owner'
+                      ? 'Only owners can rename projects'
+                      : projectMeta.name
+                        ? `Rename project (current: ${projectMeta.name})`
+                        : 'Rename project'
+                  }
+                  aria-label={
+                    viewerRole !== 'owner'
+                      ? 'Only owners can rename projects'
+                      : projectMeta.name
+                        ? `Rename project. Current name ${projectMeta.name}.`
+                        : 'Rename project'
+                  }
+                >
+                  Rename
+                  <span className="sr-only">
+                    {projectMeta.name ? `Current project name ${projectMeta.name}` : ''}
+                  </span>
+                </button>
+              ) : null}
               <button
                 onClick={openShareModal}
                 className={shareButtonClass}
