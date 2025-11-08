@@ -618,30 +618,24 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     ]
   );
 
+  const persistProjectRef = useRef(persistProject);
+
+  useEffect(() => {
+    persistProjectRef.current = persistProject;
+  }, [persistProject]);
+
   useEffect(() => {
     if (viewerRole === 'viewer') return;
-    if (projectMeta.id) return;
     if (!files || !Object.keys(files).length) return;
     if (autoSaveSkipRef.current) {
       autoSaveSkipRef.current = false;
       return;
     }
     const timeout = window.setTimeout(() => {
-      void persistProject('auto');
+      void persistProjectRef.current('auto');
     }, 800);
     return () => window.clearTimeout(timeout);
-  }, [files, persistProject, projectMeta.id, projectMeta.name, viewerRole]);
-
-  const handleSave = useCallback(async () => {
-    if (viewerRole === 'viewer') {
-      pushToast({ kind: 'error', message: 'Viewers cannot sync projects.' });
-      return;
-    }
-    const result = await persistProject('manual');
-    if (result.ok) {
-      pushToast({ kind: 'success', message: `✅ Project synced to the cloud` });
-    }
-  }, [persistProject, pushToast, viewerRole]);
+  }, [files, viewerRole]);
 
   const flushCollaborativeState = useCallback(() => {
     if (viewerRole === 'viewer') {
@@ -1298,9 +1292,6 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                 }
               >
                 Share
-              </button>
-              <button onClick={handleSave} className={subtleActionClass} disabled={!canEdit}>
-                Sync now
               </button>
               <button onClick={resetWorkspace} className={dangerActionClass} disabled={viewerRole !== 'owner'}>
                 Reset workspace
