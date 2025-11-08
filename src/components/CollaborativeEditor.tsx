@@ -129,7 +129,7 @@ export default function CollaborativeEditor({
   const suppressLocalSyncRef = useRef(false);
   const appliedStateRef = useRef<string | null>(null);
   const localPresenceRef = useRef<LocalCollaboratorPresence | null>(null);
-  const onPresenceChangeRef = useRef<((presence: CollaboratorPresence[]) => void) | undefined>();
+  const onPresenceChangeRef = useRef<((presence: CollaboratorPresence[]) => void) | undefined>(undefined);
 
   const emitPresence = useCallback(() => {
     const collaboration = collaborationRef.current;
