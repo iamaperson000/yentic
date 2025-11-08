@@ -33,6 +33,16 @@ export async function GET(_req: Request, context: RouteContext) {
 
   const project = await prisma.project.findUnique({
     where: { id: params.id },
+    select: {
+      id: true,
+      name: true,
+      language: true,
+      files: true,
+      createdAt: true,
+      updatedAt: true,
+      userId: true,
+      yjsState: true,
+    },
   });
 
   if (!project) {
