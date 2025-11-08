@@ -21,7 +21,12 @@ export async function GET(
   }
 
   const user = await prisma.user.findFirst({
-    where: { username },
+    where: {
+      username: {
+        equals: username,
+        mode: "insensitive",
+      },
+    },
     select: {
       id: true,
       name: true,
