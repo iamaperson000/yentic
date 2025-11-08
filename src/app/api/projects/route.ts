@@ -51,27 +51,52 @@ export async function GET() {
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const projects = await prisma.project.findMany({
-    where: {
-      OR: [{ userId: user.id }, { collaborators: { some: { userId: user.id } } }],
-    },
-    include: {
-      collaborators: {
-        where: { userId: user.id },
-        select: { role: true },
+  const [owned, shared] = await Promise.all([
+    prisma.project.findMany({
+      where: { userId: user.id },
+      include: {
+        collaborators: {
+          where: { userId: user.id },
+          select: { role: true },
+        },
       },
-    },
-    orderBy: { updatedAt: "desc" },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.project.findMany({
+      where: {
+        collaborators: { some: { userId: user.id } },
+        NOT: { userId: user.id },
+      },
+      include: {
+        collaborators: {
+          where: { userId: user.id },
+          select: { role: true },
+        },
+        user: {
+          select: { name: true, username: true, image: true },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
+
+  const normalizedOwned = owned.map((project) => {
+    const { collaborators: memberships, yjsState, ...rest } = project;
+    void memberships;
+
+    return {
+      ...rest,
+      yjsState: encodeState(yjsState),
+      viewerRole: "owner" as ViewerRole,
+    };
   });
 
-  const normalized = projects.map((project) => {
+  const normalizedShared = shared.map((project) => {
     const { collaborators: memberships, yjsState, ...rest } = project;
     const membershipRole = memberships[0]?.role;
 
     const viewerRole: ViewerRole =
-      project.userId === user.id
-        ? ("owner" as ViewerRole)
-        : membershipRole === "editor"
+      membershipRole === "editor"
         ? ("editor" as ViewerRole)
         : ("viewer" as ViewerRole);
 
@@ -82,7 +107,7 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json(normalized);
+  return NextResponse.json({ owned: normalizedOwned, shared: normalizedShared });
 }
 
 /* -------------------------------------------------------------------------- */
