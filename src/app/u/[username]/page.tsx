@@ -1,7 +1,4 @@
-import { notFound } from "next/navigation";
-import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { normalizeUsername } from "@/lib/username";
 
 export const dynamic = "force-dynamic";
 
@@ -9,56 +6,25 @@ export async function generateStaticParams() {
   return [];
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { username?: string };
-}) {
-  const username = normalizeUsername(params?.username);
-  if (!username) return { title: "User | Yentic" };
+export default async function UserPage({ params }: { params: { username?: string } }) {
+  const username = params?.username;
+  console.log(">>> DEBUG username param:", username);
 
-  if (!process.env.DATABASE_URL) {
-    return { title: "User | Yentic" };
+  if (!username) {
+    console.error(">>> No username param found!");
+    return <div className="p-8 text-center text-red-500">Error: no username in params.</div>;
   }
 
-  // Lookup user profile by normalized username
-  const user = (await prisma.user.findFirst({
-    where: {
-      username: { equals: username, mode: "insensitive" },
-    } as Prisma.UserWhereInput,
-  })) as ({ name: string | null; username: string | null } | null);
+  const user = await prisma.user.findFirst({
+    where: { username: { equals: username, mode: "insensitive" } },
+    select: { id: true, name: true, username: true, bio: true, image: true },
+  });
 
-  const title = user ? `${user.username} | Yentic` : "User | Yentic";
-  return { title };
-}
+  console.log(">>> DEBUG prisma result:", user);
 
-export default async function UserPage({
-  params,
-}: {
-  params: { username?: string };
-}) {
-  const username = normalizeUsername(params?.username);
-  if (!username) return notFound();
-
-  if (!process.env.DATABASE_URL) {
-    return notFound();
+  if (!user) {
+    return <div className="p-8 text-center text-red-500">No user found for "{username}"</div>;
   }
-
-  // Lookup user profile by normalized username
-  const user = (await prisma.user.findFirst({
-    where: {
-      username: { equals: username, mode: "insensitive" },
-    } as Prisma.UserWhereInput,
-  })) as
-    | ({
-        id: string;
-        name: string | null;
-        username: string | null;
-        bio: string | null;
-        image: string | null;
-      } | null);
-
-  if (!user) return notFound();
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
