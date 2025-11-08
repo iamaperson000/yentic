@@ -1,33 +1,44 @@
-import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { cache } from "react";
-
 import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-type Params = { username: string };
+export async function generateStaticParams() {
+  return [];
+}
 
-const getUserByUsername = cache(async (username: string) => {
-  return prisma.user.findFirst({
-    where: {
-      username: {
-        equals: username,
-        mode: "insensitive",
-      },
-    },
-    select: { name: true, username: true, bio: true, image: true },
+export async function generateMetadata({
+  params,
+}: {
+  params: { username?: string };
+}) {
+  const username = await Promise.resolve(params?.username);
+  if (!username) return { title: "User | Yentic" };
+
+  // Case-insensitive lookup for metadata
+  const user = await prisma.user.findFirst({
+    where: { username: { equals: username, mode: "insensitive" } },
+    select: { name: true, username: true },
   });
-});
 
-export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  const user = await getUserByUsername(params.username);
   const title = user ? `${user.username} | Yentic` : "User | Yentic";
   return { title };
 }
 
-export default async function UserPage({ params }: { params: Params }) {
-  const user = await getUserByUsername(params.username);
+export default async function UserPage({
+  params,
+}: {
+  params: { username?: string };
+}) {
+  const username = await Promise.resolve(params?.username);
+  if (!username || typeof username !== "string") return notFound();
+
+  // Case-insensitive lookup for user
+  const user = await prisma.user.findFirst({
+    where: { username: { equals: username, mode: "insensitive" } },
+    select: { id: true, name: true, username: true, bio: true, image: true },
+  });
+
   if (!user) return notFound();
 
   return (

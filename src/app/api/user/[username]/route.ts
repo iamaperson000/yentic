@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { NextRequest, NextResponse } from "next/server"
 
 import prisma from "@/lib/prisma"
@@ -20,21 +21,23 @@ export async function GET(
     return NextResponse.json({ error: "Username is required" }, { status: 400 })
   }
 
+  const userSelect: Prisma.UserSelect = {
+    id: true,
+    name: true,
+    username: true,
+    image: true,
+    bio: true,
+    createdAt: true,
+  }
+
   const user = await prisma.user.findFirst({
     where: {
       username: {
         equals: username,
         mode: "insensitive",
       },
-    },
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      image: true,
-      bio: true,
-      createdAt: true,
-    },
+    } as Prisma.UserWhereInput,
+    select: userSelect,
   })
 
   if (!user) {
