@@ -3,10 +3,14 @@
 import Link from 'next/link';
 import { notFound, useSearchParams } from 'next/navigation';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Y from 'yjs';
 
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
 import { Preview } from '@/components/Preview';
+import CollaborativeEditor from '@/components/CollaborativeEditor';
+import { ProjectShareModal } from '@/components/ProjectShareModal';
+import { type CollaboratorInfo, type ViewerRole } from '@/types/collaboration';
 import {
   clearProject,
   ensureUniquePath,
@@ -47,18 +51,15 @@ function formatTime(date: Date | null) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function resolveWorkspaceFromProject(language: string, fallback: WorkspaceSlug): WorkspaceSlug {
-  if (language in workspaceConfigs) {
-    return language as WorkspaceSlug;
+function encodeYjsUpdate(update: Uint8Array): string {
+  if (typeof window === 'undefined') {
+    return Buffer.from(update).toString('base64');
   }
-  if (['html', 'css', 'javascript'].includes(language)) {
-    return 'web';
-  } 
-  if (language === 'python') return 'python';
-  if (language === 'c') return 'c';
-  if (language === 'cpp') return 'cpp';
-  if (language === 'java') return 'java';
-  return fallback;
+  let binary = '';
+  update.forEach(value => {
+    binary += String.fromCharCode(value);
+  });
+  return btoa(binary);
 }
 
 type WorkspacePageProps = {
@@ -71,6 +72,8 @@ type CloudProject = {
   language: string;
   files: ProjectFileMap;
   updatedAt: string;
+  yjsState?: string | null;
+  viewerRole?: ViewerRole;
 };
 
 type ProjectMeta = {
@@ -89,7 +92,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
   const config = workspace;
 
-  const [files, setFiles] = useState<ProjectFileMap>(() => getStarterProject(slug));
+  const [files, setFilesState] = useState<ProjectFileMap>(() => getStarterProject(slug));
   const [activePath, setActivePath] = useState<string>(config.defaultActivePath);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -128,6 +131,41 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const loadedCloudProjectIdRef = useRef<string | null>(null);
   const namePromptInitializedRef = useRef(false);
   const searchParams = useSearchParams();
+  const [viewerRole, setViewerRole] = useState<ViewerRole>('owner');
+  const [encodedYjsState, setEncodedYjsState] = useState<string | null>(null);
+  const collaborativeDocRef = useRef<Y.Doc | null>(null);
+  const [isShareModalOpen, setShareModalOpen] = useState(false);
+  const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
+  const [inviteValue, setInviteValue] = useState('');
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [isInviteSubmitting, setIsInviteSubmitting] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [collaborators, setCollaborators] = useState<CollaboratorInfo[]>([]);
+  const [projectOwner, setProjectOwner] = useState<CollaboratorInfo | null>(null);
+
+  const updateFiles = useCallback(
+    (updater: ProjectFileMap | ((prev: ProjectFileMap) => ProjectFileMap)) => {
+      setFilesState(prev =>
+        typeof updater === 'function' ? (updater as (prev: ProjectFileMap) => ProjectFileMap)(prev) : (updater as ProjectFileMap)
+      );
+    },
+    []
+  );
+
+  const handleCollaborativeFilesChange = useCallback(
+    (next: ProjectFileMap) => {
+      autoSaveSkipRef.current = true;
+      setFilesState(() => next);
+      saveProject(slug, next);
+      if (!next[activePath]) {
+        const fallback = next[config.defaultActivePath]
+          ? config.defaultActivePath
+          : Object.keys(next).sort((a, b) => a.localeCompare(b))[0] ?? config.defaultActivePath;
+        setActivePath(fallback);
+      }
+    },
+    [activePath, config.defaultActivePath, slug]
+  );
 
   useEffect(() => {
     if (isNameRequired) {
@@ -199,17 +237,21 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     autoSaveSkipRef.current = true;
     const stored = loadProject(slug);
     if (stored && Object.keys(stored).length) {
-      setFiles(stored);
+      updateFiles(stored);
       const preferred = stored[config.defaultActivePath]
         ? config.defaultActivePath
         : Object.keys(stored).sort((a, b) => a.localeCompare(b))[0];
       setActivePath(preferred);
     } else {
       const starter = getStarterProject(slug);
-      setFiles(starter);
+      updateFiles(starter);
       setActivePath(config.defaultActivePath);
     }
-  }, [slug, config.defaultActivePath]);
+    setEncodedYjsState(null);
+    setViewerRole('owner');
+    setCollaborators([]);
+    setProjectOwner(null);
+  }, [slug, config.defaultActivePath, updateFiles]);
 
   useEffect(() => {
     const intent = searchParams?.get('new');
@@ -228,7 +270,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     namePromptInitializedRef.current = false;
     autoSaveSkipRef.current = true;
     const starter = getStarterProject(slug);
-    setFiles(starter);
+    updateFiles(starter);
     setActivePath(config.defaultActivePath);
     setProjectMeta({ id: null, name: defaultProjectName });
     setProjectNameDraft('');
@@ -240,6 +282,16 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     setIsSaving(false);
     setIsLoadingCloudProject(false);
     setRecentlyCreatedPath(null);
+    setViewerRole('owner');
+    setEncodedYjsState(null);
+    setCollaborators([]);
+    setProjectOwner(null);
+    setShareModalOpen(false);
+    setInviteValue('');
+    setInviteError(null);
+    setRemoveError(null);
+    setIsInviteSubmitting(false);
+    setIsLoadingCollaborators(false);
     cloudWarningShownRef.current = false;
     loadedCloudProjectIdRef.current = null;
   }, [
@@ -248,18 +300,22 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     metaStorageKey,
     searchParams,
     slug,
+    updateFiles,
   ]);
 
   const code = files[activePath]?.code ?? '';
   const lang = files[activePath]?.language ?? 'javascript';
 
-  const setActiveCode = useCallback((next: string) => {
-    setFiles(prev => {
-      const target = prev[activePath];
-      if (!target) return prev;
-      return { ...prev, [activePath]: { ...target, code: next } };
-    });
-  }, [activePath]);
+  const setActiveCode = useCallback(
+    (next: string) => {
+      updateFiles(prev => {
+        const target = prev[activePath];
+        if (!target) return prev;
+        return { ...prev, [activePath]: { ...target, code: next } };
+      });
+    },
+    [activePath, updateFiles]
+  );
 
   const onRename = useCallback(
     (oldPath: string, newPathRaw: string): string | null => {
@@ -274,7 +330,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       let error: string | null = null;
       let renamed = false;
 
-      setFiles(prev => {
+      updateFiles(prev => {
         if (!prev[oldPath]) {
           error = 'The original file could not be found.';
           return prev;
@@ -296,14 +352,14 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
       return error;
     },
-    [activePath]
+    [activePath, updateFiles]
   );
 
   const onDelete = useCallback((path: string) => {
     let nextActivePath = activePath;
     let shouldUpdateActive = false;
 
-    setFiles(prev => {
+    updateFiles(prev => {
       if (!prev[path]) return prev;
       const nextFiles = { ...prev };
       delete nextFiles[path];
@@ -326,12 +382,12 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     if (shouldUpdateActive) {
       setActivePath(nextActivePath);
     }
-  }, [activePath, slug, config.defaultActivePath]);
+  }, [activePath, slug, config.defaultActivePath, updateFiles]);
 
   const onCreate = useCallback((rawPath: string): string => {
     const desired = rawPath.trim() || config.newFilePlaceholder;
     let nextPath = desired;
-    setFiles(prev => {
+    updateFiles(prev => {
       const safePath = ensureUniquePath(desired, prev);
       nextPath = safePath;
       const fileLanguage = inferLanguage(safePath);
@@ -346,7 +402,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     });
     setActivePath(nextPath);
     return nextPath;
-  }, [config.newFilePlaceholder]);
+  }, [config.newFilePlaceholder, updateFiles]);
 
   const pushToast = useCallback((next: { kind: 'success' | 'error'; message: string }) => {
     setToast(next);
@@ -363,7 +419,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     (project: CloudProject, options?: { silent?: boolean }) => {
       autoSaveSkipRef.current = true;
       saveProject(slug, project.files);
-      setFiles(project.files);
+      updateFiles(project.files);
       const firstPath = Object.keys(project.files).sort()[0] || config.defaultActivePath;
       setActivePath(firstPath);
       const normalizedName = project.name.trim() || defaultProjectName;
@@ -372,11 +428,13 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       setLastSavedAt(new Date(project.updatedAt ?? Date.now()));
       setCloudAuthRequired(false);
       setCloudError(null);
+      setViewerRole(project.viewerRole ?? 'owner');
+      setEncodedYjsState(project.yjsState ?? null);
       if (!options?.silent) {
         pushToast({ kind: 'success', message: `✅ Loaded project: ${normalizedName}` });
       }
     },
-    [config.defaultActivePath, defaultProjectName, pushToast, slug]
+    [config.defaultActivePath, defaultProjectName, pushToast, slug, updateFiles]
   );
 
   const persistProject = useCallback(
@@ -392,6 +450,19 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
       saveProject(slug, files);
 
+      const doc = collaborativeDocRef.current;
+      let yStateBase64: string | null = null;
+      if (doc) {
+        try {
+          const update = Y.encodeStateAsUpdate(doc);
+          yStateBase64 = encodeYjsUpdate(update);
+        } catch (error) {
+          console.error('Failed to encode collaborative state', error);
+        }
+      } else if (encodedYjsState) {
+        yStateBase64 = encodedYjsState;
+      }
+
       setIsSaving(true);
       try {
         const res = await fetch('/api/projects', {
@@ -402,6 +473,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
             name: normalizedName,
             language: slug,
             files,
+            yjsState: yStateBase64,
           }),
         });
 
@@ -446,6 +518,8 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         setCloudError(null);
         cloudWarningShownRef.current = false;
         setIsNameRequired(false);
+        setViewerRole(project.viewerRole ?? (projectMeta.id ? viewerRole : 'owner'));
+        setEncodedYjsState(project.yjsState ?? null);
         return { ok: true as const, project };
       } catch (error) {
         console.error('Save failed:', error);
@@ -458,7 +532,16 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         setIsSaving(false);
       }
     },
-    [defaultProjectName, files, projectMeta.id, projectMeta.name, pushToast, slug]
+    [
+      defaultProjectName,
+      encodedYjsState,
+      files,
+      projectMeta.id,
+      projectMeta.name,
+      pushToast,
+      slug,
+      viewerRole,
+    ]
   );
 
   useEffect(() => {
@@ -480,14 +563,160 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     }
   }, [persistProject, pushToast]);
 
+  const loadCollaborators = useCallback(async () => {
+    if (!projectMeta.id) {
+      return;
+    }
+    setIsLoadingCollaborators(true);
+    setInviteError(null);
+    setRemoveError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectMeta.id}/collaborators`, { cache: 'no-store' });
+      if (!res.ok) {
+        const raw = await res.text();
+        let message = 'Failed to load collaborators';
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object' && typeof parsed.error === 'string') {
+            message = parsed.error;
+          }
+        } catch {
+          if (raw) {
+            message = raw;
+          }
+        }
+        setInviteError(message);
+        setProjectOwner(null);
+        setCollaborators([]);
+        return;
+      }
+      const data = (await res.json()) as { owner: CollaboratorInfo; collaborators: CollaboratorInfo[] };
+      setProjectOwner(data.owner);
+      setCollaborators(data.collaborators);
+    } catch (error) {
+      console.error('Failed to load collaborators', error);
+      setInviteError('Failed to load collaborators');
+      setProjectOwner(null);
+      setCollaborators([]);
+    } finally {
+      setIsLoadingCollaborators(false);
+    }
+  }, [projectMeta.id]);
+
+  const openShareModal = useCallback(() => {
+    if (!projectMeta.id) {
+      return;
+    }
+    setShareModalOpen(true);
+    setInviteValue('');
+    setInviteError(null);
+    setRemoveError(null);
+    void loadCollaborators();
+  }, [loadCollaborators, projectMeta.id]);
+
+  const closeShareModal = useCallback(() => {
+    setShareModalOpen(false);
+    setInviteValue('');
+    setInviteError(null);
+    setRemoveError(null);
+    setIsInviteSubmitting(false);
+  }, []);
+
+  const handleInviteSubmit = useCallback(async () => {
+    if (!projectMeta.id) {
+      return;
+    }
+    const value = inviteValue.trim();
+    if (!value) {
+      setInviteError('Enter a username to invite.');
+      return;
+    }
+    setIsInviteSubmitting(true);
+    setInviteError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectMeta.id}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: value }),
+      });
+      if (!res.ok) {
+        const raw = await res.text();
+        let message = 'Failed to invite collaborator';
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object' && typeof parsed.error === 'string') {
+            message = parsed.error;
+          }
+        } catch {
+          if (raw) {
+            message = raw;
+          }
+        }
+        setInviteError(message);
+        return;
+      }
+      const data = (await res.json()) as { collaborator: CollaboratorInfo };
+      setCollaborators(prev => {
+        if (prev.some(entry => entry.id === data.collaborator.id)) {
+          return prev;
+        }
+        return [...prev, data.collaborator];
+      });
+      setInviteValue('');
+      setInviteError(null);
+    } catch (error) {
+      console.error('Failed to invite collaborator', error);
+      setInviteError('Failed to invite collaborator');
+    } finally {
+      setIsInviteSubmitting(false);
+    }
+  }, [inviteValue, projectMeta.id]);
+
+  const handleRemoveCollaborator = useCallback(
+    async (userId: string) => {
+      if (!projectMeta.id) {
+        return;
+      }
+      setRemoveError(null);
+      try {
+        const res = await fetch(`/api/projects/${projectMeta.id}/remove`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        });
+        if (!res.ok) {
+          const raw = await res.text();
+          let message = 'Failed to remove collaborator';
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && typeof parsed.error === 'string') {
+              message = parsed.error;
+            }
+          } catch {
+            if (raw) {
+              message = raw;
+            }
+          }
+          setRemoveError(message);
+          return;
+        }
+        setCollaborators(prev => prev.filter(entry => entry.id !== userId));
+      } catch (error) {
+        console.error('Failed to remove collaborator', error);
+        setRemoveError('Failed to remove collaborator');
+      }
+    },
+    [projectMeta.id]
+  );
+
   const beginProjectRename = useCallback(() => {
-    if (isRenamingProject) {
+    if (viewerRole !== 'owner' || isRenamingProject) {
       return;
     }
     setIsNameRequired(false);
     setProjectNameDraft(projectMeta.name);
     setIsRenamingProject(true);
-  }, [isRenamingProject, projectMeta.name]);
+  }, [isRenamingProject, projectMeta.name, viewerRole]);
 
   const cancelProjectRename = useCallback(() => {
     if (isNameRequired) {
@@ -500,6 +729,10 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [isNameRequired, projectMeta.name, pushToast]);
 
   const commitProjectRename = useCallback(() => {
+    if (viewerRole !== 'owner') {
+      setIsRenamingProject(false);
+      return;
+    }
     const trimmed = projectNameDraft.trim();
     if (!trimmed) {
       pushToast({ kind: 'error', message: 'Project name cannot be empty.' });
@@ -529,7 +762,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       kind: 'success',
       message: isNameRequired ? `Project named ${trimmed}` : `Renamed project to ${trimmed}`,
     });
-  }, [isNameRequired, projectNameDraft, projectMeta.name, pushToast]);
+  }, [isNameRequired, projectNameDraft, projectMeta.name, pushToast, viewerRole]);
 
   useEffect(() => {
     const projectId = searchParams?.get('projectId');
@@ -632,13 +865,18 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         : 'inline-flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-emerald-100';
 
   const actionButtonBaseClass =
-    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70';
+    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-60';
   const primaryActionClass =
     `${actionButtonBaseClass} bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 hover:bg-emerald-400`;
   const subtleActionClass =
     `${actionButtonBaseClass} border border-white/20 bg-white/5 text-white/80 hover:border-white/40 hover:bg-white/10 hover:text-white`;
   const dangerActionClass =
     `${actionButtonBaseClass} border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:border-rose-300 hover:bg-rose-500/20 hover:text-rose-50`;
+  const shareButtonClass =
+    viewerRole === 'owner'
+      ? subtleActionClass
+      : `${actionButtonBaseClass} border border-white/10 bg-white/5 text-white/60 hover:border-white/20 hover:bg-white/10 hover:text-white`;
+  const shareButtonDisabled = !projectMeta.id;
 
   const createSmartFile = useCallback(() => {
     const activeFile = files[activePath];
@@ -658,13 +896,13 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     }
     const starter = getStarterProject(slug);
     autoSaveSkipRef.current = true;
-    setFiles(starter);
+    updateFiles(starter);
     setActivePath(config.defaultActivePath);
     saveProject(slug, starter);
     setLastSavedAt(new Date());
     setIsSaving(false);
     setCloudError(null);
-  }, [slug, config.defaultActivePath]);
+  }, [slug, config.defaultActivePath, updateFiles]);
 
   useEffect(() => {
     return () => {
@@ -684,6 +922,33 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     <div className="relative min-h-screen bg-gradient-to-b from-[#06070d] via-[#090b19] to-[#040509] text-white">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.25),_transparent_60%)]" />
       <div className="relative flex min-h-screen flex-col">
+        <CollaborativeEditor
+          projectId={projectMeta.id}
+          files={files}
+          onFilesChange={handleCollaborativeFilesChange}
+          encodedState={encodedYjsState}
+          onDoc={doc => {
+            collaborativeDocRef.current = doc;
+          }}
+        >
+          {null}
+        </CollaborativeEditor>
+        <ProjectShareModal
+          isOpen={isShareModalOpen}
+          onClose={closeShareModal}
+          owner={projectOwner}
+          collaborators={collaborators}
+          viewerRole={viewerRole}
+          inviteValue={inviteValue}
+          onInviteValueChange={setInviteValue}
+          onInviteSubmit={handleInviteSubmit}
+          inviteError={inviteError}
+          isInviteSubmitting={isInviteSubmitting}
+          isLoading={isLoadingCollaborators}
+          canInvite={viewerRole === 'owner' && !shareButtonDisabled}
+          onRemoveCollaborator={handleRemoveCollaborator}
+          removeError={removeError}
+        />
         <header className="border-b border-white/10 bg-black/30 backdrop-blur">
           <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-3 px-4 py-3 lg:px-8">
             <Link
@@ -759,6 +1024,20 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
               <div className="flex items-center gap-1.5">
                 <button onClick={createSmartFile} className={primaryActionClass}>
                   New file
+                </button>
+                <button
+                  onClick={openShareModal}
+                  className={shareButtonClass}
+                  disabled={shareButtonDisabled}
+                  title={
+                    shareButtonDisabled
+                      ? 'Save this project to enable sharing'
+                      : viewerRole === 'owner'
+                        ? 'Invite collaborators'
+                        : 'View collaborators'
+                  }
+                >
+                  Share
                 </button>
                 <button onClick={handleSave} className={subtleActionClass}>
                   Sync now
