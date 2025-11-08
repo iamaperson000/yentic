@@ -1064,7 +1064,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     return [...liveCollaborators].sort((a, b) => {
       if (a.isSelf && !b.isSelf) return -1;
       if (!a.isSelf && b.isSelf) return 1;
-      if (a.userId === b.userId) return a.clientId - b.clientId;
+      if (a.userId === b.userId) return a.clientId.localeCompare(b.clientId);
       return a.userId.localeCompare(b.userId);
     });
   }, [liveCollaborators]);

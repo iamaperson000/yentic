@@ -16,7 +16,7 @@ export type LocalCollaboratorPresence = {
 };
 
 export type CollaboratorPresence = {
-  clientId: number;
+  clientId: string;
   userId: string;
   name: string | null;
   color: string;
