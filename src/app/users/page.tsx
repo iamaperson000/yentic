@@ -5,25 +5,21 @@ import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-type UsersPageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
-};
+export default async function UsersPage() {
+  const users = await prisma.user.findMany({
+    where: { username: { not: null } } satisfies Prisma.UserWhereInput,
+    orderBy: { createdAt: "desc" } satisfies Prisma.UserOrderByWithRelationInput,
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      image: true,
+      bio: true,
+    },
+  });
 
-export default async function UsersPage({ searchParams }: UsersPageProps) {
-  const queryParam = searchParams?.q;
-  const query = Array.isArray(queryParam) ? queryParam[0] ?? "" : queryParam ?? "";
-  const trimmedQuery = query.trim();
-
-  const where: Prisma.UserWhereInput = {
-    username: { not: null },
-  };
-
-  if (trimmedQuery) {
-    where.OR = [
-      { username: { contains: trimmedQuery, mode: "insensitive" } },
-      { name: { contains: trimmedQuery, mode: "insensitive" } },
-      { bio: { contains: trimmedQuery, mode: "insensitive" } },
-    ];
+  if (users.length === 0) {
+    return <p className="text-center text-gray-500 mt-12">No users yet.</p>;
   }
 
   const orderBy: Prisma.UserOrderByWithRelationInput = { createdAt: "desc" };

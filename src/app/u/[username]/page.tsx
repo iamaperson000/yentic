@@ -1,3 +1,4 @@
+import { UsernameSearchForm } from "@/components/users/UsernameSearchForm";
 import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,9 @@ export default async function UserPage({
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
+      <div className="mb-6 flex justify-center">
+        <UsernameSearchForm initialUsername={user.username ?? ""} />
+      </div>
       <div className="flex flex-col items-center text-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
