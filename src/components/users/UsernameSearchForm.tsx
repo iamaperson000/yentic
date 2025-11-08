@@ -23,7 +23,10 @@ export function UsernameSearchForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-sm gap-2">
+    <form
+      onSubmit={handleSubmit}
+      className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:gap-2"
+    >
       <label className="sr-only" htmlFor="username-search">
         Search by username
       </label>
@@ -33,11 +36,11 @@ export function UsernameSearchForm({
         value={value}
         onChange={(event) => setValue(event.target.value)}
         placeholder="Search username"
-        className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm text-white/80 placeholder:text-white/40 shadow-inner shadow-black/10 transition focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
       />
       <button
         type="submit"
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+        className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
       >
         Search
       </button>
