@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Sandpack } from '@codesandbox/sandpack-react';
 import * as Y from 'yjs';
 import { WebrtcProvider } from 'y-webrtc';
@@ -202,9 +202,12 @@ export default function CollaborativeEditor({
         },
       });
 
-      provider.on('status', ({ status }) =>
-        console.log(`[Yjs] WebRTC status: ${status} (room: ${projectId})`)
-      );
+      // FIX: Correct typing for new y-webrtc event format
+      provider.on('status', ({ connected }: { connected: boolean }) => {
+        console.log(
+          `[Yjs] WebRTC ${connected ? 'connected' : 'disconnected'} (room: ${projectId})`
+        );
+      });
 
       awareness = provider.awareness;
     } catch (e) {
@@ -333,7 +336,7 @@ export default function CollaborativeEditor({
     }
   }, [encodedState, projectId]);
 
-  /* Refresh presence heartbeat */
+  /* Presence heartbeat */
   useEffect(() => {
     const id = setInterval(() => collabRef.current?.sendPresence(localPresenceRef.current), 15_000);
     return () => clearInterval(id);
