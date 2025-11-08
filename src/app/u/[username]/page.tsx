@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { normalizeUsername } from "@/lib/username";
 
 export const dynamic = "force-dynamic";
 
@@ -12,14 +14,17 @@ export async function generateMetadata({
 }: {
   params: { username?: string };
 }) {
-  const username = await Promise.resolve(params?.username);
+  const username = normalizeUsername(params?.username);
   if (!username) return { title: "User | Yentic" };
 
-  // Case-insensitive lookup for metadata
-  const user = await prisma.user.findFirst({
-    where: { username: { equals: username, mode: "insensitive" } },
-    select: { name: true, username: true },
-  });
+  if (!process.env.DATABASE_URL) {
+    return { title: "User | Yentic" };
+  }
+
+  // Lookup user profile by normalized username
+  const user = (await prisma.user.findFirst({
+    where: { username: { equals: username } } as Prisma.UserWhereInput,
+  })) as ({ name: string | null; username: string | null } | null);
 
   const title = user ? `${user.username} | Yentic` : "User | Yentic";
   return { title };
@@ -30,14 +35,24 @@ export default async function UserPage({
 }: {
   params: { username?: string };
 }) {
-  const username = await Promise.resolve(params?.username);
-  if (!username || typeof username !== "string") return notFound();
+  const username = normalizeUsername(params?.username);
+  if (!username) return notFound();
 
-  // Case-insensitive lookup for user
-  const user = await prisma.user.findFirst({
-    where: { username: { equals: username, mode: "insensitive" } },
-    select: { id: true, name: true, username: true, bio: true, image: true },
-  });
+  if (!process.env.DATABASE_URL) {
+    return notFound();
+  }
+
+  // Lookup user profile by normalized username
+  const user = (await prisma.user.findFirst({
+    where: { username: { equals: username } } as Prisma.UserWhereInput,
+  })) as
+    | ({
+        id: string;
+        name: string | null;
+        username: string | null;
+        bio: string | null;
+        image: string | null;
+      } | null);
 
   if (!user) return notFound();
 
