@@ -7,3 +7,19 @@ export type CollaboratorInfo = {
   image: string | null;
   role: ViewerRole;
 };
+
+export type LocalCollaboratorPresence = {
+  id: string;
+  name: string | null;
+  color: string;
+  avatar: string | null;
+};
+
+export type CollaboratorPresence = {
+  clientId: number;
+  userId: string;
+  name: string | null;
+  color: string;
+  avatar: string | null;
+  isSelf: boolean;
+};

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { notFound, useSearchParams } from 'next/navigation';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
@@ -9,8 +10,13 @@ import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
 import { Preview } from '@/components/Preview';
 import CollaborativeEditor from '@/components/CollaborativeEditor';
+import PresenceAvatars from '@/components/PresenceAvatars';
 import { ProjectShareModal } from '@/components/ProjectShareModal';
-import { type CollaboratorInfo, type ViewerRole } from '@/types/collaboration';
+import {
+  type CollaboratorInfo,
+  type CollaboratorPresence,
+  type ViewerRole,
+} from '@/types/collaboration';
 import {
   clearProject,
   ensureUniquePath,
@@ -49,6 +55,16 @@ function smartPlaceholder(base: string, language?: SupportedLanguage) {
 function formatTime(date: Date | null) {
   if (!date) return null;
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function colorForUser(userId: string) {
+  let hash = 0;
+  for (let index = 0; index < userId.length; index += 1) {
+    hash = (hash << 5) - hash + userId.charCodeAt(index);
+    hash |= 0; // Convert to 32bit integer
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}deg 75% 65%)`;
 }
 
 function encodeYjsUpdate(update: Uint8Array): string {
@@ -91,6 +107,8 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }
 
   const config = workspace;
+  const { data: session } = useSession();
+  const sessionUser = session?.user ?? null;
 
   const [files, setFilesState] = useState<ProjectFileMap>(() => getStarterProject(slug));
   const [activePath, setActivePath] = useState<string>(config.defaultActivePath);
@@ -133,7 +151,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const searchParams = useSearchParams();
   const [viewerRole, setViewerRole] = useState<ViewerRole>('owner');
   const [encodedYjsState, setEncodedYjsState] = useState<string | null>(null);
-  const collaborativeDocRef = useRef<Y.Doc | null>(null);
+  const [collaborativeDoc, setCollaborativeDoc] = useState<Y.Doc | null>(null);
+  const collaborativeDocDirtyRef = useRef(false);
+  const collaborativeSaveInFlightRef = useRef(false);
   const [isShareModalOpen, setShareModalOpen] = useState(false);
   const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
   const [inviteValue, setInviteValue] = useState('');
@@ -145,6 +165,23 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareUrlError, setShareUrlError] = useState<string | null>(null);
   const [isShareUrlLoading, setIsShareUrlLoading] = useState(false);
+  const [liveCollaborators, setLiveCollaborators] = useState<CollaboratorPresence[]>([]);
+
+  const localCollaboratorPresence = sessionUser?.id
+    ? {
+        id: sessionUser.id,
+        name:
+          (typeof sessionUser.name === 'string' && sessionUser.name.trim()) ||
+          (typeof sessionUser.email === 'string' && sessionUser.email.length > 0
+            ? sessionUser.email.split('@')[0]
+            : null),
+        color: colorForUser(sessionUser.id),
+        avatar:
+          typeof sessionUser.image === 'string' && sessionUser.image.length > 0
+            ? sessionUser.image
+            : null,
+      }
+    : null;
 
   const updateFiles = useCallback(
     (updater: ProjectFileMap | ((prev: ProjectFileMap) => ProjectFileMap)) => {
@@ -169,6 +206,23 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     },
     [activePath, config.defaultActivePath, slug]
   );
+
+  useEffect(() => {
+    if (!collaborativeDoc) {
+      collaborativeDocDirtyRef.current = false;
+      collaborativeSaveInFlightRef.current = false;
+      return;
+    }
+    collaborativeDocDirtyRef.current = false;
+    collaborativeSaveInFlightRef.current = false;
+    const markDirty = () => {
+      collaborativeDocDirtyRef.current = true;
+    };
+    collaborativeDoc.on('update', markDirty);
+    return () => {
+      collaborativeDoc.off('update', markDirty);
+    };
+  }, [collaborativeDoc]);
 
   useEffect(() => {
     if (isNameRequired) {
@@ -468,7 +522,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
       saveProject(slug, files);
 
-      const doc = collaborativeDocRef.current;
+      const doc = collaborativeDoc;
       let yStateBase64: string | null = null;
       if (doc) {
         try {
@@ -538,6 +592,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         setIsNameRequired(false);
         setViewerRole(project.viewerRole ?? (projectMeta.id ? viewerRole : 'owner'));
         setEncodedYjsState(project.yjsState ?? null);
+        collaborativeDocDirtyRef.current = false;
         return { ok: true as const, project };
       } catch (error) {
         console.error('Save failed:', error);
@@ -551,6 +606,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       }
     },
     [
+      collaborativeDoc,
       defaultProjectName,
       encodedYjsState,
       files,
@@ -564,6 +620,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
   useEffect(() => {
     if (viewerRole === 'viewer') return;
+    if (projectMeta.id) return;
     if (!files || !Object.keys(files).length) return;
     if (autoSaveSkipRef.current) {
       autoSaveSkipRef.current = false;
@@ -573,7 +630,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       void persistProject('auto');
     }, 800);
     return () => window.clearTimeout(timeout);
-  }, [files, persistProject, projectMeta.name, viewerRole]);
+  }, [files, persistProject, projectMeta.id, projectMeta.name, viewerRole]);
 
   const handleSave = useCallback(async () => {
     if (viewerRole === 'viewer') {
@@ -585,6 +642,64 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       pushToast({ kind: 'success', message: `✅ Project synced to the cloud` });
     }
   }, [persistProject, pushToast, viewerRole]);
+
+  const flushCollaborativeState = useCallback(() => {
+    if (viewerRole === 'viewer') {
+      return Promise.resolve(false);
+    }
+    if (!projectMeta.id) {
+      return Promise.resolve(false);
+    }
+    if (!collaborativeDocDirtyRef.current) {
+      return Promise.resolve(false);
+    }
+    if (collaborativeSaveInFlightRef.current) {
+      return Promise.resolve(false);
+    }
+    collaborativeSaveInFlightRef.current = true;
+    return persistProject('auto').finally(() => {
+      collaborativeSaveInFlightRef.current = false;
+    });
+  }, [persistProject, projectMeta.id, viewerRole]);
+
+  useEffect(() => {
+    if (!collaborativeDoc) return;
+    if (!projectMeta.id) return;
+    if (viewerRole === 'viewer') return;
+    const interval = window.setInterval(() => {
+      void flushCollaborativeState();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [collaborativeDoc, flushCollaborativeState, projectMeta.id, viewerRole]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!collaborativeDoc) {
+      return;
+    }
+    if (!projectMeta.id) {
+      return;
+    }
+    if (viewerRole === 'viewer') {
+      return;
+    }
+    const handleBeforeUnload = () => {
+      void flushCollaborativeState();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        void flushCollaborativeState();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [collaborativeDoc, flushCollaborativeState, projectMeta.id, viewerRole]);
 
   const loadCollaborators = useCallback(async () => {
     if (!projectMeta.id) {
@@ -942,6 +1057,17 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [files]);
 
   const formattedTime = formatTime(lastSavedAt);
+  const orderedLiveCollaborators = useMemo(() => {
+    if (!liveCollaborators.length) {
+      return [] as CollaboratorPresence[];
+    }
+    return [...liveCollaborators].sort((a, b) => {
+      if (a.isSelf && !b.isSelf) return -1;
+      if (!a.isSelf && b.isSelf) return 1;
+      if (a.userId === b.userId) return a.clientId - b.clientId;
+      return a.userId.localeCompare(b.userId);
+    });
+  }, [liveCollaborators]);
   let savedLabel: string;
   if (isLoadingCloudProject) {
     savedLabel = 'Loading project…';
@@ -1038,9 +1164,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         files={files}
         onFilesChange={handleCollaborativeFilesChange}
         encodedState={encodedYjsState}
-        onDoc={doc => {
-          collaborativeDocRef.current = doc;
-        }}
+        onDoc={setCollaborativeDoc}
+        localPresence={localCollaboratorPresence}
+        onPresenceChange={setLiveCollaborators}
       >
         {null}
       </CollaborativeEditor>
@@ -1125,6 +1251,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
               <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
               {savedLabel}
             </span>
+            {orderedLiveCollaborators.length ? (
+              <PresenceAvatars collaborators={orderedLiveCollaborators} />
+            ) : null}
             {cloudError ? <span className="text-[11px] text-rose-200">{cloudError}</span> : null}
             <div className="flex items-center gap-1.5">
               <button onClick={createSmartFile} className={primaryActionClass} disabled={!canEdit}>
