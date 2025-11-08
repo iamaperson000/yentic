@@ -1,39 +1,30 @@
 import Link from "next/link";
-
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export default async function UsersPage() {
-  const users = await prisma.user.findMany({
-    where: { username: { not: null } } satisfies Prisma.UserWhereInput,
-    orderBy: { createdAt: "desc" } satisfies Prisma.UserOrderByWithRelationInput,
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      image: true,
-      bio: true,
-    },
-  });
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams?: { q?: string };
+}) {
+  const query = searchParams?.q?.trim() ?? "";
 
-  if (users.length === 0) {
-    return <p className="text-center text-gray-500 mt-12">No users yet.</p>;
-  }
-
-  const orderBy: Prisma.UserOrderByWithRelationInput = { createdAt: "desc" };
+  const where: Prisma.UserWhereInput = query
+    ? {
+        OR: [
+          { username: { contains: query, mode: "insensitive" } },
+          { name: { contains: query, mode: "insensitive" } },
+          { bio: { contains: query, mode: "insensitive" } },
+        ],
+      }
+    : { username: { not: null } };
 
   const users = await prisma.user.findMany({
     where,
-    orderBy,
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      image: true,
-      bio: true,
-    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, name: true, username: true, image: true, bio: true },
   });
 
   return (
@@ -41,14 +32,16 @@ export default async function UsersPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Users</h1>
-          <p className="text-gray-500 text-sm">Discover profiles from the community.</p>
+          <p className="text-gray-500 text-sm">
+            Discover profiles from the community.
+          </p>
         </div>
-        <UsersSearchForm initialQuery={trimmedQuery} />
+        <UsersSearchForm initialQuery={query} />
       </div>
 
       {users.length === 0 ? (
         <p className="text-center text-gray-500 mt-12">
-          {trimmedQuery ? "No users matched your search." : "No users yet."}
+          {query ? "No users matched your search." : "No users yet."}
         </p>
       ) : (
         <ul className="grid gap-4 mt-6">
