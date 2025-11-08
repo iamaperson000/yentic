@@ -42,6 +42,26 @@ function normalizeBytes(bytes: BinaryState | null | undefined): BinaryState | nu
   return cloned;
 }
 
+type ViewerRole = 'owner' | 'editor' | 'viewer';
+
+function encodeState(state: Uint8Array | null | undefined): string | null {
+  if (!state || !state.length) {
+    return null;
+  }
+  return Buffer.from(state).toString('base64');
+}
+
+function decodeState(encoded?: string | null): Buffer | null {
+  if (!encoded) {
+    return null;
+  }
+  try {
+    return Buffer.from(encoded, 'base64');
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
