@@ -7,17 +7,17 @@ import { WebrtcProvider } from 'y-webrtc';
 import type { Awareness } from 'y-protocols/awareness';
 
 import { inferLanguage, type ProjectFile, type ProjectFileMap } from '@/lib/project';
-import type {
-  CollaboratorPresence,
-  LocalCollaboratorPresence,
-} from '@/types/collaboration';
+import type { CollaboratorPresence, LocalCollaboratorPresence } from '@/types/collaboration';
 
+/** ──────────────────────────────────────────────────────────────────────────
+ *  Types
+ *  ────────────────────────────────────────────────────────────────────────── */
 type CollaborativeEditorProps = {
   projectId: string | null;
   files: ProjectFileMap;
   onFilesChange: (files: ProjectFileMap) => void;
-  encodedState?: string | null;
-  onDoc?: (doc: Y.Doc | null) => void;
+  encodedState?: string | null;              // base64 snapshot stored in Prisma
+  onDoc?: (doc: Y.Doc | null) => void;       // optional for external hooks
   localPresence?: LocalCollaboratorPresence | null;
   onPresenceChange?: (presence: CollaboratorPresence[]) => void;
   children?: ReactNode;
@@ -26,411 +26,361 @@ type CollaborativeEditorProps = {
 type CollaborationRef = {
   ydoc: Y.Doc;
   ymap: Y.Map<ProjectFile>;
-  observer: (event: Y.YMapEvent<ProjectFile>) => void;
   provider: WebrtcProvider | null;
   awareness: Awareness | null;
+  unobserveFiles: (() => void) | null;
+  unsubscribePresence: (() => void) | null;
   sendPresence: (presence: LocalCollaboratorPresence | null) => void;
-  disposeAwarenessListener: (() => void) | null;
 };
 
+/** ──────────────────────────────────────────────────────────────────────────
+ *  Helpers
+ *  ────────────────────────────────────────────────────────────────────────── */
 function cloneProjectFile(file: ProjectFile): ProjectFile {
-  return {
-    path: file.path,
-    language: file.language,
-    code: file.code,
-  };
+  return { path: file.path, language: file.language, code: file.code };
 }
 
 function normalizeProjectFile(path: string, file: Partial<ProjectFile>): ProjectFile {
-  const fromFile = typeof file.path === 'string' ? file.path.trim() : '';
-  const fromKey = path.trim();
-  const normalizedPath = fromFile || fromKey || path;
+  const normalizedPath = (file.path?.trim() || path.trim() || path);
   const language = file.language ?? inferLanguage(normalizedPath);
   const code = typeof file.code === 'string' ? file.code : '';
-  return {
-    path: normalizedPath,
-    language,
-    code,
-  };
+  return { path: normalizedPath, language, code };
 }
 
-function isLegacyProjectFileMap(value: unknown): value is Record<string, Partial<ProjectFile>> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-  if ('path' in (value as Record<string, unknown>)) {
-    return false;
-  }
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (!entries.length) {
-    return false;
-  }
-  return entries.every(([, entry]) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      return false;
-    }
-    return 'code' in (entry as Record<string, unknown>);
-  });
+function isLegacyProjectFileMap(v: unknown): v is Record<string, Partial<ProjectFile>> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  if ('path' in (v as Record<string, unknown>)) return false;
+  const entries = Object.entries(v as Record<string, unknown>);
+  if (!entries.length) return false;
+  return entries.every(([, entry]) => !!entry && typeof entry === 'object' && 'code' in (entry as any));
 }
 
 function projectFilesFromYMap(map: Y.Map<ProjectFile>): ProjectFileMap {
   const result: ProjectFileMap = {};
   map.forEach((value, key) => {
-    if (!value) {
-      return;
-    }
+    if (!value) return;
     if (isLegacyProjectFileMap(value)) {
-      const legacyEntries = value as Record<string, Partial<ProjectFile>>;
-      Object.entries(legacyEntries).forEach(([legacyPath, legacyFile]) => {
+      Object.entries(value).forEach(([legacyPath, legacyFile]) => {
         const normalized = normalizeProjectFile(legacyPath, legacyFile ?? {});
         result[normalized.path] = cloneProjectFile(normalized);
       });
       return;
     }
-    const normalizedPath = typeof value.path === 'string' && value.path.length > 0 ? value.path : key;
-    result[normalizedPath] = cloneProjectFile({
-      path: normalizedPath,
-      language: value.language,
-      code: value.code,
-    });
+    const normalizedPath = (typeof value.path === 'string' && value.path.length > 0) ? value.path : key;
+    result[normalizedPath] = cloneProjectFile({ path: normalizedPath, language: value.language, code: value.code });
   });
   return result;
 }
 
-function decodeState(encoded?: string | null): Uint8Array | null {
-  if (!encoded) {
-    return null;
-  }
-
+function decodeStateBase64(encoded?: string | null): Uint8Array | null {
+  if (!encoded) return null;
   try {
     if (typeof window === 'undefined') {
+      // SSR safeguard
       return Uint8Array.from(Buffer.from(encoded, 'base64'));
     }
-    const binary = atob(encoded);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes;
-  } catch (error) {
-    console.error('Failed to decode Yjs state', error);
+    const bin = atob(encoded);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch (e) {
+    console.error('[Yjs] Failed to decode snapshot:', e);
     return null;
   }
 }
 
-export default function CollaborativeEditor({
-  projectId,
-  files,
-  onFilesChange,
-  encodedState,
-  onDoc,
-  localPresence,
-  onPresenceChange,
-  children,
-}: CollaborativeEditorProps) {
-  const collaborationRef = useRef<CollaborationRef | null>(null);
-  const suppressLocalSyncRef = useRef(false);
-  const appliedStateRef = useRef<string | null>(null);
-  const localPresenceRef = useRef<LocalCollaboratorPresence | null>(null);
-  const onPresenceChangeRef = useRef<((presence: CollaboratorPresence[]) => void) | undefined>(undefined);
-  useEffect(() => {
-    onPresenceChangeRef.current = onPresenceChange ?? undefined;
-  }, [onPresenceChange]);
+/** ──────────────────────────────────────────────────────────────────────────
+ *  Component
+ *  ────────────────────────────────────────────────────────────────────────── */
+export default function CollaborativeEditor(props: CollaborativeEditorProps) {
+  const {
+    projectId,
+    files,
+    onFilesChange,
+    encodedState,
+    onDoc,
+    localPresence,
+    onPresenceChange,
+    children,
+  } = props;
 
+  /** Stateful refs that survive re-renders and strict-mode */
+  const collabRef = useRef<CollaborationRef | null>(null);
+  const providerRef = useRef<WebrtcProvider | null>(null);
+  const appliedSnapshotRef = useRef<string | null>(null);
+  const suppressLocalSyncRef = useRef(false);
+  const localPresenceRef = useRef<LocalCollaboratorPresence | null>(null);
+  const onPresenceChangeRef = useRef<((p: CollaboratorPresence[]) => void) | undefined>(undefined);
+
+  /* keep callbacks/presence refs fresh */
+  useEffect(() => { onPresenceChangeRef.current = onPresenceChange ?? undefined; }, [onPresenceChange]);
   useEffect(() => {
     localPresenceRef.current = localPresence ?? null;
-    const collaboration = collaborationRef.current;
-    if (!collaboration) {
-      return;
-    }
-    collaboration.sendPresence(localPresenceRef.current);
+    collabRef.current?.sendPresence(localPresenceRef.current);
   }, [localPresence]);
 
+  /** Initialize / Recreate Y.Doc + WebRTC for a project */
   useEffect(() => {
-    if (!projectId) {
-      if (collaborationRef.current) {
-        const current = collaborationRef.current;
-        current.ymap.unobserve(current.observer);
-        current.disposeAwarenessListener?.();
-        current.awareness?.setLocalState(null);
-        current.provider?.destroy();
-        current.ydoc.destroy();
-        collaborationRef.current = null;
+    if (!projectId || typeof window === 'undefined') {
+      // teardown when leaving a project
+      if (collabRef.current) {
+        try {
+          collabRef.current.unobserveFiles?.();
+          collabRef.current.unsubscribePresence?.();
+          collabRef.current.awareness?.setLocalState(null);
+          providerRef.current?.destroy();
+          collabRef.current.ydoc.destroy();
+        } catch {/* noop */}
+        collabRef.current = null;
+        providerRef.current = null;
       }
-      appliedStateRef.current = null;
+      appliedSnapshotRef.current = null;
       onDoc?.(null);
       onPresenceChangeRef.current?.([]);
       return;
     }
 
+    // Full teardown if switching projects
+    if (collabRef.current) {
+      try {
+        collabRef.current.unobserveFiles?.();
+        collabRef.current.unsubscribePresence?.();
+        collabRef.current.awareness?.setLocalState(null);
+        providerRef.current?.destroy();
+        collabRef.current.ydoc.destroy();
+      } catch {/* noop */}
+      collabRef.current = null;
+      providerRef.current = null;
+    }
+
+    // Build a fresh doc
     const ydoc = new Y.Doc();
     const ymap = ydoc.getMap<ProjectFile>('files');
-    let isMounted = true;
 
-    const decoded = encodedState ? decodeState(encodedState) : null;
-    if (decoded) {
-      try {
-        Y.applyUpdate(ydoc, decoded, 'bootstrap');
-        appliedStateRef.current = encodedState ?? null;
-      } catch (error) {
-        console.error('Failed to apply stored Yjs state', error);
+    // Apply stored snapshot ONCE (before any peer update)
+    if (encodedState && !appliedSnapshotRef.current) {
+      const decoded = decodeStateBase64(encodedState);
+      if (decoded) {
+        try {
+          Y.applyUpdate(ydoc, decoded, 'bootstrap');
+          appliedSnapshotRef.current = encodedState;
+          // eslint-disable-next-line no-console
+          console.log('[Yjs] Applied bootstrap snapshot');
+        } catch (e) {
+          console.error('[Yjs] Failed to apply bootstrap snapshot:', e);
+        }
+      } else {
+        appliedSnapshotRef.current = encodedState; // avoid retry loop on bad data
       }
     }
 
+    // If doc is still empty, seed from props.files
     if (ymap.size === 0) {
-      ydoc.transact(
-        () => {
-          Object.values(files).forEach(file => {
-            ymap.set(file.path, cloneProjectFile(file));
-          });
-        },
-        'bootstrap',
-      );
+      ydoc.transact(() => {
+        Object.values(files).forEach(f => ymap.set(f.path, cloneProjectFile(f)));
+      }, 'seed-from-props');
     } else {
+      // If it had content (from snapshot), push it to React state
       const existing = projectFilesFromYMap(ymap);
       suppressLocalSyncRef.current = true;
       onFilesChange(existing);
-      Promise.resolve().then(() => {
-        suppressLocalSyncRef.current = false;
-      });
+      queueMicrotask(() => { suppressLocalSyncRef.current = false; });
     }
 
-    const observer = (event: Y.YMapEvent<ProjectFile>) => {
-      if (event.transaction.local || suppressLocalSyncRef.current) {
-        return;
-      }
-      const current = projectFilesFromYMap(event.target);
+    // Observe Y.Map → push remote changes to React state
+    const onFilesChanged = (evt: Y.YMapEvent<ProjectFile>) => {
+      if (evt.transaction.local || suppressLocalSyncRef.current) return;
+      const next = projectFilesFromYMap(evt.target);
       suppressLocalSyncRef.current = true;
-      onFilesChange(current);
-      Promise.resolve().then(() => {
-        suppressLocalSyncRef.current = false;
-      });
+      onFilesChange(next);
+      queueMicrotask(() => { suppressLocalSyncRef.current = false; });
     };
+    ymap.observe(onFilesChanged);
 
-    ymap.observe(observer);
-
-    const collaboration: CollaborationRef = {
-      ydoc,
-      ymap,
-      observer,
-      provider: null,
-      awareness: null,
-      sendPresence: () => {},
-      disposeAwarenessListener: null,
-    };
-
+    // Create WebRTC provider
     let provider: WebrtcProvider | null = null;
     let awareness: Awareness | null = null;
 
-    if (typeof window !== 'undefined') {
-      try {
-        provider = new WebrtcProvider(`yentic-project-${projectId}`, ydoc, {
-          signaling: [
-            'wss://signaling.yjs.dev',
-            'wss://y-webrtc-signaling-eu.herokuapp.com',
-            'wss://y-webrtc-signaling-us.herokuapp.com',
-          ],
-          maxConns: 20,
-          filterBcConns: false,
-          peerOpts: {
-            config: {
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:global.stun.twilio.com:3478?transport=udp' },
-              ],
-            },
+    try {
+      provider = new WebrtcProvider(`yentic-project-${projectId}`, ydoc, {
+        // Multiple public signalers; replace with your own later if needed
+        signaling: [
+          'wss://signaling.yjs.dev',
+          'wss://y-webrtc-signaling-eu.herokuapp.com',
+          'wss://y-webrtc-signaling-us.herokuapp.com',
+        ],
+        maxConns: 20,
+        filterBcConns: false,
+        peerOpts: {
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:global.stun.twilio.com:3478?transport=udp' },
+            ],
           },
-        });
-        awareness = provider.awareness;
-      } catch (error) {
-        console.error('Failed to initialize WebRTC collaboration provider', error);
-      }
+        },
+      });
+
+      provider.on('status', ({ status }) => {
+        // eslint-disable-next-line no-console
+        console.log(`[Yjs] WebRTC status: ${status} (room: yentic-project-${projectId})`);
+      });
+
+      awareness = provider.awareness;
+    } catch (e) {
+      console.error('[Yjs] Failed to initialize WebRTC provider:', e);
     }
 
+    // Presence wiring (→ UI)
     const fallbackColor = '#38bdf8';
-
     const emitPresenceSnapshot = () => {
-      if (!awareness) {
-        onPresenceChangeRef.current?.([]);
-        return;
-      }
-      const states = awareness.getStates();
-      const normalized: CollaboratorPresence[] = [];
-      states.forEach((state, clientId) => {
-        if (!state || typeof state !== 'object') {
-          return;
-        }
-        const presenceEntry = (state as { presence?: LocalCollaboratorPresence | null }).presence;
-        if (!presenceEntry || typeof presenceEntry !== 'object') {
-          return;
-        }
-        if (typeof presenceEntry.id !== 'string' || presenceEntry.id.trim().length === 0) {
-          return;
-        }
-        normalized.push({
+      if (!awareness) { onPresenceChangeRef.current?.([]); return; }
+      const out: CollaboratorPresence[] = [];
+      awareness.getStates().forEach((state, clientId) => {
+        if (!state || typeof state !== 'object') return;
+        const p = (state as any).presence as LocalCollaboratorPresence | null | undefined;
+        if (!p || typeof p !== 'object' || typeof p.id !== 'string' || p.id.trim() === '') return;
+        out.push({
           clientId: String(clientId),
-          userId: presenceEntry.id,
-          name:
-            typeof presenceEntry.name === 'string' && presenceEntry.name.trim().length > 0
-              ? presenceEntry.name
-              : null,
-          color:
-            typeof presenceEntry.color === 'string' && presenceEntry.color.trim().length > 0
-              ? presenceEntry.color
-              : fallbackColor,
-          avatar:
-            typeof presenceEntry.avatar === 'string' && presenceEntry.avatar.length > 0
-              ? presenceEntry.avatar
-              : null,
+          userId: p.id,
+          name: (typeof p.name === 'string' && p.name.trim()) ? p.name : null,
+          color: (typeof p.color === 'string' && p.color.trim()) ? p.color : fallbackColor,
+          avatar: (typeof p.avatar === 'string' && p.avatar.length > 0) ? p.avatar : null,
           isSelf: awareness ? clientId === awareness.clientID : false,
         });
       });
-      onPresenceChangeRef.current?.(normalized);
+      onPresenceChangeRef.current?.(out);
     };
 
     if (awareness) {
       awareness.on('update', emitPresenceSnapshot);
-      emitPresenceSnapshot();
-      collaboration.disposeAwarenessListener = () => {
-        awareness?.off('update', emitPresenceSnapshot);
-      };
+      emitPresenceSnapshot(); // initial
     }
 
-    collaboration.provider = provider;
-    collaboration.awareness = awareness;
-    collaboration.sendPresence = presence => {
-      if (!collaboration.awareness) {
-        return;
-      }
-      if (!presence) {
-        collaboration.awareness.setLocalState(null);
-        return;
-      }
-      collaboration.awareness.setLocalStateField('presence', {
-        id: presence.id,
-        name: presence.name ?? null,
-        color: presence.color,
-        avatar: presence.avatar ?? null,
-      });
+    // Compose the collaboration ref
+    collabRef.current = {
+      ydoc,
+      ymap,
+      provider,
+      awareness,
+      unobserveFiles: () => ymap.unobserve(onFilesChanged),
+      unsubscribePresence: awareness ? () => awareness.off('update', emitPresenceSnapshot) : null,
+      sendPresence: (presence) => {
+        if (!awareness) return;
+        if (!presence) {
+          awareness.setLocalState(null);
+          return;
+        }
+        awareness.setLocalStateField('presence', {
+          id: presence.id,
+          name: presence.name ?? null,
+          color: presence.color,
+          avatar: presence.avatar ?? null,
+        });
+      },
     };
 
-    collaborationRef.current = collaboration;
-    collaboration.sendPresence(localPresenceRef.current);
+    providerRef.current = provider ?? null;
 
-    if (isMounted) {
-      onDoc?.(ydoc);
-    }
+    // Send local presence immediately (if provided)
+    collabRef.current.sendPresence(localPresenceRef.current);
+
+    // Expose doc upwards if needed
+    onDoc?.(ydoc);
 
     return () => {
-      ymap.unobserve(observer);
-      collaboration.disposeAwarenessListener?.();
-      collaboration.disposeAwarenessListener = null;
-      if (awareness) {
-        awareness.setLocalState(null);
-      }
-      provider?.destroy();
-      ydoc.destroy();
-      collaborationRef.current = null;
-      appliedStateRef.current = null;
+      // Hard teardown ONLY when unmounting / switching project
+      try {
+        ymap.unobserve(onFilesChanged);
+        awareness?.off('update', emitPresenceSnapshot);
+        awareness?.setLocalState(null);
+        provider?.destroy();
+        ydoc.destroy();
+      } catch {/* noop */}
+      collabRef.current = null;
+      providerRef.current = null;
+      appliedSnapshotRef.current = null;
       onDoc?.(null);
       onPresenceChangeRef.current?.([]);
-      isMounted = false;
     };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
+  /** Push React → Yjs (prop changes) without creating loops */
   useEffect(() => {
-    if (!projectId) {
-      return;
-    }
-    const collaboration = collaborationRef.current;
-    if (!collaboration || suppressLocalSyncRef.current) {
-      return;
-    }
-    const { ydoc, ymap } = collaboration;
-    const existing = new Map<string, ProjectFile>();
-    ymap.forEach((value, key) => {
-      if (value) {
-        existing.set(key, value);
-      }
-    });
+    if (!projectId) return;
+    const c = collabRef.current;
+    if (!c || suppressLocalSyncRef.current) return;
 
-    const pendingDeletes: string[] = [];
-    const pendingUpserts: ProjectFile[] = [];
+    const { ydoc, ymap } = c;
+
+    // Build a quick index of current Y state
+    const current = new Map<string, ProjectFile>();
+    ymap.forEach((v, k) => { if (v) current.set(k, v); });
+
+    const upserts: ProjectFile[] = [];
+    const toDelete: string[] = [];
 
     Object.values(files).forEach(file => {
-      const prev = existing.get(file.path);
-      if (
-        !prev ||
-        prev.path !== file.path ||
-        prev.language !== file.language ||
-        prev.code !== file.code
-      ) {
-        pendingUpserts.push(file);
+      const prev = current.get(file.path);
+      if (!prev || prev.language !== file.language || prev.code !== file.code) {
+        upserts.push(file);
       }
-      existing.delete(file.path);
+      current.delete(file.path);
     });
 
-    existing.forEach((_, key) => {
-      pendingDeletes.push(key);
-    });
+    current.forEach((_, leftover) => toDelete.push(leftover));
 
-    if (!pendingUpserts.length && !pendingDeletes.length) {
-      return;
-    }
+    if (!upserts.length && !toDelete.length) return;
 
     suppressLocalSyncRef.current = true;
     ydoc.transact(() => {
-      pendingUpserts.forEach(file => {
-        ymap.set(file.path, cloneProjectFile(file));
-      });
-      pendingDeletes.forEach(key => {
-        ymap.delete(key);
-      });
-    });
-    Promise.resolve().then(() => {
-      suppressLocalSyncRef.current = false;
-    });
+      upserts.forEach(f => ymap.set(f.path, cloneProjectFile(f)));
+      toDelete.forEach(k => ymap.delete(k));
+    }, 'react->yjs');
+    queueMicrotask(() => { suppressLocalSyncRef.current = false; });
   }, [files, projectId]);
 
+  /** If a NEW snapshot arrives later (e.g. from save), apply it once */
   useEffect(() => {
-    if (!projectId || !encodedState) {
-      return;
-    }
-    if (appliedStateRef.current === encodedState) {
-      return;
-    }
-    const collaboration = collaborationRef.current;
-    if (!collaboration) {
-      return;
-    }
-    const decoded = decodeState(encodedState);
-    if (!decoded) {
-      appliedStateRef.current = encodedState;
-      return;
-    }
+    if (!projectId || !encodedState) return;
+    if (appliedSnapshotRef.current === encodedState) return;
+    const c = collabRef.current;
+    if (!c) return;
+
+    const decoded = decodeStateBase64(encodedState);
+    if (!decoded) { appliedSnapshotRef.current = encodedState; return; }
+
     try {
-      collaboration.ydoc.transact(() => {
-        Y.applyUpdate(collaboration.ydoc, decoded, 'bootstrap');
+      c.ydoc.transact(() => {
+        Y.applyUpdate(c.ydoc, decoded, 'apply-snapshot');
       });
-      appliedStateRef.current = encodedState;
-    } catch (error) {
-      console.error('Failed to apply collaborative state update', error);
+      appliedSnapshotRef.current = encodedState;
+      // eslint-disable-next-line no-console
+      console.log('[Yjs] Applied incoming snapshot (post-bootstrap)');
+    } catch (e) {
+      console.error('[Yjs] Failed to apply incoming snapshot:', e);
     }
   }, [encodedState, projectId]);
 
+  /** Keep presence fresh (tab crashes / network blips) */
+  useEffect(() => {
+    const id = setInterval(() => {
+      const send = collabRef.current?.sendPresence;
+      if (send) send(localPresenceRef.current);
+    }, 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  /** Sandpack file adapter */
   const sandpackFiles = useMemo(() => {
-    const result: Record<string, { code: string }> = {};
-    Object.values(files).forEach(file => {
-      result[`/${file.path}`] = { code: file.code };
-    });
-    return result;
+    const out: Record<string, { code: string }> = {};
+    Object.values(files).forEach(f => { out[`/${f.path}`] = { code: f.code }; });
+    return out;
   }, [files]);
 
-  if (children !== undefined) {
-    return <>{children}</>;
-  }
+  if (children !== undefined) return <>{children}</>;
 
   return (
     <div className="h-full">
