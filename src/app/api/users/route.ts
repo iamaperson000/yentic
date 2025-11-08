@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import type { Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 
 export async function GET(request: Request) {
@@ -14,19 +15,20 @@ export async function GET(request: Request) {
     )
   }
 
-  const users = await prisma.user.findMany({
+  const rawUsers = await prisma.user.findMany({
     skip: Number.isFinite(skip) ? skip : 0,
     take: Number.isFinite(take) && take > 0 ? Math.min(take, 100) : 50,
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      image: true,
-      bio: true,
-      createdAt: true,
-    },
+    orderBy: { createdAt: "desc" } as unknown as Prisma.UserOrderByWithRelationInput,
   })
+
+  const users = rawUsers as unknown as Array<{
+    id: string
+    name: string | null
+    username: string | null
+    image: string | null
+    bio: string | null
+    createdAt: Date
+  }>
 
   return NextResponse.json({ users })
 }
