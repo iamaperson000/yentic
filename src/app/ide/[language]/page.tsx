@@ -142,6 +142,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [collaborators, setCollaborators] = useState<CollaboratorInfo[]>([]);
   const [projectOwner, setProjectOwner] = useState<CollaboratorInfo | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareUrlError, setShareUrlError] = useState<string | null>(null);
+  const [isShareUrlLoading, setIsShareUrlLoading] = useState(false);
 
   const updateFiles = useCallback(
     (updater: ProjectFileMap | ((prev: ProjectFileMap) => ProjectFileMap)) => {
@@ -251,6 +254,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     setViewerRole('owner');
     setCollaborators([]);
     setProjectOwner(null);
+    setShareUrl(null);
+    setShareUrlError(null);
+    setIsShareUrlLoading(false);
   }, [slug, config.defaultActivePath, updateFiles]);
 
   useEffect(() => {
@@ -292,6 +298,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     setRemoveError(null);
     setIsInviteSubmitting(false);
     setIsLoadingCollaborators(false);
+    setShareUrl(null);
+    setShareUrlError(null);
+    setIsShareUrlLoading(false);
     cloudWarningShownRef.current = false;
     loadedCloudProjectIdRef.current = null;
   }, [
@@ -319,6 +328,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
   const onRename = useCallback(
     (oldPath: string, newPathRaw: string): string | null => {
+      if (viewerRole === 'viewer') {
+        return 'Viewers cannot rename files.';
+      }
       const nextPath = newPathRaw.trim();
       if (!nextPath) {
         return 'File name cannot be empty.';
@@ -352,10 +364,13 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
       return error;
     },
-    [activePath, updateFiles]
+    [activePath, updateFiles, viewerRole]
   );
 
   const onDelete = useCallback((path: string) => {
+    if (viewerRole === 'viewer') {
+      return;
+    }
     let nextActivePath = activePath;
     let shouldUpdateActive = false;
 
@@ -382,7 +397,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     if (shouldUpdateActive) {
       setActivePath(nextActivePath);
     }
-  }, [activePath, slug, config.defaultActivePath, updateFiles]);
+  }, [activePath, slug, config.defaultActivePath, updateFiles, viewerRole]);
 
   const onCreate = useCallback((rawPath: string): string => {
     const desired = rawPath.trim() || config.newFilePlaceholder;
@@ -439,6 +454,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
   const persistProject = useCallback(
     async (context: 'auto' | 'manual' | 'rename') => {
+      if (viewerRole === 'viewer') {
+        return { ok: false as const, reason: 'forbidden' as const };
+      }
       if (!files || !Object.keys(files).length) {
         return { ok: false as const, reason: 'empty' as const };
       }
@@ -545,6 +563,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   );
 
   useEffect(() => {
+    if (viewerRole === 'viewer') return;
     if (!files || !Object.keys(files).length) return;
     if (autoSaveSkipRef.current) {
       autoSaveSkipRef.current = false;
@@ -554,14 +573,18 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       void persistProject('auto');
     }, 800);
     return () => window.clearTimeout(timeout);
-  }, [files, persistProject, projectMeta.name]);
+  }, [files, persistProject, projectMeta.name, viewerRole]);
 
   const handleSave = useCallback(async () => {
+    if (viewerRole === 'viewer') {
+      pushToast({ kind: 'error', message: 'Viewers cannot sync projects.' });
+      return;
+    }
     const result = await persistProject('manual');
     if (result.ok) {
       pushToast({ kind: 'success', message: `✅ Project synced to the cloud` });
     }
-  }, [persistProject, pushToast]);
+  }, [persistProject, pushToast, viewerRole]);
 
   const loadCollaborators = useCallback(async () => {
     if (!projectMeta.id) {
@@ -603,6 +626,81 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     }
   }, [projectMeta.id]);
 
+  const fetchShareUrl = useCallback(
+    async (options?: { rotate?: boolean }) => {
+      if (!projectMeta.id || viewerRole !== 'owner') {
+        setShareUrl(null);
+        setShareUrlError(null);
+        setIsShareUrlLoading(false);
+        return;
+      }
+      setIsShareUrlLoading(true);
+      setShareUrlError(null);
+      try {
+        const init: RequestInit = { method: 'POST' };
+        if (options?.rotate) {
+          init.headers = { 'Content-Type': 'application/json' };
+          init.body = JSON.stringify({ rotate: true });
+        }
+        const res = await fetch(`/api/projects/${projectMeta.id}/share`, init);
+        if (!res.ok) {
+          const raw = await res.text();
+          let message = 'Failed to generate share link';
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              if (typeof (parsed as { error?: unknown }).error === 'string') {
+                message = (parsed as { error: string }).error;
+              } else if (typeof (parsed as { message?: unknown }).message === 'string') {
+                message = (parsed as { message: string }).message;
+              }
+            }
+          } catch {
+            if (raw) {
+              message = raw;
+            }
+          }
+          setShareUrlError(message);
+          setShareUrl(null);
+          return;
+        }
+        const data = (await res.json()) as { url: string };
+        setShareUrl(data.url);
+        setShareUrlError(null);
+      } catch (error) {
+        console.error('Failed to generate share link', error);
+        setShareUrl(null);
+        setShareUrlError('Failed to generate share link');
+      } finally {
+        setIsShareUrlLoading(false);
+      }
+    },
+    [projectMeta.id, viewerRole]
+  );
+
+  const rotateShareUrl = useCallback(() => {
+    void fetchShareUrl({ rotate: true });
+  }, [fetchShareUrl]);
+
+  const handleCopyShareLink = useCallback(async () => {
+    if (!shareUrl) {
+      return;
+    }
+    if (typeof window === 'undefined' || !navigator?.clipboard) {
+      setShareUrlError('Clipboard not available');
+      return;
+    }
+    try {
+      const fullUrl = new URL(shareUrl, window.location.origin).toString();
+      await navigator.clipboard.writeText(fullUrl);
+      setShareUrlError(null);
+      pushToast({ kind: 'success', message: 'Copied share link to clipboard' });
+    } catch (error) {
+      console.error('Failed to copy share link', error);
+      setShareUrlError('Failed to copy link');
+    }
+  }, [pushToast, shareUrl]);
+
   const openShareModal = useCallback(() => {
     if (!projectMeta.id) {
       return;
@@ -611,8 +709,10 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     setInviteValue('');
     setInviteError(null);
     setRemoveError(null);
+    setShareUrlError(null);
     void loadCollaborators();
-  }, [loadCollaborators, projectMeta.id]);
+    void fetchShareUrl();
+  }, [fetchShareUrl, loadCollaborators, projectMeta.id]);
 
   const closeShareModal = useCallback(() => {
     setShareModalOpen(false);
@@ -620,6 +720,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     setInviteError(null);
     setRemoveError(null);
     setIsInviteSubmitting(false);
+    setShareUrl(null);
+    setShareUrlError(null);
+    setIsShareUrlLoading(false);
   }, []);
 
   const handleInviteSubmit = useCallback(async () => {
@@ -872,22 +975,32 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     `${actionButtonBaseClass} border border-white/20 bg-white/5 text-white/80 hover:border-white/40 hover:bg-white/10 hover:text-white`;
   const dangerActionClass =
     `${actionButtonBaseClass} border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:border-rose-300 hover:bg-rose-500/20 hover:text-rose-50`;
+  const shareButtonDisabled = !projectMeta.id;
+  const canEdit = viewerRole !== 'viewer';
+  const canManageShareLink = viewerRole === 'owner' && !shareButtonDisabled;
   const shareButtonClass =
     viewerRole === 'owner'
       ? subtleActionClass
-      : `${actionButtonBaseClass} border border-white/10 bg-white/5 text-white/60 hover:border-white/20 hover:bg-white/10 hover:text-white`;
-  const shareButtonDisabled = !projectMeta.id;
+      : `${actionButtonBaseClass} border border-white/15 bg-white/5 text-white/60 hover:border-white/25 hover:bg-white/10 hover:text-white`;
 
   const createSmartFile = useCallback(() => {
+    if (viewerRole === 'viewer') {
+      pushToast({ kind: 'error', message: 'Viewers cannot create files.' });
+      return;
+    }
     const activeFile = files[activePath];
     const activeLanguage = activeFile?.language;
     const placeholder = smartPlaceholder(config.newFilePlaceholder, activeLanguage);
     const createdPath = onCreate(placeholder);
     setRecentlyCreatedPath(createdPath);
     pushToast({ kind: 'success', message: `Created file ${createdPath}` });
-  }, [files, activePath, config.newFilePlaceholder, onCreate, pushToast]);
+  }, [files, activePath, config.newFilePlaceholder, onCreate, pushToast, viewerRole]);
 
   const resetWorkspace = useCallback(() => {
+    if (viewerRole !== 'owner') {
+      pushToast({ kind: 'error', message: 'Only owners can reset the workspace.' });
+      return;
+    }
     const confirmed = window.confirm(
       'Reset this workspace to the starter files? This will replace your current files.'
     );
@@ -902,7 +1015,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     setLastSavedAt(new Date());
     setIsSaving(false);
     setCloudError(null);
-  }, [slug, config.defaultActivePath, updateFiles]);
+  }, [slug, config.defaultActivePath, updateFiles, viewerRole, pushToast]);
 
   useEffect(() => {
     return () => {
@@ -919,139 +1032,144 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [recentlyCreatedPath]);
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#06070d] via-[#090b19] to-[#040509] text-white">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(120,119,198,0.25),_transparent_60%)]" />
-      <div className="relative flex min-h-screen flex-col">
-        <CollaborativeEditor
-          projectId={projectMeta.id}
-          files={files}
-          onFilesChange={handleCollaborativeFilesChange}
-          encodedState={encodedYjsState}
-          onDoc={doc => {
-            collaborativeDocRef.current = doc;
-          }}
-        >
-          {null}
-        </CollaborativeEditor>
-        <ProjectShareModal
-          isOpen={isShareModalOpen}
-          onClose={closeShareModal}
-          owner={projectOwner}
-          collaborators={collaborators}
-          viewerRole={viewerRole}
-          inviteValue={inviteValue}
-          onInviteValueChange={setInviteValue}
-          onInviteSubmit={handleInviteSubmit}
-          inviteError={inviteError}
-          isInviteSubmitting={isInviteSubmitting}
-          isLoading={isLoadingCollaborators}
-          canInvite={viewerRole === 'owner' && !shareButtonDisabled}
-          onRemoveCollaborator={handleRemoveCollaborator}
-          removeError={removeError}
-        />
-        <header className="border-b border-white/10 bg-black/30 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-3 px-4 py-3 lg:px-8">
-            <Link
-              href="/"
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-[13px] font-semibold text-white/75 transition hover:border-white/25 hover:bg-white/10 hover:text-white"
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10">
-                <svg viewBox="0 0 20 20" aria-hidden className="h-3.5 w-3.5">
-                  <path
-                    d="M11.75 5.75 8 9.5l3.75 3.75"
-                    className="fill-none stroke-current stroke-[1.5]"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-              <span className="hidden sm:inline">Back to home</span>
-              <span className="sm:hidden">Home</span>
-            </Link>
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Workspace</p>
-                <p className="truncate text-sm font-semibold text-white sm:text-base">{config.title}</p>
-              </div>
-              <p className="hidden min-w-0 truncate text-xs text-white/50 sm:block">{config.description}</p>
+    <div className="flex min-h-screen flex-col bg-[#05060d] text-white">
+      <CollaborativeEditor
+        projectId={projectMeta.id}
+        files={files}
+        onFilesChange={handleCollaborativeFilesChange}
+        encodedState={encodedYjsState}
+        onDoc={doc => {
+          collaborativeDocRef.current = doc;
+        }}
+      >
+        {null}
+      </CollaborativeEditor>
+      <ProjectShareModal
+        isOpen={isShareModalOpen}
+        onClose={closeShareModal}
+        owner={projectOwner}
+        collaborators={collaborators}
+        viewerRole={viewerRole}
+        inviteValue={inviteValue}
+        onInviteValueChange={setInviteValue}
+        onInviteSubmit={handleInviteSubmit}
+        inviteError={inviteError}
+        isInviteSubmitting={isInviteSubmitting}
+        isLoading={isLoadingCollaborators}
+        canInvite={canManageShareLink}
+        onRemoveCollaborator={handleRemoveCollaborator}
+        removeError={removeError}
+        shareUrl={shareUrl}
+        isShareUrlLoading={isShareUrlLoading}
+        shareUrlError={shareUrlError}
+        canManageShareLink={canManageShareLink}
+        onCopyShareUrl={handleCopyShareLink}
+        onResetShareUrl={rotateShareUrl}
+      />
+      <header className="border-b border-white/10 bg-[#080b16]/80 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-3 px-4 py-3 lg:px-8">
+          <Link
+            href="/"
+            className="inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 text-[13px] font-semibold text-white/75 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10">
+              <svg viewBox="0 0 20 20" aria-hidden className="h-3.5 w-3.5">
+                <path
+                  d="M11.75 5.75 8 9.5l3.75 3.75"
+                  className="fill-none stroke-current stroke-[1.5]"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            <span className="hidden sm:inline">Back to home</span>
+            <span className="sm:hidden">Home</span>
+          </Link>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Workspace</p>
+              <p className="truncate text-sm font-semibold text-white sm:text-base">{config.title}</p>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-white/60">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">Project</span>
-                {isRenamingProject ? (
-                  <input
-                    ref={projectNameInputRef}
-                    value={projectNameDraft}
-                    onChange={event => setProjectNameDraft(event.target.value)}
-                    onKeyDown={event => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        commitProjectRename();
-                      }
-                      if (event.key === 'Escape') {
-                        event.preventDefault();
-                        cancelProjectRename();
-                      }
-                    }}
-                    onBlur={commitProjectRename}
-                    autoFocus
-                    placeholder={isNameRequired ? 'Name your project' : 'Project name'}
-                    className="w-[180px] rounded-md border border-white/20 bg-black/60 px-2.5 py-1 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onDoubleClick={beginProjectRename}
-                    onClick={beginProjectRename}
-                    onKeyDown={event => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        beginProjectRename();
-                      }
-                    }}
-                    className="truncate max-w-[220px] rounded-full border border-white/15 bg-white/5 px-3 py-1 text-sm font-medium text-white/75 transition hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300/60"
-                    title="Double-click to rename project"
-                  >
-                    {projectMeta.name}
-                  </button>
-                )}
-              </div>
-              <span className={statusBadgeClass}>
-                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-                {savedLabel}
-              </span>
-              {cloudError ? <span className="text-[11px] text-rose-200">{cloudError}</span> : null}
-              <div className="flex items-center gap-1.5">
-                <button onClick={createSmartFile} className={primaryActionClass}>
-                  New file
-                </button>
+            <p className="hidden min-w-0 truncate text-xs text-white/50 sm:block">{config.description}</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-white/60">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">Project</span>
+              {isRenamingProject ? (
+                <input
+                  ref={projectNameInputRef}
+                  value={projectNameDraft}
+                  onChange={event => setProjectNameDraft(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      commitProjectRename();
+                    }
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      cancelProjectRename();
+                    }
+                  }}
+                  onBlur={commitProjectRename}
+                  autoFocus
+                  placeholder={isNameRequired ? 'Name your project' : 'Project name'}
+                  className="w-[180px] rounded-md border border-white/20 bg-black/60 px-2.5 py-1 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40"
+                />
+              ) : (
                 <button
-                  onClick={openShareModal}
-                  className={shareButtonClass}
-                  disabled={shareButtonDisabled}
-                  title={
-                    shareButtonDisabled
-                      ? 'Save this project to enable sharing'
-                      : viewerRole === 'owner'
-                        ? 'Invite collaborators'
-                        : 'View collaborators'
-                  }
+                  type="button"
+                  onDoubleClick={beginProjectRename}
+                  onClick={beginProjectRename}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      beginProjectRename();
+                    }
+                  }}
+                  className="truncate max-w-[220px] rounded-full border border-white/15 bg-white/5 px-3 py-1 text-sm font-medium text-white/75 transition hover:border-white/30 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300/60"
+                  title="Double-click to rename project"
                 >
-                  Share
+                  {projectMeta.name}
                 </button>
-                <button onClick={handleSave} className={subtleActionClass}>
-                  Sync now
-                </button>
-                <button onClick={resetWorkspace} className={dangerActionClass}>
-                  Reset workspace
-                </button>
-              </div>
+              )}
+            </div>
+            <span className={statusBadgeClass}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+              {savedLabel}
+            </span>
+            {cloudError ? <span className="text-[11px] text-rose-200">{cloudError}</span> : null}
+            <div className="flex items-center gap-1.5">
+              <button onClick={createSmartFile} className={primaryActionClass} disabled={!canEdit}>
+                New file
+              </button>
+              <button
+                onClick={openShareModal}
+                className={shareButtonClass}
+                disabled={shareButtonDisabled}
+                title={
+                  shareButtonDisabled
+                    ? 'Save this project to enable sharing'
+                    : viewerRole === 'owner'
+                      ? 'Invite collaborators'
+                      : 'View collaborators'
+                }
+              >
+                Share
+              </button>
+              <button onClick={handleSave} className={subtleActionClass} disabled={!canEdit}>
+                Sync now
+              </button>
+              <button onClick={resetWorkspace} className={dangerActionClass} disabled={viewerRole !== 'owner'}>
+                Reset workspace
+              </button>
             </div>
           </div>
-        </header>
-        <main className="flex flex-1 flex-col px-4 pb-6 pt-4 lg:px-8">
-          <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-3 md:gap-4 lg:grid-cols-[200px_minmax(0,2fr)_minmax(0,1.05fr)] xl:grid-cols-[220px_minmax(0,2.1fr)_minmax(0,1.05fr)]">
-            <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+        </div>
+      </header>
+      <main className="flex flex-1 overflow-hidden">
+        <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-4 px-4 py-4 lg:px-8">
+          <div className="grid h-full flex-1 gap-3 md:gap-4 lg:grid-cols-[200px_minmax(0,2fr)_minmax(0,1.05fr)] xl:grid-cols-[220px_minmax(0,2.1fr)_minmax(0,1.05fr)]">
+            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f1c]">
               <div className="flex flex-1 flex-col overflow-hidden">
                 <FileExplorer
                   files={files}
@@ -1063,13 +1181,14 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                   newlyCreatedPath={recentlyCreatedPath}
                   onFeedback={pushToast}
                   placeholder={config.newFilePlaceholder}
+                  readOnly={!canEdit}
                 />
               </div>
             </div>
-            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/40">
-              <Editor value={code} language={lang} onChange={setActiveCode} />
+            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d1324]">
+              <Editor value={code} language={lang} onChange={setActiveCode} readOnly={!canEdit} />
             </div>
-            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/40">
+            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d1324]">
               <Preview
                 files={sandpackFiles}
                 activePath={`/${activePath}`}
@@ -1081,25 +1200,24 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
               />
             </div>
           </div>
-        </main>
-
-        {toast ? (
-          <div className="pointer-events-none fixed inset-x-0 top-6 flex justify-center px-4">
-            <div
-              className={`pointer-events-auto inline-flex items-center gap-3 rounded-full border px-4 py-2 text-sm shadow-lg backdrop-blur ${
-                toast.kind === 'success'
-                  ? 'border-emerald-400/50 bg-emerald-500/15 text-emerald-100'
-                  : 'border-rose-400/50 bg-rose-500/15 text-rose-100'
-              }`}
-            >
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px] font-semibold uppercase tracking-[0.2em]">
-                {toast.kind === 'success' ? 'OK' : 'ERR'}
-              </span>
-              <span>{toast.message}</span>
-            </div>
+        </div>
+      </main>
+      {toast ? (
+        <div className="pointer-events-none fixed inset-x-0 top-6 flex justify-center px-4">
+          <div
+            className={`pointer-events-auto inline-flex items-center gap-3 rounded-full border px-4 py-2 text-sm shadow-lg backdrop-blur ${
+              toast.kind === 'success'
+                ? 'border-emerald-400/50 bg-emerald-500/15 text-emerald-100'
+                : 'border-rose-400/50 bg-rose-500/15 text-rose-100'
+            }`}
+          >
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px] font-semibold uppercase tracking-[0.2em]">
+              {toast.kind === 'success' ? 'OK' : 'ERR'}
+            </span>
+            <span>{toast.message}</span>
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

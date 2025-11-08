@@ -13,7 +13,8 @@ export function FileExplorer({
   onCreateFile,
   newlyCreatedPath,
   onFeedback,
-  placeholder
+  placeholder,
+  readOnly = false
 }: {
   files: ProjectFileMap;
   activePath: string;
@@ -24,6 +25,7 @@ export function FileExplorer({
   newlyCreatedPath?: string | null;
   onFeedback?: (feedback: { kind: 'success' | 'error'; message: string }) => void;
   placeholder?: string;
+  readOnly?: boolean;
 }) {
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState<string>('');
@@ -32,17 +34,20 @@ export function FileExplorer({
   const entries = Object.values(files).sort((a, b) => a.path.localeCompare(b.path));
 
   const beginRename = useCallback((path: string) => {
+    if (readOnly) {
+      return;
+    }
     setRenameTarget(path);
     setRenameDraft(path);
-  }, []);
+  }, [readOnly]);
 
   useEffect(() => {
-    if (!newlyCreatedPath || typeof window === 'undefined') return;
+    if (!newlyCreatedPath || typeof window === 'undefined' || readOnly) return;
     const frame = window.requestAnimationFrame(() => {
       beginRename(newlyCreatedPath);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [newlyCreatedPath, beginRename]);
+  }, [newlyCreatedPath, beginRename, readOnly]);
 
   useEffect(() => {
     if (!renameTarget || typeof window === 'undefined') return;
@@ -99,7 +104,7 @@ export function FileExplorer({
     <div className="flex h-full flex-col text-xs text-white/80">
       <div className="flex items-center gap-2 border-b border-white/5 bg-black/20 px-3 py-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/50">Files</p>
-        {onCreateFile ? (
+        {onCreateFile && !readOnly ? (
           <button
             type="button"
             onClick={onCreateFile}
@@ -136,7 +141,7 @@ export function FileExplorer({
                     <span className="truncate text-[13px] font-medium text-white">{f.path}</span>
                     <span className="text-[10px] uppercase tracking-[0.2em] text-white/35">{f.language}</span>
                   </button>
-                  {isRenaming ? null : (
+                  {isRenaming || readOnly ? null : (
                     <div className="flex items-center gap-1 text-[11px] text-white/50">
                       <button
                         type="button"
