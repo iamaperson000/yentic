@@ -1,3 +1,4 @@
+import { UsernameSearchForm } from "@/components/users/UsernameSearchForm";
 import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -6,8 +7,15 @@ export async function generateStaticParams() {
   return [];
 }
 
-export default async function UserPage({ params }: { params: { username?: string } }) {
-  const username = params?.username;
+type UserPageParams = { username?: string };
+
+export default async function UserPage({
+  params,
+}: {
+  params: UserPageParams | Promise<UserPageParams>;
+}) {
+  const resolvedParams = await Promise.resolve(params);
+  const username = resolvedParams?.username;
   console.log(">>> DEBUG username param:", username);
 
   if (!username) {
@@ -28,6 +36,9 @@ export default async function UserPage({ params }: { params: { username?: string
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
+      <div className="mb-6 flex justify-center">
+        <UsernameSearchForm initialUsername={user.username ?? ""} />
+      </div>
       <div className="flex flex-col items-center text-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
