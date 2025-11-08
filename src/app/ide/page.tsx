@@ -108,7 +108,12 @@ export default async function WorkspacePicker() {
   const session = await getServerSession(authOptions);
   const savedProjects = session?.user?.email
     ? await prisma.project.findMany({
-        where: { user: { email: session.user.email } },
+        where: {
+          OR: [
+            { user: { email: session.user.email } },
+            { collaborators: { some: { user: { email: session.user.email } } } },
+          ],
+        },
         orderBy: { updatedAt: 'desc' },
       })
     : [];
