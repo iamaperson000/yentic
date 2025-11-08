@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Sandpack } from '@codesandbox/sandpack-react';
 import * as Y from 'yjs';
-import { WebrtcProvider } from 'y-webrtc';
 
 import { inferLanguage, type ProjectFile, type ProjectFileMap } from '@/lib/project';
 import type {
@@ -22,12 +21,42 @@ type CollaborativeEditorProps = {
   children?: ReactNode;
 };
 
+type CollaborationCommand =
+  | { type: 'update'; update: string }
+  | {
+      type: 'presence';
+      presence:
+        | {
+            id: string;
+            name: string | null;
+            color: string;
+            avatar: string | null;
+          }
+        | null;
+    };
+
+type ServerPresenceEntry = {
+  clientId: string;
+  userId: string | null;
+  name: string | null;
+  color: string | null;
+  avatar: string | null;
+};
+
+type CollaborationServerMessage =
+  | { type: 'update'; update: string; clientId: string }
+  | { type: 'presence'; clients: ServerPresenceEntry[] };
+
 type CollaborationRef = {
   ydoc: Y.Doc;
-  provider: WebrtcProvider;
   ymap: Y.Map<ProjectFile>;
   observer: (event: Y.YMapEvent<ProjectFile>) => void;
-  awarenessHandler: () => void;
+  eventSource: EventSource;
+  updateHandler: (update: Uint8Array, origin: unknown) => void;
+  pendingUpdates: Uint8Array[];
+  flushTimeoutId: number | null;
+  sendCommand: (command: CollaborationCommand) => void;
+  sendPresence: (presence: LocalCollaboratorPresence | null) => void;
 };
 
 function cloneProjectFile(file: ProjectFile): ProjectFile {
@@ -115,6 +144,42 @@ function decodeState(encoded?: string | null): Uint8Array | null {
   }
 }
 
+function encodeUpdate(update: Uint8Array): string {
+  if (typeof window === 'undefined') {
+    return Buffer.from(update).toString('base64');
+  }
+  let binary = '';
+  update.forEach(value => {
+    binary += String.fromCharCode(value);
+  });
+  return btoa(binary);
+}
+
+function createCommandSender(projectId: string, clientId: string) {
+  const url = `/api/projects/${projectId}/collaboration`;
+  return (command: CollaborationCommand) => {
+    const payload = JSON.stringify({ ...command, clientId });
+    if (command.type === 'update' && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      try {
+        const blob = new Blob([payload], { type: 'application/json' });
+        if (navigator.sendBeacon(url, blob)) {
+          return;
+        }
+      } catch {
+        // ignore and fall back to fetch
+      }
+    }
+    void fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+      keepalive: command.type === 'update',
+    }).catch(error => {
+      console.error('Collaboration command failed', error);
+    });
+  };
+}
+
 export default function CollaborativeEditor({
   projectId,
   files,
@@ -130,62 +195,14 @@ export default function CollaborativeEditor({
   const appliedStateRef = useRef<string | null>(null);
   const localPresenceRef = useRef<LocalCollaboratorPresence | null>(null);
   const onPresenceChangeRef = useRef<((presence: CollaboratorPresence[]) => void) | undefined>(undefined);
+  const clientIdRef = useRef<string>('');
 
-  const emitPresence = useCallback(() => {
-    const collaboration = collaborationRef.current;
-    if (!collaboration) {
-      return;
-    }
-    const { provider } = collaboration;
-    const awareness = provider.awareness;
-    const localClientId = awareness.clientID;
-    const entries = Array.from(awareness.getStates().entries());
-    const normalized: CollaboratorPresence[] = [];
-
-    entries.forEach(([clientId, state]) => {
-      if (!state || typeof state !== 'object') {
-        return;
-      }
-      const userState = (state as { user?: unknown }).user;
-      if (!userState || typeof userState !== 'object') {
-        return;
-      }
-      const { id, name, color, avatar } = userState as {
-        id?: unknown;
-        name?: unknown;
-        color?: unknown;
-        avatar?: unknown;
-      };
-      if (typeof id !== 'string' || !id) {
-        return;
-      }
-      const fallbackColor = '#38bdf8';
-      normalized.push({
-        clientId,
-        userId: id,
-        name: typeof name === 'string' ? name : null,
-        color:
-          typeof color === 'string' && color.trim().length > 0 ? color : fallbackColor,
-        avatar: typeof avatar === 'string' && avatar.length > 0 ? avatar : null,
-        isSelf: clientId === localClientId,
-      });
-    });
-
-    onPresenceChangeRef.current?.(normalized);
-  }, []);
-
-  const applyLocalPresence = useCallback((provider: WebrtcProvider, presence: LocalCollaboratorPresence | null) => {
-    if (presence) {
-      provider.awareness.setLocalStateField('user', {
-        id: presence.id,
-        name: presence.name ?? null,
-        color: presence.color,
-        avatar: presence.avatar ?? null,
-      });
-    } else {
-      provider.awareness.setLocalStateField('user', undefined);
-    }
-  }, []);
+  if (!clientIdRef.current) {
+    clientIdRef.current =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  }
 
   useEffect(() => {
     onPresenceChangeRef.current = onPresenceChange ?? undefined;
@@ -197,20 +214,20 @@ export default function CollaborativeEditor({
     if (!collaboration) {
       return;
     }
-    applyLocalPresence(collaboration.provider, localPresenceRef.current);
-    emitPresence();
-  }, [applyLocalPresence, emitPresence, localPresence]);
+    collaboration.sendPresence(localPresenceRef.current);
+  }, [localPresence]);
 
   useEffect(() => {
     if (!projectId) {
       if (collaborationRef.current) {
-        collaborationRef.current.ymap.unobserve(collaborationRef.current.observer);
-        collaborationRef.current.provider.awareness.off(
-          'update',
-          collaborationRef.current.awarenessHandler,
-        );
-        collaborationRef.current.provider.destroy();
-        collaborationRef.current.ydoc.destroy();
+        const current = collaborationRef.current;
+        current.ymap.unobserve(current.observer);
+        current.ydoc.off('update', current.updateHandler);
+        if (current.flushTimeoutId !== null) {
+          window.clearTimeout(current.flushTimeoutId);
+        }
+        current.eventSource.close();
+        current.ydoc.destroy();
         collaborationRef.current = null;
       }
       appliedStateRef.current = null;
@@ -226,7 +243,7 @@ export default function CollaborativeEditor({
     const decoded = encodedState ? decodeState(encodedState) : null;
     if (decoded) {
       try {
-        Y.applyUpdate(ydoc, decoded);
+        Y.applyUpdate(ydoc, decoded, 'bootstrap');
         appliedStateRef.current = encodedState ?? null;
       } catch (error) {
         console.error('Failed to apply stored Yjs state', error);
@@ -234,11 +251,14 @@ export default function CollaborativeEditor({
     }
 
     if (ymap.size === 0) {
-      ydoc.transact(() => {
-        Object.values(files).forEach(file => {
-          ymap.set(file.path, cloneProjectFile(file));
-        });
-      });
+      ydoc.transact(
+        () => {
+          Object.values(files).forEach(file => {
+            ymap.set(file.path, cloneProjectFile(file));
+          });
+        },
+        'bootstrap',
+      );
     } else {
       const existing = projectFilesFromYMap(ymap);
       suppressLocalSyncRef.current = true;
@@ -247,8 +267,6 @@ export default function CollaborativeEditor({
         suppressLocalSyncRef.current = false;
       });
     }
-
-    const provider = new WebrtcProvider(`project-${projectId}`, ydoc);
 
     const observer = (event: Y.YMapEvent<ProjectFile>) => {
       if (event.transaction.local || suppressLocalSyncRef.current) {
@@ -263,22 +281,151 @@ export default function CollaborativeEditor({
     };
 
     ymap.observe(observer);
-    const awarenessHandler = () => {
-      emitPresence();
+
+    const clientId = clientIdRef.current;
+    const sendCommand = createCommandSender(projectId, clientId);
+
+    const collaboration: CollaborationRef = {
+      ydoc,
+      ymap,
+      observer,
+      eventSource: new EventSource(
+        `/api/projects/${projectId}/collaboration/stream?clientId=${encodeURIComponent(clientId)}`,
+      ),
+      updateHandler: () => {},
+      pendingUpdates: [],
+      flushTimeoutId: null,
+      sendCommand,
+      sendPresence: () => {},
     };
 
-    provider.awareness.on('update', awarenessHandler);
-    applyLocalPresence(provider, localPresenceRef.current);
-    collaborationRef.current = { ydoc, provider, ymap, observer, awarenessHandler };
+    const flushUpdates = () => {
+      if (!collaboration.pendingUpdates.length) {
+        return;
+      }
+      const updates = collaboration.pendingUpdates.splice(0);
+      const merged = updates.length === 1 ? updates[0] : Y.mergeUpdates(updates);
+      collaboration.sendCommand({ type: 'update', update: encodeUpdate(merged) });
+    };
+
+    const updateHandler = (update: Uint8Array, origin: unknown) => {
+      if (origin === 'remote' || origin === 'bootstrap') {
+        return;
+      }
+      collaboration.pendingUpdates.push(update);
+      if (collaboration.flushTimeoutId !== null) {
+        return;
+      }
+      collaboration.flushTimeoutId = window.setTimeout(() => {
+        collaboration.flushTimeoutId = null;
+        flushUpdates();
+      }, 40);
+    };
+
+    collaboration.updateHandler = updateHandler;
+    ydoc.on('update', updateHandler);
+
+    const eventSource = collaboration.eventSource;
+
+    const handleMessage = (event: MessageEvent<string>) => {
+      if (!event.data) {
+        return;
+      }
+      let payload: CollaborationServerMessage;
+      try {
+        payload = JSON.parse(event.data) as CollaborationServerMessage;
+      } catch (error) {
+        console.error('Failed to parse collaboration message', error);
+        return;
+      }
+      if (payload.type === 'update') {
+        if (payload.clientId === clientId) {
+          return;
+        }
+        const updateBytes = decodeState(payload.update);
+        if (!updateBytes) {
+          return;
+        }
+        try {
+          Y.applyUpdate(ydoc, updateBytes, 'remote');
+        } catch (error) {
+          console.error('Failed to apply remote collaboration update', error);
+        }
+      } else if (payload.type === 'presence') {
+        const fallbackColor = '#38bdf8';
+        const normalized: CollaboratorPresence[] = [];
+        payload.clients.forEach(entry => {
+          if (!entry || typeof entry !== 'object') {
+            return;
+          }
+          if (typeof entry.userId !== 'string' || entry.userId.length === 0) {
+            return;
+          }
+          normalized.push({
+            clientId: entry.clientId,
+            userId: entry.userId,
+            name: entry.name ?? null,
+            color:
+              typeof entry.color === 'string' && entry.color.trim().length > 0
+                ? entry.color
+                : fallbackColor,
+            avatar:
+              typeof entry.avatar === 'string' && entry.avatar.length > 0
+                ? entry.avatar
+                : null,
+            isSelf: entry.clientId === clientId,
+          });
+        });
+        onPresenceChangeRef.current?.(normalized);
+      }
+    };
+
+    const handleOpen = () => {
+      collaboration.sendPresence(localPresenceRef.current);
+    };
+
+    const handleError = () => {
+      console.warn('Collaboration stream disconnected, retrying…');
+    };
+
+    eventSource.addEventListener('message', handleMessage);
+    eventSource.addEventListener('open', handleOpen);
+    eventSource.addEventListener('error', handleError);
+
+    collaboration.sendPresence = presence => {
+      if (!presence) {
+        collaboration.sendCommand({ type: 'presence', presence: null });
+        return;
+      }
+      collaboration.sendCommand({
+        type: 'presence',
+        presence: {
+          id: presence.id,
+          name: presence.name ?? null,
+          color: presence.color,
+          avatar: presence.avatar ?? null,
+        },
+      });
+    };
+
+    collaborationRef.current = collaboration;
+    collaboration.sendPresence(localPresenceRef.current);
+
     if (isMounted) {
       onDoc?.(ydoc);
     }
-    emitPresence();
 
     return () => {
+      if (collaboration.flushTimeoutId !== null) {
+        window.clearTimeout(collaboration.flushTimeoutId);
+      }
+      flushUpdates();
       ymap.unobserve(observer);
-      provider.awareness.off('update', awarenessHandler);
-      provider.destroy();
+      ydoc.off('update', updateHandler);
+      eventSource.removeEventListener('message', handleMessage);
+      eventSource.removeEventListener('open', handleOpen);
+      eventSource.removeEventListener('error', handleError);
+      eventSource.close();
       ydoc.destroy();
       collaborationRef.current = null;
       appliedStateRef.current = null;
@@ -362,7 +509,7 @@ export default function CollaborativeEditor({
     }
     try {
       collaboration.ydoc.transact(() => {
-        Y.applyUpdate(collaboration.ydoc, decoded);
+        Y.applyUpdate(collaboration.ydoc, decoded, 'bootstrap');
       });
       appliedStateRef.current = encodedState;
     } catch (error) {
