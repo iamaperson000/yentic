@@ -5,7 +5,7 @@ import { Sandpack } from '@codesandbox/sandpack-react';
 import * as Y from 'yjs';
 import { WebrtcProvider } from 'y-webrtc';
 
-import { type ProjectFileMap } from '@/lib/project';
+import { inferLanguage, type ProjectFile, type ProjectFileMap } from '@/lib/project';
 
 type CollaborativeEditorProps = {
   projectId: string | null;
@@ -19,15 +19,78 @@ type CollaborativeEditorProps = {
 type CollaborationRef = {
   ydoc: Y.Doc;
   provider: WebrtcProvider;
-  ymap: Y.Map<ProjectFileMap>;
-  observer: () => void;
+  ymap: Y.Map<ProjectFile>;
+  observer: (event: Y.YMapEvent<ProjectFile>) => void;
 };
 
+function cloneProjectFile(file: ProjectFile): ProjectFile {
+  return {
+    path: file.path,
+    language: file.language,
+    code: file.code,
+  };
+}
+
 function cloneProjectFiles(files: ProjectFileMap): ProjectFileMap {
-  if (typeof structuredClone === 'function') {
-    return structuredClone(files);
+  return Object.fromEntries(
+    Object.entries(files).map(([key, file]) => [key, cloneProjectFile(file)])
+  );
+}
+
+function normalizeProjectFile(path: string, file: Partial<ProjectFile>): ProjectFile {
+  const fromFile = typeof file.path === 'string' ? file.path.trim() : '';
+  const fromKey = path.trim();
+  const normalizedPath = fromFile || fromKey || path;
+  const language = file.language ?? inferLanguage(normalizedPath);
+  const code = typeof file.code === 'string' ? file.code : '';
+  return {
+    path: normalizedPath,
+    language,
+    code,
+  };
+}
+
+function isLegacyProjectFileMap(value: unknown): value is Record<string, Partial<ProjectFile>> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
   }
-  return JSON.parse(JSON.stringify(files)) as ProjectFileMap;
+  if ('path' in (value as Record<string, unknown>)) {
+    return false;
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (!entries.length) {
+    return false;
+  }
+  return entries.every(([, entry]) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return false;
+    }
+    return 'code' in (entry as Record<string, unknown>);
+  });
+}
+
+function projectFilesFromYMap(map: Y.Map<ProjectFile>): ProjectFileMap {
+  const result: ProjectFileMap = {};
+  map.forEach((value, key) => {
+    if (!value) {
+      return;
+    }
+    if (isLegacyProjectFileMap(value)) {
+      const legacyEntries = value as Record<string, Partial<ProjectFile>>;
+      Object.entries(legacyEntries).forEach(([legacyPath, legacyFile]) => {
+        const normalized = normalizeProjectFile(legacyPath, legacyFile ?? {});
+        result[normalized.path] = cloneProjectFile(normalized);
+      });
+      return;
+    }
+    const normalizedPath = typeof value.path === 'string' && value.path.length > 0 ? value.path : key;
+    result[normalizedPath] = cloneProjectFile({
+      path: normalizedPath,
+      language: value.language,
+      code: value.code,
+    });
+  });
+  return result;
 }
 
 function decodeState(encoded?: string | null): Uint8Array | null {
@@ -77,7 +140,7 @@ export default function CollaborativeEditor({
     }
 
     const ydoc = new Y.Doc();
-    const ymap = ydoc.getMap<ProjectFileMap>('files');
+    const ymap = ydoc.getMap<ProjectFile>('files');
     const provider = new WebrtcProvider(`project-${projectId}`, ydoc);
     let isMounted = true;
 
@@ -91,28 +154,28 @@ export default function CollaborativeEditor({
       }
     }
 
-    if (!ymap.has('files')) {
+    if (ymap.size === 0) {
       ydoc.transact(() => {
-        ymap.set('files', cloneProjectFiles(files));
+        Object.values(files).forEach(file => {
+          ymap.set(file.path, cloneProjectFile(file));
+        });
       });
     } else {
-      const existing = ymap.get('files');
-      if (existing) {
-        suppressLocalSyncRef.current = true;
-        onFilesChange(cloneProjectFiles(existing));
-        Promise.resolve().then(() => {
-          suppressLocalSyncRef.current = false;
-        });
-      }
+      const existing = projectFilesFromYMap(ymap);
+      suppressLocalSyncRef.current = true;
+      onFilesChange(existing);
+      Promise.resolve().then(() => {
+        suppressLocalSyncRef.current = false;
+      });
     }
 
-    const observer = () => {
-      const current = ymap.get('files');
-      if (!current) {
+    const observer = (event: Y.YMapEvent<ProjectFile>) => {
+      if (event.transaction.local || suppressLocalSyncRef.current) {
         return;
       }
+      const current = projectFilesFromYMap(event.target);
       suppressLocalSyncRef.current = true;
-      onFilesChange(cloneProjectFiles(current));
+      onFilesChange(current);
       Promise.resolve().then(() => {
         suppressLocalSyncRef.current = false;
       });
@@ -145,8 +208,49 @@ export default function CollaborativeEditor({
     if (!collaboration || suppressLocalSyncRef.current) {
       return;
     }
-    collaboration.ydoc.transact(() => {
-      collaboration.ymap.set('files', cloneProjectFiles(files));
+    const { ydoc, ymap } = collaboration;
+    const existing = new Map<string, ProjectFile>();
+    ymap.forEach((value, key) => {
+      if (value) {
+        existing.set(key, value);
+      }
+    });
+
+    const pendingDeletes: string[] = [];
+    const pendingUpserts: ProjectFile[] = [];
+
+    Object.values(files).forEach(file => {
+      const prev = existing.get(file.path);
+      if (
+        !prev ||
+        prev.path !== file.path ||
+        prev.language !== file.language ||
+        prev.code !== file.code
+      ) {
+        pendingUpserts.push(file);
+      }
+      existing.delete(file.path);
+    });
+
+    existing.forEach((_, key) => {
+      pendingDeletes.push(key);
+    });
+
+    if (!pendingUpserts.length && !pendingDeletes.length) {
+      return;
+    }
+
+    suppressLocalSyncRef.current = true;
+    ydoc.transact(() => {
+      pendingUpserts.forEach(file => {
+        ymap.set(file.path, cloneProjectFile(file));
+      });
+      pendingDeletes.forEach(key => {
+        ymap.delete(key);
+      });
+    });
+    Promise.resolve().then(() => {
+      suppressLocalSyncRef.current = false;
     });
   }, [files, projectId]);
 
@@ -184,7 +288,7 @@ export default function CollaborativeEditor({
     return result;
   }, [files]);
 
-  if (children) {
+  if (children !== undefined) {
     return <>{children}</>;
   }
 
