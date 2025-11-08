@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth"
+import type { Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/
@@ -37,31 +38,30 @@ export async function POST(request: Request) {
       ? body.bio.trim()
       : null
 
-  const existingUser = await prisma.user.findUnique({
-    where: { username },
-    select: { id: true },
-  })
+  const existingUser = (await prisma.user.findFirst({
+    where: {
+      username: { equals: username, mode: "insensitive" },
+    } as Prisma.UserWhereInput,
+  })) as ({ id: string } | null)
 
   if (existingUser && existingUser.id !== session.user.id) {
     return NextResponse.json({ error: "Username is already taken" }, { status: 409 })
   }
 
-  const updatedUser = await prisma.user.update({
+  const updateData = { username, bio } as unknown as Prisma.UserUpdateInput
+
+  const updatedUser = (await prisma.user.update({
     where: { id: session.user.id },
-    data: {
-      username,
-      bio,
-    },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      username: true,
-      image: true,
-      bio: true,
-      updatedAt: true,
-    },
-  })
+    data: updateData,
+  })) as unknown as {
+    id: string
+    email: string | null
+    name: string | null
+    username: string | null
+    image: string | null
+    bio: string | null
+    updatedAt: Date
+  }
 
   return NextResponse.json(updatedUser)
 }
