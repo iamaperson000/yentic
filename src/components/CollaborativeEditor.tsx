@@ -1,11 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Sandpack } from '@codesandbox/sandpack-react';
 import * as Y from 'yjs';
 import { WebrtcProvider } from 'y-webrtc';
 
 import { inferLanguage, type ProjectFile, type ProjectFileMap } from '@/lib/project';
+import type {
+  CollaboratorPresence,
+  LocalCollaboratorPresence,
+} from '@/types/collaboration';
 
 type CollaborativeEditorProps = {
   projectId: string | null;
@@ -13,6 +17,8 @@ type CollaborativeEditorProps = {
   onFilesChange: (files: ProjectFileMap) => void;
   encodedState?: string | null;
   onDoc?: (doc: Y.Doc | null) => void;
+  localPresence?: LocalCollaboratorPresence | null;
+  onPresenceChange?: (presence: CollaboratorPresence[]) => void;
   children?: ReactNode;
 };
 
@@ -21,6 +27,7 @@ type CollaborationRef = {
   provider: WebrtcProvider;
   ymap: Y.Map<ProjectFile>;
   observer: (event: Y.YMapEvent<ProjectFile>) => void;
+  awarenessHandler: () => void;
 };
 
 function cloneProjectFile(file: ProjectFile): ProjectFile {
@@ -29,12 +36,6 @@ function cloneProjectFile(file: ProjectFile): ProjectFile {
     language: file.language,
     code: file.code,
   };
-}
-
-function cloneProjectFiles(files: ProjectFileMap): ProjectFileMap {
-  return Object.fromEntries(
-    Object.entries(files).map(([key, file]) => [key, cloneProjectFile(file)])
-  );
 }
 
 function normalizeProjectFile(path: string, file: Partial<ProjectFile>): ProjectFile {
@@ -120,28 +121,106 @@ export default function CollaborativeEditor({
   onFilesChange,
   encodedState,
   onDoc,
+  localPresence,
+  onPresenceChange,
   children,
 }: CollaborativeEditorProps) {
   const collaborationRef = useRef<CollaborationRef | null>(null);
   const suppressLocalSyncRef = useRef(false);
   const appliedStateRef = useRef<string | null>(null);
+  const localPresenceRef = useRef<LocalCollaboratorPresence | null>(null);
+  const onPresenceChangeRef = useRef<((presence: CollaboratorPresence[]) => void) | undefined>();
+
+  const emitPresence = useCallback(() => {
+    const collaboration = collaborationRef.current;
+    if (!collaboration) {
+      return;
+    }
+    const { provider } = collaboration;
+    const awareness = provider.awareness;
+    const localClientId = awareness.clientID;
+    const entries = Array.from(awareness.getStates().entries());
+    const normalized: CollaboratorPresence[] = [];
+
+    entries.forEach(([clientId, state]) => {
+      if (!state || typeof state !== 'object') {
+        return;
+      }
+      const userState = (state as { user?: unknown }).user;
+      if (!userState || typeof userState !== 'object') {
+        return;
+      }
+      const { id, name, color, avatar } = userState as {
+        id?: unknown;
+        name?: unknown;
+        color?: unknown;
+        avatar?: unknown;
+      };
+      if (typeof id !== 'string' || !id) {
+        return;
+      }
+      const fallbackColor = '#38bdf8';
+      normalized.push({
+        clientId,
+        userId: id,
+        name: typeof name === 'string' ? name : null,
+        color:
+          typeof color === 'string' && color.trim().length > 0 ? color : fallbackColor,
+        avatar: typeof avatar === 'string' && avatar.length > 0 ? avatar : null,
+        isSelf: clientId === localClientId,
+      });
+    });
+
+    onPresenceChangeRef.current?.(normalized);
+  }, []);
+
+  const applyLocalPresence = useCallback((provider: WebrtcProvider, presence: LocalCollaboratorPresence | null) => {
+    if (presence) {
+      provider.awareness.setLocalStateField('user', {
+        id: presence.id,
+        name: presence.name ?? null,
+        color: presence.color,
+        avatar: presence.avatar ?? null,
+      });
+    } else {
+      provider.awareness.setLocalStateField('user', undefined);
+    }
+  }, []);
+
+  useEffect(() => {
+    onPresenceChangeRef.current = onPresenceChange ?? undefined;
+  }, [onPresenceChange]);
+
+  useEffect(() => {
+    localPresenceRef.current = localPresence ?? null;
+    const collaboration = collaborationRef.current;
+    if (!collaboration) {
+      return;
+    }
+    applyLocalPresence(collaboration.provider, localPresenceRef.current);
+    emitPresence();
+  }, [applyLocalPresence, emitPresence, localPresence]);
 
   useEffect(() => {
     if (!projectId) {
       if (collaborationRef.current) {
         collaborationRef.current.ymap.unobserve(collaborationRef.current.observer);
+        collaborationRef.current.provider.awareness.off(
+          'update',
+          collaborationRef.current.awarenessHandler,
+        );
         collaborationRef.current.provider.destroy();
         collaborationRef.current.ydoc.destroy();
         collaborationRef.current = null;
       }
       appliedStateRef.current = null;
       onDoc?.(null);
+      onPresenceChangeRef.current?.([]);
       return;
     }
 
     const ydoc = new Y.Doc();
     const ymap = ydoc.getMap<ProjectFile>('files');
-    const provider = new WebrtcProvider(`project-${projectId}`, ydoc);
     let isMounted = true;
 
     const decoded = encodedState ? decodeState(encodedState) : null;
@@ -169,6 +248,8 @@ export default function CollaborativeEditor({
       });
     }
 
+    const provider = new WebrtcProvider(`project-${projectId}`, ydoc);
+
     const observer = (event: Y.YMapEvent<ProjectFile>) => {
       if (event.transaction.local || suppressLocalSyncRef.current) {
         return;
@@ -182,18 +263,27 @@ export default function CollaborativeEditor({
     };
 
     ymap.observe(observer);
-    collaborationRef.current = { ydoc, provider, ymap, observer };
+    const awarenessHandler = () => {
+      emitPresence();
+    };
+
+    provider.awareness.on('update', awarenessHandler);
+    applyLocalPresence(provider, localPresenceRef.current);
+    collaborationRef.current = { ydoc, provider, ymap, observer, awarenessHandler };
     if (isMounted) {
       onDoc?.(ydoc);
     }
+    emitPresence();
 
     return () => {
       ymap.unobserve(observer);
+      provider.awareness.off('update', awarenessHandler);
       provider.destroy();
       ydoc.destroy();
       collaborationRef.current = null;
       appliedStateRef.current = null;
       onDoc?.(null);
+      onPresenceChangeRef.current?.([]);
       isMounted = false;
     };
 
