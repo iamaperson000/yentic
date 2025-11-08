@@ -6,8 +6,15 @@ export async function generateStaticParams() {
   return [];
 }
 
-export default async function UserPage({ params }: { params: { username?: string } }) {
-  const username = params?.username;
+type UserPageParams = { username?: string };
+
+export default async function UserPage({
+  params,
+}: {
+  params: UserPageParams | Promise<UserPageParams>;
+}) {
+  const resolvedParams = await Promise.resolve(params);
+  const username = resolvedParams?.username;
   console.log(">>> DEBUG username param:", username);
 
   if (!username) {
