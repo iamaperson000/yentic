@@ -8,13 +8,6 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-function encodeState(state: Uint8Array | null | undefined): string | null {
-  if (!state || !state.length) {
-    return null;
-  }
-  return Buffer.from(state).toString('base64');
-}
-
 export async function GET(_req: Request, context: RouteContext) {
   const params = await context.params;
   const session = await getServerSession(authOptions);
@@ -33,6 +26,19 @@ export async function GET(_req: Request, context: RouteContext) {
 
   const project = await prisma.project.findUnique({
     where: { id: params.id },
+    include: {
+      user: {
+        select: { id: true, name: true, username: true, image: true },
+      },
+      collaborators: {
+        include: {
+          user: {
+            select: { id: true, name: true, username: true, image: true },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
   });
 
   if (!project) {
@@ -53,11 +59,24 @@ export async function GET(_req: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const { yjsState, ...rest } = project;
+  const owner = {
+    id: project.user.id,
+    name: project.user.name,
+    username: project.user.username,
+    image: project.user.image,
+    role: 'owner' as const,
+  };
+
+  const collaborators = project.collaborators.map(entry => ({
+    id: entry.user.id,
+    name: entry.user.name,
+    username: entry.user.username,
+    image: entry.user.image,
+    role: entry.role,
+  }));
 
   return NextResponse.json({
-    ...rest,
-    yjsState: encodeState(yjsState),
-    viewerRole: isOwner ? 'owner' : membership?.role ?? 'viewer',
+    owner,
+    collaborators,
   });
 }
