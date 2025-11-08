@@ -1,6 +1,14 @@
 'use client';
 import Monaco from '@monaco-editor/react';
-export function Editor({ value, language, onChange }: { value: string; language: string; onChange: (v: string) => void; }) {
+
+type EditorProps = {
+  value: string;
+  language: string;
+  onChange: (value: string) => void;
+  readOnly?: boolean;
+};
+
+export function Editor({ value, language, onChange, readOnly = false }: EditorProps) {
   const monacoLanguage = language === 'c' ? 'cpp' : language;
   return (
     <div className="relative flex h-full min-h-0">
@@ -24,9 +32,16 @@ export function Editor({ value, language, onChange }: { value: string; language:
           lineDecorationsWidth: 8,
           overviewRulerBorder: false,
           renderLineHighlight: 'line',
-          wordWrap: 'off'
+          wordWrap: 'off',
+          readOnly,
+          domReadOnly: readOnly,
         }}
-        onChange={val => onChange(val ?? '')}
+        onChange={val => {
+          if (readOnly) {
+            return;
+          }
+          onChange(val ?? '');
+        }}
       />
     </div>
   );

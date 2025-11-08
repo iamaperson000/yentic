@@ -19,6 +19,12 @@ type ProjectShareModalProps = {
   canInvite: boolean;
   onRemoveCollaborator: (userId: string) => void;
   removeError: string | null;
+  shareUrl: string | null;
+  isShareUrlLoading: boolean;
+  shareUrlError: string | null;
+  canManageShareLink: boolean;
+  onCopyShareUrl: () => void;
+  onResetShareUrl: () => void;
 };
 
 function roleLabel(role: ViewerRole) {
@@ -42,6 +48,12 @@ export function ProjectShareModal({
   canInvite,
   onRemoveCollaborator,
   removeError,
+  shareUrl,
+  isShareUrlLoading,
+  shareUrlError,
+  canManageShareLink,
+  onCopyShareUrl,
+  onResetShareUrl,
 }: ProjectShareModalProps) {
   const members = useMemo(() => {
     const list: CollaboratorInfo[] = [];
@@ -50,6 +62,20 @@ export function ProjectShareModal({
     }
     return list.concat(collaborators);
   }, [owner, collaborators]);
+
+  const fullShareUrl = useMemo(() => {
+    if (!shareUrl) {
+      return '';
+    }
+    if (typeof window === 'undefined') {
+      return shareUrl;
+    }
+    try {
+      return new URL(shareUrl, window.location.origin).toString();
+    } catch {
+      return shareUrl;
+    }
+  }, [shareUrl]);
 
   if (!isOpen) {
     return null;
@@ -80,6 +106,55 @@ export function ProjectShareModal({
         </div>
 
         <div className="mt-4 space-y-3">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">Shareable link</p>
+                <p className="text-xs text-white/50">
+                  {canManageShareLink
+                    ? 'Anyone with this link joins as a viewer.'
+                    : 'Only project owners can generate and manage share links.'}
+                </p>
+              </div>
+              {canManageShareLink ? (
+                <button
+                  type="button"
+                  onClick={onResetShareUrl}
+                  disabled={isShareUrlLoading}
+                  className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/70 transition hover:border-white/30 hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Refresh link
+                </button>
+              ) : null}
+            </div>
+            {isShareUrlLoading ? (
+              <p className="mt-3 text-sm text-white/60">Generating link…</p>
+            ) : canManageShareLink ? (
+              shareUrl ? (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={fullShareUrl}
+                    readOnly
+                    className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white/80 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={onCopyShareUrl}
+                    disabled={!shareUrl || isShareUrlLoading}
+                    className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Copy link
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-white/60">Click refresh to generate a share link.</p>
+              )
+            ) : (
+              <p className="mt-3 text-sm text-white/50">Ask the project owner to share the link with you.</p>
+            )}
+            {shareUrlError ? <p className="mt-2 text-sm text-rose-300">{shareUrlError}</p> : null}
+          </div>
+
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-white/40">Your role</p>
             <p className="text-sm font-medium text-white/80">{roleLabel(viewerRole)}</p>
@@ -92,7 +167,7 @@ export function ProjectShareModal({
                 <p className="text-xs text-white/50">Use a username or email.</p>
               </div>
               <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.25em] text-white/60">
-                Editors only
+                Owners only
               </span>
             </div>
             <form
@@ -106,7 +181,7 @@ export function ProjectShareModal({
               <input
                 value={inviteValue}
                 onChange={event => onInviteValueChange(event.target.value)}
-                placeholder="Search username"
+                placeholder="Search username or email"
                 disabled={!canInvite || isInviteSubmitting}
                 className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40 disabled:cursor-not-allowed disabled:opacity-60"
               />
