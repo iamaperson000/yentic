@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth"
+import type { Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 
 export async function GET() {
@@ -18,19 +19,19 @@ export async function GET() {
     )
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      username: true,
-      image: true,
-      bio: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  })
+  const user = (await prisma.user.findFirst({
+    where: { id: session.user.id } as Prisma.UserWhereInput,
+  })) as
+    | ({
+        id: string
+        email: string | null
+        name: string | null
+        username: string | null
+        image: string | null
+        bio: string | null
+        createdAt: Date
+        updatedAt: Date
+      } | null)
 
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 })

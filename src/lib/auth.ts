@@ -2,6 +2,7 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import GoogleProvider from "next-auth/providers/google"
 import type { NextAuthOptions } from "next-auth"
 
+import type { Prisma } from "@prisma/client"
 import prisma from "./prisma"
 
 export const authOptions: NextAuthOptions = {
@@ -43,10 +44,17 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (!token.username && token.email) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: token.email },
-          select: { id: true, username: true, bio: true, image: true, name: true },
-        })
+        const dbUser = (await prisma.user.findFirst({
+          where: { email: token.email } as Prisma.UserWhereInput,
+        })) as
+          | ({
+              id: string
+              username: string | null
+              bio: string | null
+              image: string | null
+              name: string | null
+            } | null)
+          | null
 
         if (dbUser) {
           token.id = dbUser.id

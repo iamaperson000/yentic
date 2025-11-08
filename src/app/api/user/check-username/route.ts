@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth"
+import type { Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/
@@ -23,10 +24,9 @@ export async function GET(request: NextRequest) {
 
   const session = await getServerSession(authOptions)
 
-  const existingUser = await prisma.user.findUnique({
-    where: { username },
-    select: { id: true },
-  })
+  const existingUser = (await prisma.user.findFirst({
+    where: { username: { equals: username } } as Prisma.UserWhereInput,
+  })) as ({ id: string } | null)
 
   if (!existingUser) {
     return NextResponse.json({ available: true })
