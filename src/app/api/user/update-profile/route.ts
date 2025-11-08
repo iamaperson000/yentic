@@ -39,7 +39,9 @@ export async function POST(request: Request) {
       : null
 
   const existingUser = (await prisma.user.findFirst({
-    where: { username: { equals: username } } as Prisma.UserWhereInput,
+    where: {
+      username: { equals: username, mode: "insensitive" },
+    } as Prisma.UserWhereInput,
   })) as ({ id: string } | null)
 
   if (existingUser && existingUser.id !== session.user.id) {

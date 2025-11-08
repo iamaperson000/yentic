@@ -23,7 +23,9 @@ export async function generateMetadata({
 
   // Lookup user profile by normalized username
   const user = (await prisma.user.findFirst({
-    where: { username: { equals: username } } as Prisma.UserWhereInput,
+    where: {
+      username: { equals: username, mode: "insensitive" },
+    } as Prisma.UserWhereInput,
   })) as ({ name: string | null; username: string | null } | null);
 
   const title = user ? `${user.username} | Yentic` : "User | Yentic";
@@ -44,7 +46,9 @@ export default async function UserPage({
 
   // Lookup user profile by normalized username
   const user = (await prisma.user.findFirst({
-    where: { username: { equals: username } } as Prisma.UserWhereInput,
+    where: {
+      username: { equals: username, mode: "insensitive" },
+    } as Prisma.UserWhereInput,
   })) as
     | ({
         id: string;
