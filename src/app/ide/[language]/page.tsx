@@ -1093,9 +1093,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
             <p className="hidden min-w-0 truncate text-xs text-white/50 sm:block">{config.description}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-white/60">
-            {isRenamingProject ? (
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">Project</span>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">Project</span>
+              {isRenamingProject ? (
                 <input
                   ref={projectNameInputRef}
                   value={projectNameDraft}
@@ -1115,8 +1115,12 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                   placeholder={isNameRequired ? 'Name your project' : 'Project name'}
                   className="w-[180px] rounded-md border border-white/20 bg-black/60 px-2.5 py-1 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40"
                 />
-              </div>
-            ) : null}
+              ) : (
+                <span className="truncate text-sm font-semibold text-white/80">
+                  {projectMeta.name?.trim() || defaultProjectName}
+                </span>
+              )}
+            </div>
             <span className={statusBadgeClass}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
               {savedLabel}
