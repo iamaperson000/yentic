@@ -1,0 +1,120 @@
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+
+import { authOptions } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+type CollaboratorPayload = {
+  collaborator: {
+    id: string;
+    name: string | null;
+    username: string | null;
+    image: string | null;
+    role: string;
+  };
+};
+
+function serializeCollaborator(entry: {
+  role: string;
+  user: {
+    id: string;
+    name: string | null;
+    username: string | null;
+    image: string | null;
+  };
+}): CollaboratorPayload {
+  return {
+    collaborator: {
+      id: entry.user.id,
+      name: entry.user.name,
+      username: entry.user.username,
+      image: entry.user.image,
+      role: entry.role,
+    },
+  };
+}
+
+export async function POST(req: Request, context: RouteContext) {
+  const params = await context.params;
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  });
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: params.id },
+    select: { id: true, userId: true },
+  });
+
+  if (!project || project.userId !== user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const body = (await req.json()) as { username?: string };
+  const identifier = body.username?.trim();
+
+  if (!identifier) {
+    return NextResponse.json({ error: 'Username is required' }, { status: 400 });
+  }
+
+  const targetUser = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { username: identifier },
+        { email: identifier },
+      ],
+    },
+  });
+
+  if (!targetUser) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  }
+
+  if (targetUser.id === user.id) {
+    return NextResponse.json({ error: 'You are already the owner' }, { status: 400 });
+  }
+
+  const existing = await prisma.collaborator.findFirst({
+    where: {
+      projectId: params.id,
+      userId: targetUser.id,
+    },
+  });
+
+  if (existing) {
+    return NextResponse.json({ error: 'User is already a collaborator' }, { status: 409 });
+  }
+
+  const collaborator = await prisma.collaborator.create({
+    data: {
+      projectId: params.id,
+      userId: targetUser.id,
+      role: 'editor',
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          image: true,
+        },
+      },
+    },
+  });
+
+  return NextResponse.json(serializeCollaborator(collaborator));
+}

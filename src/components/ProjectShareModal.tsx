@@ -1,0 +1,179 @@
+'use client';
+
+import { useMemo } from 'react';
+
+import { type CollaboratorInfo, type ViewerRole } from '@/types/collaboration';
+
+type ProjectShareModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  owner: CollaboratorInfo | null;
+  collaborators: CollaboratorInfo[];
+  viewerRole: ViewerRole;
+  inviteValue: string;
+  onInviteValueChange: (value: string) => void;
+  onInviteSubmit: () => void;
+  inviteError: string | null;
+  isInviteSubmitting: boolean;
+  isLoading: boolean;
+  canInvite: boolean;
+  onRemoveCollaborator: (userId: string) => void;
+  removeError: string | null;
+};
+
+function roleLabel(role: ViewerRole) {
+  if (role === 'owner') return 'Owner';
+  if (role === 'editor') return 'Editor';
+  return 'Viewer';
+}
+
+export function ProjectShareModal({
+  isOpen,
+  onClose,
+  owner,
+  collaborators,
+  viewerRole,
+  inviteValue,
+  onInviteValueChange,
+  onInviteSubmit,
+  inviteError,
+  isInviteSubmitting,
+  isLoading,
+  canInvite,
+  onRemoveCollaborator,
+  removeError,
+}: ProjectShareModalProps) {
+  const members = useMemo(() => {
+    const list: CollaboratorInfo[] = [];
+    if (owner) {
+      list.push(owner);
+    }
+    return list.concat(collaborators);
+  }, [owner, collaborators]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#0b0f1a] p-6 text-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Share project</h2>
+            <p className="text-sm text-white/60">Invite teammates to edit this project in real time.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-white/10 bg-white/10 p-1.5 text-white/70 transition hover:border-white/30 hover:bg-white/20 hover:text-white"
+            aria-label="Close share dialog"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden className="h-4 w-4">
+              <path
+                d="M6 6l8 8m0-8-8 8"
+                className="fill-none stroke-current stroke-[1.4]"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-white/40">Your role</p>
+            <p className="text-sm font-medium text-white/80">{roleLabel(viewerRole)}</p>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-white">Invite collaborators</p>
+                <p className="text-xs text-white/50">Use a username or email.</p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.25em] text-white/60">
+                Editors only
+              </span>
+            </div>
+            <form
+              className="mt-3 flex flex-col gap-3 sm:flex-row"
+              onSubmit={event => {
+                event.preventDefault();
+                if (!canInvite) return;
+                onInviteSubmit();
+              }}
+            >
+              <input
+                value={inviteValue}
+                onChange={event => onInviteValueChange(event.target.value)}
+                placeholder="Search username"
+                disabled={!canInvite || isInviteSubmitting}
+                className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              <button
+                type="submit"
+                disabled={!canInvite || isInviteSubmitting}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
+                  canInvite && !isInviteSubmitting
+                    ? 'bg-emerald-500 text-black hover:bg-emerald-400'
+                    : 'cursor-not-allowed bg-white/10 text-white/40'
+                }`}
+              >
+                {isInviteSubmitting ? 'Inviting…' : 'Invite'}
+              </button>
+            </form>
+            {inviteError ? <p className="mt-2 text-sm text-rose-300">{inviteError}</p> : null}
+            {!canInvite ? (
+              <p className="mt-2 text-xs text-white/40">Only project owners can invite collaborators.</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <p className="text-xs uppercase tracking-[0.3em] text-white/40">Collaborators</p>
+          <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-2">
+            {isLoading ? (
+              <div className="flex items-center justify-center rounded-lg border border-white/10 bg-white/5 py-6 text-sm text-white/70">
+                Loading collaborators…
+              </div>
+            ) : members.length ? (
+              members.map(member => {
+                const canRemove = canInvite && member.role !== 'owner';
+                return (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between rounded-lg border border-white/10 bg-black/30 px-3 py-2"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-sm font-semibold uppercase text-white/80">
+                        {member.name?.charAt(0) ?? member.username?.charAt(0) ?? 'U'}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-white">{member.name ?? member.username ?? 'Unknown user'}</p>
+                        <p className="text-xs text-white/50">{roleLabel(member.role)}</p>
+                      </div>
+                    </div>
+                    {canRemove ? (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveCollaborator(member.id)}
+                        className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white/70 transition hover:border-rose-400/60 hover:bg-rose-500/20 hover:text-rose-100"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm text-white/60">
+                No collaborators yet.
+              </div>
+            )}
+          </div>
+          {removeError ? <p className="mt-3 text-sm text-rose-300">{removeError}</p> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
