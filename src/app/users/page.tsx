@@ -46,7 +46,10 @@ export default async function UsersPage({
       ) : (
         <ul className="grid gap-4 mt-6">
           {users.map((u) => (
-            <li key={u.id} className="p-4 border rounded-lg hover:bg-gray-50 transition">
+            <li
+              key={u.id}
+              className="p-4 border rounded-lg hover:bg-gray-50 transition"
+            >
               <Link href={`/u/${u.username}`} className="flex items-center gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
