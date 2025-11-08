@@ -106,19 +106,28 @@ function formatTimeAgo(value: Date): string {
 
 export default async function WorkspacePicker() {
   const session = await getServerSession(authOptions);
-  const savedProjects = session?.user?.email
-    ? await prisma.project.findMany({
-        where: {
-          OR: [
-            { user: { email: session.user.email } },
-            { collaborators: { some: { user: { email: session.user.email } } } },
-          ],
-        },
-        orderBy: { updatedAt: 'desc' },
-      })
-    : [];
+  const [ownedProjects, sharedProjects] = session?.user?.email
+    ? await Promise.all([
+        prisma.project.findMany({
+          where: { user: { email: session.user.email } },
+          orderBy: { updatedAt: 'desc' },
+        }),
+        prisma.project.findMany({
+          where: {
+            collaborators: { some: { user: { email: session.user.email } } },
+            NOT: { user: { email: session.user.email } },
+          },
+          include: {
+            user: {
+              select: { name: true, username: true, image: true },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+        }),
+      ])
+    : [[], []];
 
-  const savedProjectCards = savedProjects.map(project => {
+  const ownedProjectCards = ownedProjects.map(project => {
     const slug = resolveWorkspaceSlugFromLanguage(project.language);
     const workspace = workspaceConfigs[slug];
     return {
@@ -129,6 +138,23 @@ export default async function WorkspacePicker() {
       updatedAt: project.updatedAt,
     };
   });
+
+  const sharedProjectCards = sharedProjects.map(project => {
+    const slug = resolveWorkspaceSlugFromLanguage(project.language);
+    const workspace = workspaceConfigs[slug];
+    return {
+      id: project.id,
+      name: project.name,
+      slug,
+      workspaceTitle: workspace.title,
+      updatedAt: project.updatedAt,
+      ownerName: project.user?.name ?? 'Unknown user',
+      ownerUsername: project.user?.username ?? null,
+      ownerImage: project.user?.image ?? null,
+    };
+  });
+
+  const totalProjectCount = ownedProjectCards.length + sharedProjectCards.length;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#04060d] via-[#080c1a] to-[#05060a] text-white">
@@ -237,7 +263,7 @@ export default async function WorkspacePicker() {
             </div>
             {session?.user ? (
               <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
-                {savedProjectCards.length} saved
+                {totalProjectCount} saved
               </span>
             ) : (
               <Link
@@ -250,35 +276,87 @@ export default async function WorkspacePicker() {
           </div>
 
           {session?.user ? (
-            savedProjectCards.length ? (
-              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {savedProjectCards.map(project => (
-                  <Link
-                    key={project.id}
-                    href={`/ide/${project.slug}?projectId=${project.id}`}
-                    className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-6 transition hover:-translate-y-1 hover:border-white/20 hover:bg-black/50"
-                  >
-                    <div className="space-y-2">
-                      <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/40">
-                        Cloud project
-                      </span>
-                      <h3 className="truncate text-lg font-semibold text-white">{project.name}</h3>
-                      <p className="text-xs text-white/50">
-                        Updated {formatTimeAgo(project.updatedAt)} · {project.workspaceTitle}
-                      </p>
-                    </div>
-                    <div className="mt-auto inline-flex items-center gap-2 text-sm font-semibold text-emerald-200">
-                      Resume in {project.workspaceTitle}
-                      <span aria-hidden className="transition group-hover:translate-x-1">→</span>
-                    </div>
-                  </Link>
-                ))}
+            <div className="mt-6 space-y-8">
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.35em] text-white/70">My Projects</h3>
+                {ownedProjectCards.length ? (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {ownedProjectCards.map(project => (
+                      <Link
+                        key={project.id}
+                        href={`/ide/${project.slug}?projectId=${project.id}`}
+                        className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-6 transition hover:-translate-y-1 hover:border-white/20 hover:bg-black/50"
+                      >
+                        <div className="space-y-2">
+                          <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/40">
+                            Cloud project
+                          </span>
+                          <h3 className="truncate text-lg font-semibold text-white">{project.name}</h3>
+                          <p className="text-xs text-white/50">
+                            Updated {formatTimeAgo(project.updatedAt)} · {project.workspaceTitle}
+                          </p>
+                        </div>
+                        <div className="mt-auto inline-flex items-center gap-2 text-sm font-semibold text-emerald-200">
+                          Resume in {project.workspaceTitle}
+                          <span aria-hidden className="transition group-hover:translate-x-1">→</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-sm text-white/60">
+                    No saved projects yet—create a project and we&apos;ll store the entire workspace here.
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="mt-6 rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-sm text-white/60">
-                No saved projects yet—create a project and we&apos;ll store the entire workspace here.
+
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.35em] text-white/70">Shared with Me</h3>
+                {sharedProjectCards.length ? (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {sharedProjectCards.map(project => (
+                      <Link
+                        key={project.id}
+                        href={`/ide/${project.slug}?projectId=${project.id}`}
+                        className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-6 transition hover:-translate-y-1 hover:border-white/20 hover:bg-black/50"
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={project.ownerImage ?? '/default-avatar.png'}
+                              alt={project.ownerName}
+                              className="h-9 w-9 rounded-full border border-white/15 bg-black/40 object-cover"
+                            />
+                            <div className="space-y-0.5">
+                              <p className="text-sm font-medium text-white">{project.ownerName}</p>
+                              <p className="text-xs text-white/50">@{project.ownerUsername ?? 'unknown'}</p>
+                            </div>
+                          </div>
+                          <span className="inline-flex items-center gap-2 rounded-full border border-violet-400/50 bg-violet-500/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-violet-100">
+                            Shared
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <h3 className="truncate text-lg font-semibold text-white">{project.name}</h3>
+                          <p className="text-xs text-white/50">
+                            Updated {formatTimeAgo(project.updatedAt)} · {project.workspaceTitle}
+                          </p>
+                        </div>
+                        <div className="mt-auto inline-flex items-center gap-2 text-sm font-semibold text-violet-200">
+                          Open in {project.workspaceTitle}
+                          <span aria-hidden className="transition group-hover:translate-x-1">→</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-sm text-white/60">
+                    No shared projects yet — ask someone to add you as a collaborator.
+                  </div>
+                )}
               </div>
-            )
+            </div>
           ) : (
             <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-white/70">
               Sign in to see cloud projects that bundle all of your files together.
