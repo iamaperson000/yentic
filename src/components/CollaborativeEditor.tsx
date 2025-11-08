@@ -290,7 +290,7 @@ export default function CollaborativeEditor({
       ymap,
       observer,
       eventSource: new EventSource(
-        `/api/projects/${projectId}/collaboration/stream?clientId=${encodeURIComponent(clientId)}`,
+        `/api/projects/${projectId}/collaboration?clientId=${encodeURIComponent(clientId)}`,
       ),
       updateHandler: () => {},
       pendingUpdates: [],
