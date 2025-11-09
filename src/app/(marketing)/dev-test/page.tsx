@@ -82,6 +82,7 @@ export default function DevTestPage() {
     const text = doc.getText('dev-test');
     let eventSource: EventSource | null = null;
     let disposed = false;
+    const endpoint = '/api/projects/dev-test/collaboration';
 
     const safeSetStatus = (status: ConnectionStatus) => {
       if (statusGuardRef.current.mounted) {
@@ -95,23 +96,53 @@ export default function DevTestPage() {
       }
     };
 
-    const postCollaboration = (payload: { type: 'update'; update: string } | { type: 'presence'; presence: unknown }) => {
-      if (disposed) {
+    const postCollaboration = (
+      payload: { type: 'update'; update: string } | { type: 'presence'; presence: unknown },
+      options?: { keepalive?: boolean; preferBeacon?: boolean; allowDuringDispose?: boolean },
+    ) => {
+      if (disposed && !options?.allowDuringDispose) {
         return;
       }
-      const body =
+      const bodyObject =
         payload.type === 'update'
           ? { type: 'update', update: payload.update, clientId }
           : { type: 'presence', presence: payload.presence, clientId };
-      fetch('/api/projects/dev-test/collaboration', {
+      const body = JSON.stringify(bodyObject);
+
+      if (payload.type === 'presence' && options?.preferBeacon && typeof navigator !== 'undefined') {
+        try {
+          if (typeof navigator.sendBeacon === 'function' && navigator.sendBeacon(endpoint, body)) {
+            return;
+          }
+        } catch (error) {
+          console.error('[Dev Test] Failed to send beacon payload:', error);
+        }
+      }
+
+      fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        keepalive: payload.type === 'presence',
+        body,
+        keepalive: options?.keepalive ?? payload.type === 'presence',
       }).catch(error => {
         console.error('[Dev Test] Failed to post collaboration payload:', error);
       });
     };
+
+    const sendPresence = (
+      presence: unknown,
+      options?: { keepalive?: boolean; preferBeacon?: boolean; allowDuringDispose?: boolean },
+    ) => {
+      postCollaboration({ type: 'presence', presence }, options);
+    };
+
+    const handlePageHide = () => {
+      sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', handlePageHide);
+    }
 
     const applyYTextToTextarea = () => {
       const currentValue = text.toString();
@@ -175,10 +206,7 @@ export default function DevTestPage() {
         if (encoded) {
           postCollaboration({ type: 'update', update: encoded });
         }
-        postCollaboration({
-          type: 'presence',
-          presence: { id: clientId, name: null, color: '#34d399', avatar: null },
-        });
+        sendPresence({ id: clientId, name: null, color: '#34d399', avatar: null });
       };
 
       eventSource.onmessage = event => {
@@ -219,6 +247,7 @@ export default function DevTestPage() {
     openEventStream();
 
     return () => {
+      sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
       disposed = true;
       element.removeEventListener('input', handleInput);
       text.unobserve(observer);
@@ -226,6 +255,9 @@ export default function DevTestPage() {
       doc.destroy();
       if (eventSource) {
         eventSource.close();
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', handlePageHide);
       }
       safeSetStatus('disconnected');
       safeSetPeerCount(1);
