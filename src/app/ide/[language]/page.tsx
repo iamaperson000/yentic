@@ -207,19 +207,6 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     [activePath, config.defaultActivePath, slug]
   );
 
-  const handleRemoteProjectName = useCallback(
-    (name: string | null) => {
-      const normalized =
-        typeof name === 'string' && name.trim().length > 0 ? name.trim() : defaultProjectName;
-      setProjectMeta(prev => (prev.name === normalized ? prev : { ...prev, name: normalized }));
-      if (!isRenamingProject) {
-        setProjectNameDraft(normalized);
-      }
-      setIsNameRequired(false);
-    },
-    [defaultProjectName, isRenamingProject]
-  );
-
   useEffect(() => {
     if (!collaborativeDoc) {
       collaborativeDocDirtyRef.current = false;
@@ -1174,8 +1161,6 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         onDoc={setCollaborativeDoc}
         localPresence={localCollaboratorPresence}
         onPresenceChange={setLiveCollaborators}
-        projectName={projectMeta.name}
-        onRemoteProjectName={handleRemoteProjectName}
       >
         {null}
       </CollaborativeEditor>
