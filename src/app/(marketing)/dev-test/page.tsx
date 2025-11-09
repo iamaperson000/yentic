@@ -83,6 +83,12 @@ export default function DevTestPage() {
     let eventSource: EventSource | null = null;
     let disposed = false;
     const endpoint = '/api/projects/dev-test/collaboration';
+    const pendingRequests: Array<{ body: string; keepalive: boolean; attempt: number }> = [];
+    let sendingRequest = false;
+    let reconnectTimer: number | null = null;
+    let reconnectAttempts = 0;
+    let updateQueue: Uint8Array[] = [];
+    let updateTimer: number | null = null;
 
     const safeSetStatus = (status: ConnectionStatus) => {
       if (statusGuardRef.current.mounted) {
@@ -94,6 +100,43 @@ export default function DevTestPage() {
       if (statusGuardRef.current.mounted) {
         setPeerCount(count);
       }
+    };
+
+    const processPendingRequests = () => {
+      if (sendingRequest || pendingRequests.length === 0) {
+        return;
+      }
+      const next = pendingRequests.shift();
+      if (!next) {
+        return;
+      }
+      sendingRequest = true;
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: next.body,
+        keepalive: next.keepalive,
+      })
+        .then(() => {
+          sendingRequest = false;
+          processPendingRequests();
+        })
+        .catch(error => {
+          console.error('[Dev Test] Failed to post collaboration payload:', error);
+          sendingRequest = false;
+          if (!disposed && typeof window !== 'undefined' && next.attempt < 3) {
+            const delay = Math.min(500 * 2 ** next.attempt, 4000);
+            window.setTimeout(() => {
+              pendingRequests.unshift({
+                body: next.body,
+                keepalive: next.keepalive,
+                attempt: next.attempt + 1,
+              });
+              processPendingRequests();
+            }, delay);
+          }
+          processPendingRequests();
+        });
     };
 
     const postCollaboration = (
@@ -119,14 +162,12 @@ export default function DevTestPage() {
         }
       }
 
-      fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      pendingRequests.push({
         body,
         keepalive: options?.keepalive ?? payload.type === 'presence',
-      }).catch(error => {
-        console.error('[Dev Test] Failed to post collaboration payload:', error);
+        attempt: 0,
       });
+      processPendingRequests();
     };
 
     const sendPresence = (
@@ -136,7 +177,48 @@ export default function DevTestPage() {
       postCollaboration({ type: 'presence', presence }, options);
     };
 
+    const clearUpdateTimer = () => {
+      if (updateTimer !== null) {
+        window.clearTimeout(updateTimer);
+        updateTimer = null;
+      }
+    };
+
+    const flushQueuedUpdates = (options?: { allowDuringDispose?: boolean }) => {
+      clearUpdateTimer();
+      if (!updateQueue.length) {
+        return;
+      }
+      try {
+        const merged = Y.mergeUpdates(updateQueue);
+        updateQueue = [];
+        const encoded = encodeUpdate(merged);
+        if (encoded) {
+          postCollaboration(
+            { type: 'update', update: encoded },
+            options?.allowDuringDispose
+              ? { keepalive: true, allowDuringDispose: true }
+              : undefined,
+          );
+        }
+      } catch (error) {
+        console.error('[Dev Test] Failed to merge queued updates:', error);
+        updateQueue = [];
+      }
+    };
+
+    const enqueueUpdate = (update: Uint8Array) => {
+      updateQueue.push(update);
+      if (updateTimer !== null) {
+        return;
+      }
+      updateTimer = window.setTimeout(() => {
+        flushQueuedUpdates();
+      }, 120);
+    };
+
     const handlePageHide = () => {
+      flushQueuedUpdates({ allowDuringDispose: true });
       sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
     };
 
@@ -176,10 +258,7 @@ export default function DevTestPage() {
       if (origin !== 'textarea-input') {
         return;
       }
-      const encoded = encodeUpdate(update);
-      if (encoded) {
-        postCollaboration({ type: 'update', update: encoded });
-      }
+      enqueueUpdate(update);
     };
 
     doc.on('update', handleDocUpdate);
@@ -200,7 +279,13 @@ export default function DevTestPage() {
       }
 
       eventSource.onopen = () => {
+        reconnectAttempts = 0;
+        if (reconnectTimer !== null) {
+          window.clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
         safeSetStatus('connected');
+        flushQueuedUpdates();
         const snapshot = Y.encodeStateAsUpdate(doc);
         const encoded = encodeUpdate(snapshot);
         if (encoded) {
@@ -241,14 +326,25 @@ export default function DevTestPage() {
       eventSource.onerror = error => {
         console.error('[Dev Test] Collaboration stream error:', error);
         safeSetStatus('disconnected');
+        if (reconnectTimer !== null || disposed) {
+          return;
+        }
+        const delay = Math.min(1000 * 2 ** reconnectAttempts, 10000);
+        reconnectAttempts += 1;
+        reconnectTimer = window.setTimeout(() => {
+          reconnectTimer = null;
+          openEventStream();
+        }, delay);
       };
     };
 
     openEventStream();
 
     return () => {
+      flushQueuedUpdates({ allowDuringDispose: true });
       sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
       disposed = true;
+      clearUpdateTimer();
       element.removeEventListener('input', handleInput);
       text.unobserve(observer);
       doc.off('update', handleDocUpdate);
@@ -258,6 +354,10 @@ export default function DevTestPage() {
       }
       if (typeof window !== 'undefined') {
         window.removeEventListener('pagehide', handlePageHide);
+        if (reconnectTimer !== null) {
+          window.clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
       }
       safeSetStatus('disconnected');
       safeSetPeerCount(1);
