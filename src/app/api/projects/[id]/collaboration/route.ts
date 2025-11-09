@@ -184,6 +184,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (type === 'presence') {
     const client = room.get(clientId);
     if (client) {
+      if (presence === null) {
+        cleanupClient(projectId, clientId);
+        return NextResponse.json({ ok: true });
+      }
       if (
         presence &&
         typeof presence === 'object' &&
