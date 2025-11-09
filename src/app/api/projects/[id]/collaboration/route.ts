@@ -20,6 +20,7 @@ type RoomClient = {
   writer: WritableStreamDefaultWriter<string>;
   presence: PresenceState | null;
   keepAliveTimer: ReturnType<typeof setInterval>;
+  lastSeen: number;
 };
 
 type ServerPresenceEntry = {
@@ -32,12 +33,18 @@ type ServerPresenceEntry = {
 
 type ServerMessage =
   | { type: 'update'; update: string; clientId: string }
-  | { type: 'presence'; clients: ServerPresenceEntry[] };
+  | { type: 'presence'; clients: ServerPresenceEntry[] }
+  | { type: 'meta'; name: string | null };
 
-const rooms = new Map<string, Map<string, RoomClient>>();
+type RoomState = {
+  clients: Map<string, RoomClient>;
+  metaName: string | null;
+};
 
-function serializePresence(room: Map<string, RoomClient>): ServerPresenceEntry[] {
-  return Array.from(room.values()).map(client => ({
+const rooms = new Map<string, RoomState>();
+
+function serializePresence(room: RoomState): ServerPresenceEntry[] {
+  return Array.from(room.clients.values()).map(client => ({
     clientId: client.clientId,
     userId: client.presence?.id ?? null,
     name: client.presence?.name ?? null,
@@ -52,7 +59,7 @@ function broadcast(roomId: string, message: ServerMessage, excludeClientId?: str
     return;
   }
   const payload = `data: ${JSON.stringify(message)}\n\n`;
-  room.forEach((client, id) => {
+  room.clients.forEach((client, id) => {
     if (excludeClientId && id === excludeClientId) {
       return;
     }
@@ -75,7 +82,7 @@ function cleanupClient(roomId: string, clientId: string) {
   if (!room) {
     return;
   }
-  const client = room.get(clientId);
+  const client = room.clients.get(clientId);
   if (!client) {
     return;
   }
@@ -85,8 +92,8 @@ function cleanupClient(roomId: string, clientId: string) {
   } catch {
     // ignore close errors
   }
-  room.delete(clientId);
-  if (room.size === 0) {
+  room.clients.delete(clientId);
+  if (room.clients.size === 0) {
     rooms.delete(roomId);
     return;
   }
@@ -108,25 +115,52 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   let room = rooms.get(projectId);
   if (!room) {
-    room = new Map();
+    room = { clients: new Map(), metaName: null };
     rooms.set(projectId, room);
   }
 
+  const existing = room.clients.get(clientId);
+  if (existing) {
+    clearInterval(existing.keepAliveTimer);
+    try {
+      void existing.writer.close();
+    } catch {
+      // ignore
+    }
+    room.clients.delete(clientId);
+  }
+
   const keepAliveTimer = setInterval(() => {
+    const currentRoom = rooms.get(projectId);
+    const currentClient = currentRoom?.clients.get(clientId);
+    if (!currentRoom || !currentClient) {
+      clearInterval(keepAliveTimer);
+      return;
+    }
+    if (Date.now() - currentClient.lastSeen > 45000) {
+      cleanupClient(projectId, clientId);
+      return;
+    }
     writer.write(':keep-alive\n\n').catch(() => {
       cleanupClient(projectId, clientId);
     });
   }, 30000);
 
-  room.set(clientId, {
+  const client: RoomClient = {
     clientId,
     writer,
     presence: null,
     keepAliveTimer,
-  });
+    lastSeen: Date.now(),
+  };
+
+  room.clients.set(clientId, client);
 
   const initialPresence = { type: 'presence' as const, clients: serializePresence(room) };
   void writer.write(`data: ${JSON.stringify(initialPresence)}\n\n`);
+  if (room.metaName !== null) {
+    void writer.write(`data: ${JSON.stringify({ type: 'meta' as const, name: room.metaName })}\n\n`);
+  }
   broadcastPresence(projectId);
 
   request.signal.addEventListener('abort', () => {
@@ -157,11 +191,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
-  const { type, clientId, update, presence } = body as {
+  const { type, clientId, update, presence, meta } = body as {
     type?: unknown;
     clientId?: unknown;
     update?: unknown;
     presence?: unknown;
+    meta?: unknown;
   };
 
   if (typeof clientId !== 'string' || clientId.length === 0) {
@@ -169,8 +204,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const room = rooms.get(projectId);
-  if (!room || !room.has(clientId)) {
+  if (!room || !room.clients.has(clientId)) {
     return NextResponse.json({ ok: true });
+  }
+
+  const client = room.clients.get(clientId);
+  if (client) {
+    client.lastSeen = Date.now();
   }
 
   if (type === 'update') {
@@ -182,8 +222,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (type === 'presence') {
-    const client = room.get(clientId);
+    const client = room.clients.get(clientId);
     if (client) {
+      if (presence === null) {
+        cleanupClient(projectId, clientId);
+        return NextResponse.json({ ok: true });
+      }
       if (
         presence &&
         typeof presence === 'object' &&
@@ -210,6 +254,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     }
     broadcastPresence(projectId);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (type === 'meta') {
+    const nextName =
+      meta && typeof meta === 'object' && meta !== null && typeof (meta as { name?: unknown }).name === 'string'
+        ? ((meta as { name: string }).name.length > 0 ? (meta as { name: string }).name : null)
+        : null;
+    const state = rooms.get(projectId);
+    if (state) {
+      state.metaName = nextName;
+      broadcast(projectId, { type: 'meta', name: nextName }, clientId);
+    }
     return NextResponse.json({ ok: true });
   }
 
