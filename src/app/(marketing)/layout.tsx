@@ -8,7 +8,8 @@ import MarketingNav from './MarketingNav';
 const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/features', label: 'Features' },
-  { href: '/roadmap', label: 'Roadmap' }
+  { href: '/roadmap', label: 'Roadmap' },
+  { href: '/dev-test', label: 'Dev Test' },
 ];
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
