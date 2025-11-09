@@ -92,6 +92,12 @@ function MarketingLanding() {
             >
               Explore the features
             </Link>
+            <Link
+              href="/dev-test"
+              className="rounded-full border border-emerald-400/40 px-6 py-3 text-sm font-semibold text-emerald-200 transition hover:border-emerald-300/80 hover:text-emerald-100"
+            >
+              Open the dev test
+            </Link>
           </div>
         </div>
         <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-emerald-500/10">
