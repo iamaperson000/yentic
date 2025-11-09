@@ -20,6 +20,7 @@ type RoomClient = {
   writer: WritableStreamDefaultWriter<string>;
   presence: PresenceState | null;
   keepAliveTimer: ReturnType<typeof setInterval>;
+  lastSeen: number;
 };
 
 type ServerPresenceEntry = {
@@ -112,18 +113,42 @@ export async function GET(request: NextRequest, context: RouteContext) {
     rooms.set(projectId, room);
   }
 
+  const existing = room.get(clientId);
+  if (existing) {
+    clearInterval(existing.keepAliveTimer);
+    try {
+      void existing.writer.close();
+    } catch {
+      // ignore
+    }
+    room.delete(clientId);
+  }
+
   const keepAliveTimer = setInterval(() => {
+    const currentRoom = rooms.get(projectId);
+    const currentClient = currentRoom?.get(clientId);
+    if (!currentRoom || !currentClient) {
+      clearInterval(keepAliveTimer);
+      return;
+    }
+    if (Date.now() - currentClient.lastSeen > 45000) {
+      cleanupClient(projectId, clientId);
+      return;
+    }
     writer.write(':keep-alive\n\n').catch(() => {
       cleanupClient(projectId, clientId);
     });
   }, 30000);
 
-  room.set(clientId, {
+  const client: RoomClient = {
     clientId,
     writer,
     presence: null,
     keepAliveTimer,
-  });
+    lastSeen: Date.now(),
+  };
+
+  room.set(clientId, client);
 
   const initialPresence = { type: 'presence' as const, clients: serializePresence(room) };
   void writer.write(`data: ${JSON.stringify(initialPresence)}\n\n`);
@@ -173,6 +198,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ ok: true });
   }
 
+  const client = room.get(clientId);
+  if (client) {
+    client.lastSeen = Date.now();
+  }
+
   if (type === 'update') {
     if (typeof update !== 'string' || update.length === 0) {
       return NextResponse.json({ error: 'Missing update payload' }, { status: 400 });
@@ -184,6 +214,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (type === 'presence') {
     const client = room.get(clientId);
     if (client) {
+      if (presence === null) {
+        cleanupClient(projectId, clientId);
+        return NextResponse.json({ ok: true });
+      }
       if (
         presence &&
         typeof presence === 'object' &&
