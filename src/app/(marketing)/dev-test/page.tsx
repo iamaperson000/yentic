@@ -56,6 +56,9 @@ export default function DevTestPage() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [peerCount, setPeerCount] = useState(1);
   const statusGuardRef = useRef({ mounted: true });
+  const connectedRef = useRef(false);
+  const knownPeersRef = useRef<Set<string>>(new Set());
+  const hasBroadcastableStateRef = useRef(false);
 
   const statusLabel = useMemo(() => {
     switch (connectionStatus) {
@@ -89,6 +92,8 @@ export default function DevTestPage() {
     let reconnectAttempts = 0;
     let updateQueue: Uint8Array[] = [];
     let updateTimer: number | null = null;
+    let presenceInterval: number | null = null;
+    let hasConnectedOnce = false;
 
     const safeSetStatus = (status: ConnectionStatus) => {
       if (statusGuardRef.current.mounted) {
@@ -189,6 +194,12 @@ export default function DevTestPage() {
       if (!updateQueue.length) {
         return;
       }
+      if (!connectedRef.current && !options?.allowDuringDispose) {
+        updateTimer = window.setTimeout(() => {
+          flushQueuedUpdates(options);
+        }, 150);
+        return;
+      }
       try {
         const merged = Y.mergeUpdates(updateQueue);
         updateQueue = [];
@@ -258,15 +269,33 @@ export default function DevTestPage() {
       if (origin !== 'textarea-input') {
         return;
       }
+      hasBroadcastableStateRef.current = true;
       enqueueUpdate(update);
     };
 
     doc.on('update', handleDocUpdate);
 
+    const presencePayload = {
+      id: clientId,
+      name: null,
+      color: '#34d399',
+      avatar: null,
+    };
+
+    const clearPresenceInterval = () => {
+      if (presenceInterval !== null) {
+        window.clearInterval(presenceInterval);
+        presenceInterval = null;
+      }
+    };
+
     const openEventStream = () => {
       if (eventSource) {
         eventSource.close();
       }
+
+      connectedRef.current = false;
+      clearPresenceInterval();
 
       safeSetStatus('connecting');
 
@@ -284,14 +313,26 @@ export default function DevTestPage() {
           window.clearTimeout(reconnectTimer);
           reconnectTimer = null;
         }
+        connectedRef.current = true;
         safeSetStatus('connected');
         flushQueuedUpdates();
-        const snapshot = Y.encodeStateAsUpdate(doc);
-        const encoded = encodeUpdate(snapshot);
-        if (encoded) {
-          postCollaboration({ type: 'update', update: encoded });
+        if (hasConnectedOnce && hasBroadcastableStateRef.current) {
+          try {
+            const snapshot = Y.encodeStateAsUpdate(doc);
+            const encoded = encodeUpdate(snapshot);
+            if (encoded) {
+              postCollaboration({ type: 'update', update: encoded });
+            }
+          } catch (error) {
+            console.error('[Dev Test] Failed to publish reconnect snapshot:', error);
+          }
         }
-        sendPresence({ id: clientId, name: null, color: '#34d399', avatar: null });
+        sendPresence(presencePayload);
+        clearPresenceInterval();
+        presenceInterval = window.setInterval(() => {
+          sendPresence(presencePayload);
+        }, 20000);
+        hasConnectedOnce = true;
       };
 
       eventSource.onmessage = event => {
@@ -310,14 +351,43 @@ export default function DevTestPage() {
             }
             try {
               Y.applyUpdate(doc, decoded, 'collab-sse');
+              hasBroadcastableStateRef.current = true;
             } catch (error) {
               console.error('[Dev Test] Failed to apply remote update:', error);
             }
             return;
           }
 
-          const count = Math.max(1, message.clients.length);
-          safeSetPeerCount(count);
+          const uniqueClientIds = new Set<string>();
+          const remoteClientIds = new Set<string>();
+          message.clients.forEach(client => {
+            if (typeof client.clientId === 'string') {
+              uniqueClientIds.add(client.clientId);
+              if (client.clientId !== clientId) {
+                remoteClientIds.add(client.clientId);
+              }
+            }
+          });
+          const previousPeers = knownPeersRef.current;
+          const newPeers: string[] = [];
+          remoteClientIds.forEach(id => {
+            if (!previousPeers.has(id)) {
+              newPeers.push(id);
+            }
+          });
+          knownPeersRef.current = remoteClientIds;
+          safeSetPeerCount(Math.max(1, uniqueClientIds.size || 0));
+          if (newPeers.length > 0 && connectedRef.current && hasBroadcastableStateRef.current) {
+            try {
+              const snapshot = Y.encodeStateAsUpdate(doc);
+              const encoded = encodeUpdate(snapshot);
+              if (encoded) {
+                postCollaboration({ type: 'update', update: encoded });
+              }
+            } catch (error) {
+              console.error('[Dev Test] Failed to publish snapshot for new peers:', error);
+            }
+          }
         } catch (error) {
           console.error('[Dev Test] Failed to parse collaboration payload:', error);
         }
@@ -325,6 +395,12 @@ export default function DevTestPage() {
 
       eventSource.onerror = error => {
         console.error('[Dev Test] Collaboration stream error:', error);
+        connectedRef.current = false;
+        clearPresenceInterval();
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
         safeSetStatus('disconnected');
         if (reconnectTimer !== null || disposed) {
           return;
@@ -344,7 +420,9 @@ export default function DevTestPage() {
       flushQueuedUpdates({ allowDuringDispose: true });
       sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
       disposed = true;
+      connectedRef.current = false;
       clearUpdateTimer();
+      clearPresenceInterval();
       element.removeEventListener('input', handleInput);
       text.unobserve(observer);
       doc.off('update', handleDocUpdate);
@@ -361,6 +439,8 @@ export default function DevTestPage() {
       }
       safeSetStatus('disconnected');
       safeSetPeerCount(1);
+      knownPeersRef.current = new Set();
+      hasBroadcastableStateRef.current = false;
       statusGuardRef.current.mounted = false;
     };
   }, []);
@@ -371,8 +451,8 @@ export default function DevTestPage() {
         <p className="text-sm uppercase tracking-[0.3em] text-emerald-300/80">Dev Test</p>
         <h1 className="text-3xl font-semibold">Realtime text area</h1>
         <p className="text-sm text-white/60">
-          This page connects directly to the public Yjs WebRTC signaling servers. Open it in multiple tabs to verify that
-          keystrokes appear everywhere instantly. No database writes happen here.
+          This page uses the same collaboration bridge as the rest of the app—no database writes happen here, and edits are
+          relayed over the server fallback so you can confirm syncing works between browsers.
         </p>
       </div>
 
