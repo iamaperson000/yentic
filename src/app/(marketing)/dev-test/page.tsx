@@ -2,20 +2,60 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { WebrtcProvider } from 'y-webrtc';
 
-const signalingServers = [
-  'wss://signaling.yjs.dev',
-  'wss://y-webrtc-signaling-us.herokuapp.com',
-  'wss://y-webrtc-signaling-eu.herokuapp.com',
-];
+type CollaborationMessage =
+  | { type: 'update'; update: string; clientId?: string }
+  | { type: 'presence'; clients: Array<{ clientId: string }> };
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
+
+function generateClientId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {}
+  return `client-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
+function encodeUpdate(update: Uint8Array): string | null {
+  try {
+    if (typeof window === 'undefined') {
+      return Buffer.from(update).toString('base64');
+    }
+    let binary = '';
+    update.forEach(value => {
+      binary += String.fromCharCode(value);
+    });
+    return btoa(binary);
+  } catch (error) {
+    console.error('[Dev Test] Failed to encode update:', error);
+    return null;
+  }
+}
+
+function decodeUpdate(encoded: string): Uint8Array | null {
+  try {
+    if (typeof window === 'undefined') {
+      return Uint8Array.from(Buffer.from(encoded, 'base64'));
+    }
+    const binary = atob(encoded);
+    const result = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      result[i] = binary.charCodeAt(i);
+    }
+    return result;
+  } catch (error) {
+    console.error('[Dev Test] Failed to decode update:', error);
+    return null;
+  }
+}
 
 export default function DevTestPage() {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [peerCount, setPeerCount] = useState(1);
+  const statusGuardRef = useRef({ mounted: true });
 
   const statusLabel = useMemo(() => {
     switch (connectionStatus) {
@@ -29,16 +69,49 @@ export default function DevTestPage() {
   }, [connectionStatus]);
 
   useEffect(() => {
+    statusGuardRef.current.mounted = true;
     const element = textAreaRef.current;
     if (!element) {
-      return;
+      return () => {
+        statusGuardRef.current.mounted = false;
+      };
     }
 
+    const clientId = generateClientId();
     const doc = new Y.Doc();
     const text = doc.getText('dev-test');
-    const provider = new WebrtcProvider('yentic-dev-test-room', doc, {
-      signaling: signalingServers,
-    });
+    let eventSource: EventSource | null = null;
+    let disposed = false;
+
+    const safeSetStatus = (status: ConnectionStatus) => {
+      if (statusGuardRef.current.mounted) {
+        setConnectionStatus(status);
+      }
+    };
+
+    const safeSetPeerCount = (count: number) => {
+      if (statusGuardRef.current.mounted) {
+        setPeerCount(count);
+      }
+    };
+
+    const postCollaboration = (payload: { type: 'update'; update: string } | { type: 'presence'; presence: unknown }) => {
+      if (disposed) {
+        return;
+      }
+      const body =
+        payload.type === 'update'
+          ? { type: 'update', update: payload.update, clientId }
+          : { type: 'presence', presence: payload.presence, clientId };
+      fetch('/api/projects/dev-test/collaboration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        keepalive: payload.type === 'presence',
+      }).catch(error => {
+        console.error('[Dev Test] Failed to post collaboration payload:', error);
+      });
+    };
 
     const applyYTextToTextarea = () => {
       const currentValue = text.toString();
@@ -68,28 +141,95 @@ export default function DevTestPage() {
 
     element.addEventListener('input', handleInput);
 
-    const awareness = provider.awareness;
-    const updatePeers = () => {
-      const states = awareness.getStates();
-      setPeerCount(states.size);
+    const handleDocUpdate = (update: Uint8Array, origin: unknown) => {
+      if (origin !== 'textarea-input') {
+        return;
+      }
+      const encoded = encodeUpdate(update);
+      if (encoded) {
+        postCollaboration({ type: 'update', update: encoded });
+      }
     };
 
-    updatePeers();
-    awareness.on('update', updatePeers);
+    doc.on('update', handleDocUpdate);
 
-    const handleStatus = (event: { connected: boolean }) => {
-      setConnectionStatus(event.connected ? 'connected' : 'disconnected');
+    const openEventStream = () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      safeSetStatus('connecting');
+
+      try {
+        eventSource = new EventSource(`/api/projects/dev-test/collaboration?clientId=${encodeURIComponent(clientId)}`);
+      } catch (error) {
+        console.error('[Dev Test] Failed to initialize collaboration stream:', error);
+        safeSetStatus('disconnected');
+        return;
+      }
+
+      eventSource.onopen = () => {
+        safeSetStatus('connected');
+        const snapshot = Y.encodeStateAsUpdate(doc);
+        const encoded = encodeUpdate(snapshot);
+        if (encoded) {
+          postCollaboration({ type: 'update', update: encoded });
+        }
+        postCollaboration({
+          type: 'presence',
+          presence: { id: clientId, name: null, color: '#34d399', avatar: null },
+        });
+      };
+
+      eventSource.onmessage = event => {
+        if (!event.data) {
+          return;
+        }
+        try {
+          const message = JSON.parse(event.data) as CollaborationMessage;
+          if (message.type === 'update') {
+            if (!message.update || message.clientId === clientId) {
+              return;
+            }
+            const decoded = decodeUpdate(message.update);
+            if (!decoded) {
+              return;
+            }
+            try {
+              Y.applyUpdate(doc, decoded, 'collab-sse');
+            } catch (error) {
+              console.error('[Dev Test] Failed to apply remote update:', error);
+            }
+            return;
+          }
+
+          const count = Math.max(1, message.clients.length);
+          safeSetPeerCount(count);
+        } catch (error) {
+          console.error('[Dev Test] Failed to parse collaboration payload:', error);
+        }
+      };
+
+      eventSource.onerror = error => {
+        console.error('[Dev Test] Collaboration stream error:', error);
+        safeSetStatus('disconnected');
+      };
     };
 
-    provider.on('status', handleStatus);
+    openEventStream();
 
     return () => {
+      disposed = true;
       element.removeEventListener('input', handleInput);
       text.unobserve(observer);
-      awareness.off('update', updatePeers);
-      provider.off('status', handleStatus);
-      provider.destroy();
+      doc.off('update', handleDocUpdate);
       doc.destroy();
+      if (eventSource) {
+        eventSource.close();
+      }
+      safeSetStatus('disconnected');
+      safeSetPeerCount(1);
+      statusGuardRef.current.mounted = false;
     };
   }, []);
 
