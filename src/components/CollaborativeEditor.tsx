@@ -3,15 +3,10 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Sandpack } from '@codesandbox/sandpack-react';
 import * as Y from 'yjs';
-import { WebrtcProvider } from 'y-webrtc';
-import type { Awareness } from 'y-protocols/awareness';
 
 import { inferLanguage, type ProjectFile, type ProjectFileMap } from '@/lib/project';
 import type { CollaboratorPresence, LocalCollaboratorPresence } from '@/types/collaboration';
 
-/* ────────────────────────────────────────────────
- * Types
- * ──────────────────────────────────────────────── */
 type CollaborativeEditorProps = {
   projectId: string | null;
   files: ProjectFileMap;
@@ -20,18 +15,18 @@ type CollaborativeEditorProps = {
   onDoc?: (doc: Y.Doc | null) => void;
   localPresence?: LocalCollaboratorPresence | null;
   onPresenceChange?: (presence: CollaboratorPresence[]) => void;
+  projectName?: string | null;
+  onRemoteProjectName?: (name: string | null) => void;
   children?: ReactNode;
 };
 
 type CollaborationRef = {
   ydoc: Y.Doc;
   ymap: Y.Map<ProjectFile>;
-  provider: WebrtcProvider | null;
-  awareness: Awareness | null;
   unobserveFiles: (() => void) | null;
-  unsubscribePresence: (() => void) | null;
   sendPresence: (presence: LocalCollaboratorPresence | null) => void;
   closeSse?: () => void;
+  updateProjectName?: () => void;
 };
 
 type ServerPresenceEntry = {
@@ -44,15 +39,14 @@ type ServerPresenceEntry = {
 
 type CollaborationServerMessage =
   | { type: 'update'; update: string; clientId?: string }
-  | { type: 'presence'; clients: ServerPresenceEntry[] };
+  | { type: 'presence'; clients: ServerPresenceEntry[] }
+  | { type: 'meta'; name: string | null };
 
 type CollaborationPayload =
   | { type: 'update'; update: string }
-  | { type: 'presence'; presence: LocalCollaboratorPresence | null };
+  | { type: 'presence'; presence: LocalCollaboratorPresence | null }
+  | { type: 'meta'; meta: { name: string | null } };
 
-/* ────────────────────────────────────────────────
- * Helpers
- * ──────────────────────────────────────────────── */
 function cloneProjectFile(file: ProjectFile): ProjectFile {
   return { path: file.path, language: file.language, code: file.code };
 }
@@ -79,16 +73,13 @@ function projectFilesFromYMap(map: Y.Map<ProjectFile>): ProjectFileMap {
     if (isLegacyProjectFileMap(value)) {
       Object.entries(value).forEach(([legacyPath, legacyFile]) => {
         const maybeFile =
-          typeof legacyFile === 'object' && legacyFile !== null
-            ? (legacyFile as Partial<ProjectFile>)
-            : {};
+          typeof legacyFile === 'object' && legacyFile !== null ? (legacyFile as Partial<ProjectFile>) : {};
         const normalized = normalizeProjectFile(legacyPath, maybeFile);
         result[normalized.path] = cloneProjectFile(normalized);
       });
       return;
     }
-    const normalizedPath =
-      typeof value.path === 'string' && value.path.length > 0 ? value.path : key;
+    const normalizedPath = typeof value.path === 'string' && value.path.length > 0 ? value.path : key;
     result[normalizedPath] = cloneProjectFile({
       path: normalizedPath,
       language: value.language,
@@ -134,9 +125,6 @@ function encodeYjsUpdate(update: Uint8Array): string {
   return btoa(binary);
 }
 
-/* ────────────────────────────────────────────────
- * Component
- * ──────────────────────────────────────────────── */
 export default function CollaborativeEditor({
   projectId,
   files,
@@ -145,6 +133,8 @@ export default function CollaborativeEditor({
   onDoc,
   localPresence,
   onPresenceChange,
+  projectName,
+  onRemoteProjectName,
   children,
 }: CollaborativeEditorProps) {
   const collabRef = useRef<CollaborationRef | null>(null);
@@ -152,46 +142,53 @@ export default function CollaborativeEditor({
   const suppressLocalSyncRef = useRef(false);
   const localPresenceRef = useRef<LocalCollaboratorPresence | null>(null);
   const onPresenceChangeRef = useRef<((p: CollaboratorPresence[]) => void) | undefined>(undefined);
-  const webrtcPresenceRef = useRef<CollaboratorPresence[]>([]);
-  const ssePresenceRef = useRef<CollaboratorPresence[]>([]);
+  const presenceStateRef = useRef<CollaboratorPresence[]>([]);
   const knownSseClientsRef = useRef<Set<string>>(new Set());
   const hasBroadcastableStateRef = useRef(false);
+  const onRemoteProjectNameRef = useRef<((name: string | null) => void) | undefined>(undefined);
+  const projectNameRef = useRef<string | null>(projectName ?? null);
+  const lastRemoteProjectNameRef = useRef<string | null>(null);
 
   useEffect(() => {
     onPresenceChangeRef.current = onPresenceChange ?? undefined;
+    if (presenceStateRef.current.length) {
+      onPresenceChangeRef.current?.(presenceStateRef.current);
+    }
   }, [onPresenceChange]);
+
+  useEffect(() => {
+    onRemoteProjectNameRef.current = onRemoteProjectName ?? undefined;
+  }, [onRemoteProjectName]);
 
   useEffect(() => {
     localPresenceRef.current = localPresence ?? null;
     collabRef.current?.sendPresence(localPresenceRef.current);
   }, [localPresence]);
 
-  const emitCombinedPresence = () => {
-    const primary = webrtcPresenceRef.current;
-    const fallback = ssePresenceRef.current;
-    const active = primary.length ? primary : fallback;
-    onPresenceChangeRef.current?.(active);
-  };
+  useEffect(() => {
+    projectNameRef.current = typeof projectName === 'string' ? projectName : projectName ?? null;
+    if (!projectId) {
+      lastRemoteProjectNameRef.current = null;
+      return;
+    }
+    collabRef.current?.updateProjectName?.();
+  }, [projectName, projectId]);
 
-  /* Initialize or destroy Yjs provider when project changes */
   useEffect(() => {
     if (!projectId || typeof window === 'undefined') {
       if (collabRef.current) {
         try {
           collabRef.current.unobserveFiles?.();
-          collabRef.current.unsubscribePresence?.();
-          collabRef.current.awareness?.setLocalState(null);
-          collabRef.current.provider?.destroy();
-          collabRef.current.ydoc.destroy();
           collabRef.current.closeSse?.();
         } catch {}
         collabRef.current = null;
       }
       appliedSnapshotRef.current = null;
       onDoc?.(null);
-      webrtcPresenceRef.current = [];
-      ssePresenceRef.current = [];
-      emitCombinedPresence();
+      presenceStateRef.current = [];
+      knownSseClientsRef.current = new Set();
+      hasBroadcastableStateRef.current = false;
+      onPresenceChangeRef.current?.([]);
       return;
     }
 
@@ -210,7 +207,9 @@ export default function CollaborativeEditor({
         } catch (e) {
           console.error('[Yjs] Failed to apply snapshot:', e);
         }
-      } else appliedSnapshotRef.current = encodedState;
+      } else {
+        appliedSnapshotRef.current = encodedState;
+      }
     }
 
     if (ymap.size === 0) {
@@ -234,69 +233,357 @@ export default function CollaborativeEditor({
     };
     ymap.observe(onFilesChanged);
 
-    let provider: WebrtcProvider | null = null;
-    let awareness: Awareness | null = null;
+    const clientId = generateClientId();
+    let disposed = false;
+    let eventSource: EventSource | null = null;
+    let updateQueue: Uint8Array[] = [];
+    let updateTimer: number | null = null;
+    let presenceInterval: number | null = null;
+    let reconnectTimer: number | null = null;
+    let reconnectAttempts = 0;
+    let sendingRequest = false;
+    const pendingRequests: Array<{ body: string; keepalive: boolean; attempt: number }> = [];
+    let sseConnected = false;
+    let pendingProjectName: string | null = projectNameRef.current ?? null;
+    let lastSentProjectName: string | null = null;
 
-    try {
-      provider = new WebrtcProvider(`yentic-project-${projectId}`, ydoc, {
-        signaling: [
-          'wss://signaling.yjs.dev',
-          'wss://y-webrtc-signaling-eu.herokuapp.com',
-          'wss://y-webrtc-signaling-us.herokuapp.com',
-        ],
-        maxConns: 20,
-        filterBcConns: false,
-        peerOpts: {
-          config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:global.stun.twilio.com:3478?transport=udp' },
-            ],
-          },
-        },
-      });
-
-      // FIX: Correct typing for new y-webrtc event format
-      provider.on('status', ({ connected }: { connected: boolean }) => {
-        console.log(
-          `[Yjs] WebRTC ${connected ? 'connected' : 'disconnected'} (room: ${projectId})`
-        );
-      });
-
-      awareness = provider.awareness;
-    } catch (e) {
-      console.error('[Yjs] Failed to init WebRTC provider:', e);
-    }
-
-    const fallbackColor = '#38bdf8';
-    const emitPresenceSnapshot = () => {
-      if (!awareness) {
-        webrtcPresenceRef.current = [];
-        emitCombinedPresence();
-        return;
-      }
-      const out: CollaboratorPresence[] = [];
-      awareness.getStates().forEach((state, clientId) => {
-        if (!state || typeof state !== 'object') return;
-        const p = (state as any).presence as LocalCollaboratorPresence | null;
-        if (!p?.id) return;
-        out.push({
-          clientId: String(clientId),
-          userId: p.id,
-          name: p.name ?? null,
-          color: p.color || fallbackColor,
-          avatar: p.avatar ?? null,
-          isSelf: awareness ? clientId === awareness.clientID : false,
-        });
-      });
-      webrtcPresenceRef.current = out;
-      emitCombinedPresence();
+    type PostOptions = {
+      keepalive?: boolean;
+      preferBeacon?: boolean;
+      allowDuringDispose?: boolean;
     };
 
-    if (awareness) {
-      awareness.on('update', emitPresenceSnapshot);
-      emitPresenceSnapshot();
-    }
+    const endpoint = `/api/projects/${projectId}/collaboration`;
+
+    const processPendingRequests = () => {
+      if (sendingRequest || pendingRequests.length === 0) {
+        return;
+      }
+      const next = pendingRequests.shift();
+      if (!next) {
+        return;
+      }
+      sendingRequest = true;
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: next.body,
+        keepalive: next.keepalive,
+      })
+        .then(() => {
+          sendingRequest = false;
+          processPendingRequests();
+        })
+        .catch(error => {
+          console.error('[Yjs] Failed to post collaboration payload:', error);
+          sendingRequest = false;
+          if (!disposed && typeof window !== 'undefined' && next.attempt < 3) {
+            const delay = Math.min(500 * 2 ** next.attempt, 4000);
+            window.setTimeout(() => {
+              pendingRequests.unshift({
+                body: next.body,
+                keepalive: next.keepalive,
+                attempt: next.attempt + 1,
+              });
+              processPendingRequests();
+            }, delay);
+          }
+          processPendingRequests();
+        });
+    };
+
+    const postCollaboration = (payload: CollaborationPayload, options?: PostOptions) => {
+      if (disposed && !options?.allowDuringDispose) {
+        return;
+      }
+      const bodyObject =
+        payload.type === 'update'
+          ? { type: 'update', update: payload.update, clientId }
+          : payload.type === 'presence'
+            ? { type: 'presence', presence: payload.presence ?? null, clientId }
+            : { type: 'meta', meta: payload.meta, clientId };
+      const body = JSON.stringify(bodyObject);
+
+      if (payload.type === 'presence' && options?.preferBeacon && typeof navigator !== 'undefined') {
+        try {
+          if (typeof navigator.sendBeacon === 'function' && navigator.sendBeacon(endpoint, body)) {
+            return;
+          }
+        } catch (error) {
+          console.error('[Yjs] Failed to send beacon payload:', error);
+        }
+      }
+
+      pendingRequests.push({
+        body,
+        keepalive: options?.keepalive ?? payload.type === 'presence',
+        attempt: 0,
+      });
+      processPendingRequests();
+    };
+
+    const clearUpdateTimer = () => {
+      if (updateTimer !== null) {
+        window.clearTimeout(updateTimer);
+        updateTimer = null;
+      }
+    };
+
+    const clearPresenceInterval = () => {
+      if (presenceInterval !== null) {
+        window.clearInterval(presenceInterval);
+        presenceInterval = null;
+      }
+    };
+
+    const flushQueuedUpdates = (options?: { allowDuringDispose?: boolean }) => {
+      clearUpdateTimer();
+      if (!updateQueue.length) {
+        return;
+      }
+      if (!sseConnected && !options?.allowDuringDispose) {
+        updateTimer = window.setTimeout(() => {
+          flushQueuedUpdates(options);
+        }, 150);
+        return;
+      }
+      try {
+        const merged = Y.mergeUpdates(updateQueue);
+        updateQueue = [];
+        const encoded = encodeYjsUpdate(merged);
+        if (encoded) {
+          postCollaboration(
+            { type: 'update', update: encoded },
+            options?.allowDuringDispose ? { allowDuringDispose: true, keepalive: true } : undefined,
+          );
+        }
+      } catch (error) {
+        console.error('[Yjs] Failed to merge queued updates:', error);
+        updateQueue = [];
+      }
+    };
+
+    const enqueueUpdateForSse = (update: Uint8Array) => {
+      updateQueue.push(update);
+      if (updateTimer !== null) {
+        return;
+      }
+      updateTimer = window.setTimeout(() => {
+        flushQueuedUpdates();
+      }, 120);
+    };
+
+    const handlePageHide = () => {
+      flushQueuedUpdates({ allowDuringDispose: true });
+      postCollaboration(
+        { type: 'presence', presence: null },
+        { keepalive: true, preferBeacon: true, allowDuringDispose: true },
+      );
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+
+    const sendPresencePayload = (
+      presence: LocalCollaboratorPresence | null,
+      options?: PostOptions,
+    ) => {
+      postCollaboration({ type: 'presence', presence }, options);
+    };
+
+    const tryBroadcastProjectName = (name: string | null, options?: { force?: boolean }) => {
+      const normalized = typeof name === 'string' && name.length > 0 ? name : null;
+      pendingProjectName = normalized;
+      if (!options?.force && normalized === lastSentProjectName) {
+        return;
+      }
+      if (!options?.force && normalized === lastRemoteProjectNameRef.current) {
+        lastSentProjectName = normalized;
+        pendingProjectName = null;
+        return;
+      }
+      if (!sseConnected) {
+        return;
+      }
+      postCollaboration({ type: 'meta', meta: { name: normalized } });
+      lastSentProjectName = normalized;
+      pendingProjectName = null;
+    };
+
+    const openEventStream = () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      sseConnected = false;
+      clearPresenceInterval();
+
+      try {
+        eventSource = new EventSource(`${endpoint}?clientId=${encodeURIComponent(clientId)}`);
+      } catch (error) {
+        console.error('[Yjs] Failed to initialize collaboration stream:', error);
+        if (typeof window !== 'undefined') {
+          const delay = Math.min(1000 * 2 ** reconnectAttempts, 10000);
+          reconnectAttempts += 1;
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            openEventStream();
+          }, delay);
+        }
+        return;
+      }
+
+      eventSource.onopen = () => {
+        reconnectAttempts = 0;
+        sseConnected = true;
+        if (reconnectTimer !== null && typeof window !== 'undefined') {
+          window.clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        flushQueuedUpdates();
+        const presence = localPresenceRef.current;
+        if (presence) {
+          sendPresencePayload(presence);
+        }
+        tryBroadcastProjectName(projectNameRef.current ?? pendingProjectName, { force: true });
+        clearPresenceInterval();
+        presenceInterval = window.setInterval(() => {
+          const latestPresence = localPresenceRef.current;
+          if (latestPresence) {
+            sendPresencePayload(latestPresence);
+          }
+        }, 20000);
+      };
+
+      eventSource.onmessage = event => {
+        if (!event.data) {
+          return;
+        }
+        try {
+          const message = JSON.parse(event.data) as CollaborationServerMessage;
+          if (message.type === 'update') {
+            if (!message.update || message.clientId === clientId) {
+              return;
+            }
+            const decoded = decodeStateBase64(message.update);
+            if (!decoded) {
+              return;
+            }
+            try {
+              Y.applyUpdate(ydoc, decoded, 'collab-sse');
+              hasBroadcastableStateRef.current = true;
+            } catch (error) {
+              console.error('[Yjs] Failed to apply collaboration update:', error);
+            }
+            return;
+          }
+
+          if (message.type === 'meta') {
+            const remoteName = typeof message.name === 'string' ? message.name : null;
+            lastRemoteProjectNameRef.current = remoteName;
+            pendingProjectName = null;
+            if (remoteName !== lastSentProjectName) {
+              projectNameRef.current = remoteName;
+              onRemoteProjectNameRef.current?.(remoteName);
+            }
+            return;
+          }
+
+          const fallbackColor = '#38bdf8';
+          const localId = localPresenceRef.current?.id ?? null;
+          const remoteClientIds = new Set<string>();
+          const derived = message.clients
+            .filter(entry => typeof entry.userId === 'string' && entry.userId.length > 0)
+            .map(entry => {
+              if (typeof entry.clientId === 'string' && entry.clientId !== clientId) {
+                remoteClientIds.add(entry.clientId);
+              }
+              return {
+                clientId: `sse:${entry.clientId}`,
+                userId: entry.userId ?? entry.clientId,
+                name: entry.name ?? null,
+                color: entry.color ?? fallbackColor,
+                avatar: entry.avatar ?? null,
+                isSelf: Boolean(localId && entry.userId === localId),
+              } satisfies CollaboratorPresence;
+            });
+
+          presenceStateRef.current = derived;
+          onPresenceChangeRef.current?.(derived);
+
+          const previous = knownSseClientsRef.current;
+          const newPeers: string[] = [];
+          remoteClientIds.forEach(id => {
+            if (!previous.has(id)) {
+              newPeers.push(id);
+            }
+          });
+          knownSseClientsRef.current = new Set(remoteClientIds);
+
+          if (newPeers.length > 0 && sseConnected && hasBroadcastableStateRef.current) {
+            try {
+              const snapshot = Y.encodeStateAsUpdate(ydoc);
+              const encoded = encodeYjsUpdate(snapshot);
+              if (encoded) {
+                postCollaboration({ type: 'update', update: encoded });
+              }
+            } catch (error) {
+              console.error('[Yjs] Failed to publish snapshot for new peers:', error);
+            }
+          }
+        } catch (error) {
+          console.error('[Yjs] Failed to parse collaboration message:', error);
+        }
+      };
+
+      eventSource.onerror = error => {
+        console.error('[Yjs] Collaboration stream error:', error);
+        sseConnected = false;
+        clearPresenceInterval();
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        if (disposed || typeof window === 'undefined') {
+          return;
+        }
+        if (reconnectTimer !== null) {
+          return;
+        }
+        const delay = Math.min(1000 * 2 ** reconnectAttempts, 10000);
+        reconnectAttempts += 1;
+        reconnectTimer = window.setTimeout(() => {
+          reconnectTimer = null;
+          openEventStream();
+        }, delay);
+      };
+    };
+
+    openEventStream();
+
+    const shutdownSse = () => {
+      flushQueuedUpdates({ allowDuringDispose: true });
+      postCollaboration(
+        { type: 'presence', presence: null },
+        { keepalive: true, preferBeacon: true, allowDuringDispose: true },
+      );
+      disposed = true;
+      sseConnected = false;
+      clearUpdateTimer();
+      clearPresenceInterval();
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', handlePageHide);
+        if (reconnectTimer !== null) {
+          window.clearTimeout(reconnectTimer);
+        }
+      }
+      presenceStateRef.current = [];
+      knownSseClientsRef.current = new Set();
+      hasBroadcastableStateRef.current = false;
+      onPresenceChangeRef.current?.([]);
+    };
 
     const clientId = generateClientId();
     let disposed = false;
@@ -641,24 +928,13 @@ export default function CollaborativeEditor({
     collabRef.current = {
       ydoc,
       ymap,
-      provider,
-      awareness,
       unobserveFiles: () => ymap.unobserve(onFilesChanged),
-      unsubscribePresence: awareness ? () => awareness.off('update', emitPresenceSnapshot) : null,
       sendPresence: presence => {
-        if (awareness) {
-          if (!presence) {
-            awareness.setLocalState(null);
-          } else {
-            awareness.setLocalStateField('presence', {
-              id: presence.id,
-              name: presence.name ?? null,
-              color: presence.color,
-              avatar: presence.avatar ?? null,
-            });
-          }
-        }
         sendPresencePayload(presence);
+      },
+      closeSse: shutdownSse,
+      updateProjectName: () => {
+        tryBroadcastProjectName(projectNameRef.current ?? pendingProjectName ?? null);
       },
       closeSse: shutdownSse,
     };
@@ -678,9 +954,7 @@ export default function CollaborativeEditor({
     return () => {
       try {
         ymap.unobserve(onFilesChanged);
-        awareness?.off('update', emitPresenceSnapshot);
-        awareness?.setLocalState(null);
-        provider?.destroy();
+        ydoc.off('update', onDocUpdate);
         ydoc.destroy();
       } catch {}
       ydoc.off('update', onDocUpdate);
@@ -688,12 +962,9 @@ export default function CollaborativeEditor({
       appliedSnapshotRef.current = null;
       onDoc?.(null);
       shutdownSse();
-      webrtcPresenceRef.current = [];
-      emitCombinedPresence();
     };
   }, [projectId]);
 
-  /* React → Yjs */
   useEffect(() => {
     if (!projectId) return;
     const c = collabRef.current;
@@ -725,7 +996,6 @@ export default function CollaborativeEditor({
     queueMicrotask(() => (suppressLocalSyncRef.current = false));
   }, [files, projectId]);
 
-  /* Reapply encoded snapshot if different */
   useEffect(() => {
     if (!projectId || !encodedState) return;
     if (appliedSnapshotRef.current === encodedState) return;
@@ -748,9 +1018,8 @@ export default function CollaborativeEditor({
     }
   }, [encodedState, projectId]);
 
-  /* Presence heartbeat */
   useEffect(() => {
-    const id = setInterval(() => collabRef.current?.sendPresence(localPresenceRef.current), 15_000);
+    const id = setInterval(() => collabRef.current?.sendPresence(localPresenceRef.current), 15000);
     return () => clearInterval(id);
   }, []);
 
@@ -768,3 +1037,4 @@ export default function CollaborativeEditor({
     </div>
   );
 }
+
