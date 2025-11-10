@@ -1,8 +1,13 @@
+import { Duplex } from 'node:stream';
+import ShareDB from 'sharedb';
+import type { Doc, JSONOp } from 'sharedb';
 import { NextRequest } from 'next/server';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
+
+type ConnectionStateDoc = Doc<PulseboardDoc>;
 
 type PulseStatus = 'blocked' | 'in-progress' | 'shipped';
 
@@ -20,16 +25,124 @@ type Peer = {
   color: string;
 };
 
-type ServerEvent =
-  | { type: 'snapshot'; items: PulseItem[] }
-  | { type: 'item'; item: PulseItem }
-  | { type: 'presence'; peers: Peer[] };
+type PulseboardDoc = {
+  items: Record<string, PulseItem>;
+  peers: Record<string, Peer>;
+};
+
+type SubmitOptions = { source?: unknown };
 
 const palette = ['#22d3ee', '#a855f7', '#f97316', '#22c55e', '#14b8a6', '#f59e0b', '#facc15', '#ef4444'];
 
-const items = new Map<string, PulseItem>();
-const clients = new Map<string, WebSocket>();
-const peers = new Map<string, Peer>();
+const backend = new ShareDB();
+const connection = backend.connect();
+const doc = connection.get<PulseboardDoc>('dev-test', 'pulseboard');
+
+const docReady: Promise<void> = new Promise((resolve, reject) => {
+  doc.subscribe(error => {
+    if (error) {
+      reject(error);
+      return;
+    }
+    if (doc.type === null) {
+      doc.create(buildInitialData(), err => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+      return;
+    }
+    resolve();
+  });
+});
+
+type JSONOpComponent = JSONOp[number];
+
+class ShareDBWebSocketStream extends Duplex {
+  private socket: WebSocket;
+  private isClosed = false;
+
+  constructor(socket: WebSocket) {
+    super({ objectMode: true });
+    this.socket = socket;
+
+    socket.addEventListener('message', event => {
+      if (this.isClosed) {
+        return;
+      }
+      try {
+        const data = parseJSON(event.data);
+        if (data !== undefined) {
+          this.push(data);
+        }
+      } catch (error) {
+        this.destroy(error as Error);
+      }
+    });
+
+    socket.addEventListener('close', () => {
+      if (this.isClosed) {
+        return;
+      }
+      this.isClosed = true;
+      this.push(null);
+      this.emit('close');
+    });
+
+    socket.addEventListener('error', () => {
+      if (this.isClosed) {
+        return;
+      }
+      this.isClosed = true;
+      this.destroy(new Error('WebSocket error'));
+    });
+  }
+
+  _read(): void {
+    // No-op: pushes happen from WebSocket messages
+  }
+
+  _write(chunk: unknown, _encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
+    if (this.isClosed) {
+      callback();
+      return;
+    }
+    try {
+      this.socket.send(JSON.stringify(chunk));
+      callback();
+    } catch (error) {
+      callback(error as Error);
+    }
+  }
+
+  _final(callback: (error?: Error | null) => void): void {
+    if (!this.isClosed) {
+      try {
+        this.socket.close();
+      } catch {
+        // Ignore close errors
+      }
+      this.isClosed = true;
+    }
+    callback();
+  }
+}
+
+function parseJSON(payload: unknown): unknown {
+  if (typeof payload === 'string') {
+    return JSON.parse(payload);
+  }
+  if (payload instanceof ArrayBuffer) {
+    const textDecoder = new TextDecoder();
+    return JSON.parse(textDecoder.decode(payload));
+  }
+  if (typeof Blob !== 'undefined' && payload instanceof Blob) {
+    return undefined;
+  }
+  return undefined;
+}
 
 function generateId(prefix: string): string {
   try {
@@ -37,7 +150,7 @@ function generateId(prefix: string): string {
       return `${prefix}_${crypto.randomUUID()}`;
     }
   } catch {
-    // ignore and fall back to Math.random
+    // ignore
   }
   return `${prefix}_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
 }
@@ -51,92 +164,95 @@ function colorForClient(clientId: string): string {
   return palette[Math.abs(hash) % palette.length];
 }
 
-function snapshot(): PulseItem[] {
-  return Array.from(items.values()).sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-function broadcast(event: ServerEvent, excludeClientId?: string) {
-  const payload = JSON.stringify(event);
-  clients.forEach((socket, id) => {
-    if (excludeClientId && excludeClientId === id) {
-      return;
-    }
-    try {
-      socket.send(payload);
-    } catch {
-      removeClient(id, socket);
-    }
-  });
-}
-
-function broadcastPresence() {
-  broadcast({ type: 'presence', peers: Array.from(peers.values()) });
-}
-
-function removeClient(clientId: string, socket: WebSocket) {
-  const current = clients.get(clientId);
-  if (!current || current !== socket) {
-    return;
-  }
-  clients.delete(clientId);
-  peers.delete(clientId);
-  broadcastPresence();
-}
-
-function bootOnce() {
-  if (items.size > 0) {
-    return;
-  }
+function buildInitialData(): PulseboardDoc {
   const now = Date.now();
-  const seed: Array<[string, PulseItem]> = [
-    [
-      generateId('pulse'),
-      {
-        id: '',
-        title: 'Architect service boundaries',
-        status: 'in-progress',
-        owner: 'Jess',
-        updatedAt: now - 1000 * 60 * 3,
-      },
-    ],
-    [
-      generateId('pulse'),
-      {
-        id: '',
-        title: 'Wire realtime dashboards',
-        status: 'blocked',
-        owner: 'Taylor',
-        updatedAt: now - 1000 * 60 * 7,
-      },
-    ],
-    [
-      generateId('pulse'),
-      {
-        id: '',
-        title: 'Polish onboarding tour',
-        status: 'shipped',
-        owner: 'Sam',
-        updatedAt: now - 1000 * 60 * 12,
-      },
-    ],
-    [
-      generateId('pulse'),
-      {
-        id: '',
-        title: 'Benchmark production replicas',
-        status: 'in-progress',
-        owner: 'Dev',
-        updatedAt: now - 1000 * 60 * 18,
-      },
-    ],
+  const base: Array<Omit<PulseItem, 'id'>> = [
+    {
+      title: 'Architect service boundaries',
+      status: 'in-progress',
+      owner: 'Jess',
+      updatedAt: now - 1000 * 60 * 3,
+    },
+    {
+      title: 'Wire realtime dashboards',
+      status: 'blocked',
+      owner: 'Taylor',
+      updatedAt: now - 1000 * 60 * 7,
+    },
+    {
+      title: 'Polish onboarding tour',
+      status: 'shipped',
+      owner: 'Sam',
+      updatedAt: now - 1000 * 60 * 12,
+    },
+    {
+      title: 'Benchmark production replicas',
+      status: 'in-progress',
+      owner: 'Dev',
+      updatedAt: now - 1000 * 60 * 18,
+    },
   ];
-  seed.forEach(([id, payload]) => {
-    const entry = { ...payload, id };
-    items.set(id, entry);
+
+  const items: Record<string, PulseItem> = {};
+  base.forEach(entry => {
+    const id = generateId('pulse');
+    items[id] = { ...entry, id };
   });
+
+  return {
+    items,
+    peers: {},
+  };
 }
 
-bootOnce();
+async function ensurePeer(clientId: string): Promise<void> {
+  await docReady;
+  const current = doc.data?.peers?.[clientId];
+  const peer: Peer = {
+    clientId,
+    name: current?.name ?? null,
+    color: colorForClient(clientId),
+  };
+
+  const op: JSONOp = [
+    {
+      p: ['peers', clientId],
+      oi: peer,
+    },
+  ];
+
+  if (current) {
+    (op[0] as JSONOpComponent).od = current;
+  }
+
+  await submitOp(doc, op, { source: 'server:peer:ensure' });
+}
+
+async function removePeer(clientId: string): Promise<void> {
+  await docReady;
+  const existing = doc.data?.peers?.[clientId];
+  if (!existing) {
+    return;
+  }
+  await submitOp(doc, [
+    {
+      p: ['peers', clientId],
+      od: existing,
+    },
+  ], { source: 'server:peer:remove' });
+}
+
+function submitOp(targetDoc: ConnectionStateDoc, op: JSONOp, options: SubmitOptions): Promise<void> {
+  return new Promise((resolve, reject) => {
+    targetDoc.submitOp(op, options, error => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
 
 export async function GET(request: NextRequest) {
   if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') {
@@ -146,133 +262,37 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const clientId = searchParams.get('clientId') ?? generateId('client');
 
-  const previousPeer = peers.get(clientId);
-  const existing = clients.get(clientId);
-  if (existing) {
-    try {
-      existing.close(4000, 'Reconnected');
-    } catch {
-      // ignore close errors
-    }
-    clients.delete(clientId);
-    peers.delete(clientId);
-  }
-
   const { WebSocketPair } = globalThis as typeof globalThis & {
     WebSocketPair?: new () => { 0: WebSocket; 1: WebSocket };
   };
+
   if (!WebSocketPair) {
     return new Response('WebSocketPair not supported in this environment', { status: 500 });
   }
+
   const pair = new WebSocketPair();
   const clientSocket = pair[0];
   const serverSocket = pair[1];
   (serverSocket as unknown as { accept: () => void }).accept();
 
-  clients.set(clientId, serverSocket);
-  peers.set(clientId, {
-    clientId,
-    name: previousPeer?.name ?? null,
-    color: colorForClient(clientId),
-  });
+  const stream = new ShareDBWebSocketStream(serverSocket);
 
   try {
-    serverSocket.send(JSON.stringify({ type: 'snapshot', items: snapshot() }));
-  } catch {
-    // ignore send errors on initial payload
+    await ensurePeer(clientId);
+  } catch (error) {
+    stream.destroy(error as Error);
+    return new Response('Failed to initialise peer', { status: 500 });
   }
 
-  broadcastPresence();
+  backend.listen(stream);
 
-  serverSocket.addEventListener('message', event => {
-    if (typeof event.data !== 'string') {
-      return;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(event.data);
-    } catch {
-      return;
-    }
-    if (!parsed || typeof parsed !== 'object') {
-      return;
-    }
-    const { type } = parsed as { type?: unknown };
-    if (type === 'presence') {
-      const { name } = parsed as { name?: unknown };
-      const normalized = typeof name === 'string' ? name.trim().slice(0, 80) : null;
-      peers.set(clientId, {
-        clientId,
-        name: normalized && normalized.length > 0 ? normalized : null,
-        color: colorForClient(clientId),
-      });
-      broadcastPresence();
-      return;
-    }
-    if (type === 'status') {
-      const { itemId, status, owner } = parsed as {
-        itemId?: unknown;
-        status?: unknown;
-        owner?: unknown;
-      };
-      if (typeof itemId !== 'string') {
-        return;
-      }
-      const entry = items.get(itemId);
-      if (!entry) {
-        return;
-      }
-      const normalizedStatus =
-        status === 'blocked' || status === 'in-progress' || status === 'shipped' ? status : null;
-      if (!normalizedStatus) {
-        return;
-      }
-      const normalizedOwner = typeof owner === 'string' ? owner.trim().slice(0, 80) : null;
-      const updated: PulseItem = {
-        ...entry,
-        status: normalizedStatus,
-        owner: normalizedOwner && normalizedOwner.length > 0 ? normalizedOwner : entry.owner,
-        updatedAt: Date.now(),
-      };
-      items.set(itemId, updated);
-      broadcast({ type: 'item', item: updated });
-      return;
-    }
-    if (type === 'create') {
-      const { title, owner, status } = parsed as {
-        title?: unknown;
-        owner?: unknown;
-        status?: unknown;
-      };
-      if (typeof title !== 'string') {
-        return;
-      }
-      const normalizedTitle = title.trim().slice(0, 160);
-      if (normalizedTitle.length === 0) {
-        return;
-      }
-      const normalizedStatus =
-        status === 'blocked' || status === 'in-progress' || status === 'shipped' ? status : 'in-progress';
-      const normalizedOwner = typeof owner === 'string' ? owner.trim().slice(0, 80) : null;
-      const id = generateId('pulse');
-      const item: PulseItem = {
-        id,
-        title: normalizedTitle,
-        status: normalizedStatus,
-        owner: normalizedOwner && normalizedOwner.length > 0 ? normalizedOwner : null,
-        updatedAt: Date.now(),
-      };
-      items.set(id, item);
-      broadcast({ type: 'item', item });
-    }
+  stream.on('close', () => {
+    void removePeer(clientId);
   });
 
-  const handleDisconnect = () => {
-    removeClient(clientId, serverSocket);
-  };
-
-  serverSocket.addEventListener('close', handleDisconnect);
-  serverSocket.addEventListener('error', handleDisconnect);
+  stream.on('error', () => {
+    void removePeer(clientId);
+  });
 
   return new Response(null, {
     status: 101,
