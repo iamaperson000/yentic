@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
-export const runtime = 'nodejs';
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
@@ -20,12 +20,6 @@ type Peer = {
   color: string;
 };
 
-type Client = {
-  clientId: string;
-  writer: WritableStreamDefaultWriter<string>;
-  heartbeat: ReturnType<typeof setInterval>;
-};
-
 type ServerEvent =
   | { type: 'snapshot'; items: PulseItem[] }
   | { type: 'item'; item: PulseItem }
@@ -34,7 +28,7 @@ type ServerEvent =
 const palette = ['#22d3ee', '#a855f7', '#f97316', '#22c55e', '#14b8a6', '#f59e0b', '#facc15', '#ef4444'];
 
 const items = new Map<string, PulseItem>();
-const clients = new Map<string, Client>();
+const clients = new Map<string, WebSocket>();
 const peers = new Map<string, Peer>();
 
 function generateId(prefix: string): string {
@@ -43,7 +37,7 @@ function generateId(prefix: string): string {
       return `${prefix}_${crypto.randomUUID()}`;
     }
   } catch {
-    // ignore
+    // ignore and fall back to Math.random
   }
   return `${prefix}_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
 }
@@ -57,36 +51,36 @@ function colorForClient(clientId: string): string {
   return palette[Math.abs(hash) % palette.length];
 }
 
+function snapshot(): PulseItem[] {
+  return Array.from(items.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 function broadcast(event: ServerEvent, excludeClientId?: string) {
-  const payload = `data: ${JSON.stringify(event)}\n\n`;
-  clients.forEach((client, id) => {
+  const payload = JSON.stringify(event);
+  clients.forEach((socket, id) => {
     if (excludeClientId && excludeClientId === id) {
       return;
     }
-    client.writer.write(payload).catch(() => {
-      disconnect(id);
-    });
+    try {
+      socket.send(payload);
+    } catch {
+      removeClient(id, socket);
+    }
   });
 }
 
-function disconnect(clientId: string) {
-  const client = clients.get(clientId);
-  if (!client) {
-    return;
-  }
-  clearInterval(client.heartbeat);
-  try {
-    void client.writer.close();
-  } catch {
-    // ignore
-  }
-  clients.delete(clientId);
-  peers.delete(clientId);
+function broadcastPresence() {
   broadcast({ type: 'presence', peers: Array.from(peers.values()) });
 }
 
-function snapshot(): PulseItem[] {
-  return Array.from(items.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+function removeClient(clientId: string, socket: WebSocket) {
+  const current = clients.get(clientId);
+  if (!current || current !== socket) {
+    return;
+  }
+  clients.delete(clientId);
+  peers.delete(clientId);
+  broadcastPresence();
 }
 
 function bootOnce() {
@@ -145,126 +139,143 @@ function bootOnce() {
 bootOnce();
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const clientId = searchParams.get('clientId');
-
-  if (!clientId) {
-    return NextResponse.json({ error: 'clientId is required' }, { status: 400 });
+  if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') {
+    return new Response('Expected WebSocket upgrade', { status: 426 });
   }
 
-  const stream = new TransformStream();
-  const writer = stream.writable.getWriter();
+  const { searchParams } = new URL(request.url);
+  const clientId = searchParams.get('clientId') ?? generateId('client');
 
-  const heartbeat = setInterval(() => {
-    const client = clients.get(clientId);
-    if (!client) {
-      clearInterval(heartbeat);
+  const previousPeer = peers.get(clientId);
+  const existing = clients.get(clientId);
+  if (existing) {
+    try {
+      existing.close(4000, 'Reconnected');
+    } catch {
+      // ignore close errors
+    }
+    clients.delete(clientId);
+    peers.delete(clientId);
+  }
+
+  const { WebSocketPair } = globalThis as typeof globalThis & {
+    WebSocketPair?: new () => { 0: WebSocket; 1: WebSocket };
+  };
+  if (!WebSocketPair) {
+    return new Response('WebSocketPair not supported in this environment', { status: 500 });
+  }
+  const pair = new WebSocketPair();
+  const clientSocket = pair[0];
+  const serverSocket = pair[1];
+  (serverSocket as unknown as { accept: () => void }).accept();
+
+  clients.set(clientId, serverSocket);
+  peers.set(clientId, {
+    clientId,
+    name: previousPeer?.name ?? null,
+    color: colorForClient(clientId),
+  });
+
+  try {
+    serverSocket.send(JSON.stringify({ type: 'snapshot', items: snapshot() }));
+  } catch {
+    // ignore send errors on initial payload
+  }
+
+  broadcastPresence();
+
+  serverSocket.addEventListener('message', event => {
+    if (typeof event.data !== 'string') {
       return;
     }
-    client.writer.write(':ping\n\n').catch(() => {
-      disconnect(clientId);
-    });
-  }, 25000);
-
-  clients.set(clientId, { clientId, writer, heartbeat });
-
-  const initial: ServerEvent = { type: 'snapshot', items: snapshot() };
-  void writer.write(`data: ${JSON.stringify(initial)}\n\n`);
-  broadcast({ type: 'presence', peers: Array.from(peers.values()) });
-
-  request.signal.addEventListener('abort', () => {
-    disconnect(clientId);
-  });
-
-  return new Response(stream.readable, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      Connection: 'keep-alive',
-      'Cache-Control': 'no-cache, no-transform',
-    },
-  });
-}
-
-export async function POST(request: NextRequest) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
-  }
-
-  if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
-  }
-
-  const { type, clientId } = body as { type?: unknown; clientId?: unknown };
-
-  if (typeof clientId !== 'string' || clientId.length === 0) {
-    return NextResponse.json({ error: 'clientId is required' }, { status: 400 });
-  }
-
-  if (type === 'presence') {
-    const { name } = body as { name?: unknown };
-    const normalizedName = typeof name === 'string' ? name.trim().slice(0, 80) : null;
-    peers.set(
-      clientId,
-      {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      return;
+    }
+    const { type } = parsed as { type?: unknown };
+    if (type === 'presence') {
+      const { name } = parsed as { name?: unknown };
+      const normalized = typeof name === 'string' ? name.trim().slice(0, 80) : null;
+      peers.set(clientId, {
         clientId,
-        name: normalizedName && normalizedName.length > 0 ? normalizedName : null,
+        name: normalized && normalized.length > 0 ? normalized : null,
         color: colorForClient(clientId),
-      },
-    );
-    broadcast({ type: 'presence', peers: Array.from(peers.values()) });
-    return NextResponse.json({ ok: true });
-  }
+      });
+      broadcastPresence();
+      return;
+    }
+    if (type === 'status') {
+      const { itemId, status, owner } = parsed as {
+        itemId?: unknown;
+        status?: unknown;
+        owner?: unknown;
+      };
+      if (typeof itemId !== 'string') {
+        return;
+      }
+      const entry = items.get(itemId);
+      if (!entry) {
+        return;
+      }
+      const normalizedStatus =
+        status === 'blocked' || status === 'in-progress' || status === 'shipped' ? status : null;
+      if (!normalizedStatus) {
+        return;
+      }
+      const normalizedOwner = typeof owner === 'string' ? owner.trim().slice(0, 80) : null;
+      const updated: PulseItem = {
+        ...entry,
+        status: normalizedStatus,
+        owner: normalizedOwner && normalizedOwner.length > 0 ? normalizedOwner : entry.owner,
+        updatedAt: Date.now(),
+      };
+      items.set(itemId, updated);
+      broadcast({ type: 'item', item: updated });
+      return;
+    }
+    if (type === 'create') {
+      const { title, owner, status } = parsed as {
+        title?: unknown;
+        owner?: unknown;
+        status?: unknown;
+      };
+      if (typeof title !== 'string') {
+        return;
+      }
+      const normalizedTitle = title.trim().slice(0, 160);
+      if (normalizedTitle.length === 0) {
+        return;
+      }
+      const normalizedStatus =
+        status === 'blocked' || status === 'in-progress' || status === 'shipped' ? status : 'in-progress';
+      const normalizedOwner = typeof owner === 'string' ? owner.trim().slice(0, 80) : null;
+      const id = generateId('pulse');
+      const item: PulseItem = {
+        id,
+        title: normalizedTitle,
+        status: normalizedStatus,
+        owner: normalizedOwner && normalizedOwner.length > 0 ? normalizedOwner : null,
+        updatedAt: Date.now(),
+      };
+      items.set(id, item);
+      broadcast({ type: 'item', item });
+    }
+  });
 
-  if (type === 'status') {
-    const { itemId, status, owner } = body as { itemId?: unknown; status?: unknown; owner?: unknown };
-    if (typeof itemId !== 'string' || !items.has(itemId)) {
-      return NextResponse.json({ error: 'Unknown item' }, { status: 400 });
-    }
-    const normalizedStatus =
-      status === 'blocked' || status === 'in-progress' || status === 'shipped' ? status : null;
-    if (!normalizedStatus) {
-      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
-    }
-    const normalizedOwner = typeof owner === 'string' ? owner.trim().slice(0, 80) : null;
-    const entry = items.get(itemId)!;
-    const updated: PulseItem = {
-      ...entry,
-      status: normalizedStatus,
-      owner: normalizedOwner && normalizedOwner.length > 0 ? normalizedOwner : entry.owner,
-      updatedAt: Date.now(),
-    };
-    items.set(itemId, updated);
-    broadcast({ type: 'item', item: updated });
-    return NextResponse.json({ ok: true });
-  }
+  const handleDisconnect = () => {
+    removeClient(clientId, serverSocket);
+  };
 
-  if (type === 'create') {
-    const { title, owner, status } = body as { title?: unknown; owner?: unknown; status?: unknown };
-    if (typeof title !== 'string') {
-      return NextResponse.json({ error: 'Title is required' }, { status: 400 });
-    }
-    const normalizedTitle = title.trim().slice(0, 160);
-    if (normalizedTitle.length === 0) {
-      return NextResponse.json({ error: 'Title is required' }, { status: 400 });
-    }
-    const normalizedStatus =
-      status === 'blocked' || status === 'in-progress' || status === 'shipped' ? status : 'in-progress';
-    const normalizedOwner = typeof owner === 'string' ? owner.trim().slice(0, 80) : null;
-    const id = generateId('pulse');
-    const item: PulseItem = {
-      id,
-      title: normalizedTitle,
-      status: normalizedStatus,
-      owner: normalizedOwner && normalizedOwner.length > 0 ? normalizedOwner : null,
-      updatedAt: Date.now(),
-    };
-    items.set(id, item);
-    broadcast({ type: 'item', item });
-    return NextResponse.json({ ok: true, id });
-  }
+  serverSocket.addEventListener('close', handleDisconnect);
+  serverSocket.addEventListener('error', handleDisconnect);
 
-  return NextResponse.json({ error: 'Unsupported command' }, { status: 400 });
+  return new Response(null, {
+    status: 101,
+    webSocket: clientSocket,
+  } as ResponseInit & { webSocket: WebSocket });
 }

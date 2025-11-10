@@ -108,30 +108,6 @@ function statusDot(status: PulseStatus): string {
     default:
       return 'bg-sky-400';
   }
-  return null;
-}
-
-function randomBetween(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
-}
-
-function sortNotes(notes: Note[]): Note[] {
-  return notes.slice().sort((a, b) => a.createdAt - b.createdAt);
-}
-
-async function postUpdate(payload: Record<string, unknown>): Promise<void> {
-  try {
-    await fetch('/api/dev-test/realtime', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    });
-  } catch {
-    // fire-and-forget; UI will reconcile from stream
-  }
 }
 
 export default function DevTestPage(): JSX.Element {
@@ -143,9 +119,45 @@ export default function DevTestPage(): JSX.Element {
   const [displayName, setDisplayName] = useState<string>('');
 
   const clientIdRef = useRef<string>(getClientId());
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const displayNameRef = useRef<string>('');
+  const pendingQueueRef = useRef<Record<string, unknown>[]>([]);
+  const connectRef = useRef<() => void>(() => {});
+
+  const flushPending = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    if (pendingQueueRef.current.length === 0) {
+      return;
+    }
+    const queued = pendingQueueRef.current.splice(0, pendingQueueRef.current.length);
+    for (let index = 0; index < queued.length; index += 1) {
+      const payload = queued[index];
+      try {
+        socket.send(JSON.stringify(payload));
+      } catch {
+        const remaining = queued.slice(index);
+        pendingQueueRef.current = [...remaining, ...pendingQueueRef.current];
+        break;
+      }
+    }
+  }, []);
+
+  const sendCommand = useCallback((payload: Record<string, unknown>) => {
+    const socket = socketRef.current;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      try {
+        socket.send(JSON.stringify(payload));
+        return;
+      } catch {
+        // fall through to queueing on failure
+      }
+    }
+    pendingQueueRef.current.push(payload);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -154,10 +166,15 @@ export default function DevTestPage(): JSX.Element {
     const stored = window.localStorage.getItem(displayNameKey);
     if (stored) {
       setDisplayName(stored);
-      displayNameRef.current = stored;
-      void postUpdate({ type: 'presence', clientId: clientIdRef.current, name: stored });
+      const normalizedStored = stored.trim();
+      displayNameRef.current = normalizedStored;
+      sendCommand({
+        type: 'presence',
+        clientId: clientIdRef.current,
+        name: normalizedStored.length > 0 ? normalizedStored : null,
+      });
     }
-  }, []);
+  }, [sendCommand]);
 
   const sortedItems = useMemo(
     () => [...items].sort((a, b) => b.updatedAt - a.updatedAt),
@@ -183,20 +200,39 @@ export default function DevTestPage(): JSX.Element {
   }, []);
 
   const connect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+    if (typeof window === 'undefined') {
+      return;
     }
+
+    if (socketRef.current) {
+      try {
+        socketRef.current.close();
+      } catch {
+        // ignore errors while closing previous sockets
+      }
+    }
+
     setConnection('connecting');
-    const source = new EventSource(`/api/dev-test/realtime?clientId=${clientIdRef.current}`);
-    eventSourceRef.current = source;
 
-    source.onopen = () => {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${protocol}://${window.location.host}/api/dev-test/realtime?clientId=${encodeURIComponent(
+      clientIdRef.current,
+    )}`;
+    const socket = new WebSocket(url);
+    socketRef.current = socket;
+
+    socket.addEventListener('open', () => {
       setConnection('connected');
-      void postUpdate({ type: 'presence', clientId: clientIdRef.current, name: displayNameRef.current });
-    };
+      flushPending();
+      sendCommand({
+        type: 'presence',
+        clientId: clientIdRef.current,
+        name: displayNameRef.current.length > 0 ? displayNameRef.current : null,
+      });
+    });
 
-    source.onmessage = event => {
-      if (!event.data) {
+    socket.addEventListener('message', event => {
+      if (typeof event.data !== 'string') {
         return;
       }
       let parsed: unknown;
@@ -212,19 +248,39 @@ export default function DevTestPage(): JSX.Element {
       if (type === 'snapshot' || type === 'item' || type === 'presence') {
         handleServerMessage(parsed as ServerMessage);
       }
-    };
+    });
 
-    source.onerror = () => {
-      setConnection('disconnected');
-      source.close();
+    const scheduleReconnect = () => {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
       reconnectTimerRef.current = setTimeout(() => {
-        connect();
+        connectRef.current();
       }, 1500);
     };
-  }, [handleServerMessage]);
+
+    socket.addEventListener('close', () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
+      socketRef.current = null;
+      setConnection('disconnected');
+      scheduleReconnect();
+    });
+
+    socket.addEventListener('error', () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
+      try {
+        socket.close();
+      } catch {
+        // ignore
+      }
+    });
+  }, [flushPending, handleServerMessage, sendCommand]);
+
+  connectRef.current = connect;
 
   useEffect(() => {
     connect();
@@ -232,7 +288,13 @@ export default function DevTestPage(): JSX.Element {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
-      eventSourceRef.current?.close();
+      if (socketRef.current) {
+        try {
+          socketRef.current.close();
+        } catch {
+          // ignore errors when closing during unmount
+        }
+      }
     };
   }, [connect]);
 
@@ -240,13 +302,18 @@ export default function DevTestPage(): JSX.Element {
     (event: ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value;
       setDisplayName(value);
-      displayNameRef.current = value.trim();
+      const normalized = value.trim();
+      displayNameRef.current = normalized;
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(displayNameKey, value);
       }
-      void postUpdate({ type: 'presence', clientId: clientIdRef.current, name: displayNameRef.current });
+      sendCommand({
+        type: 'presence',
+        clientId: clientIdRef.current,
+        name: normalized.length > 0 ? normalized : null,
+      });
     },
-    [],
+    [sendCommand],
   );
 
   const resetForm = useCallback(() => {
@@ -262,7 +329,7 @@ export default function DevTestPage(): JSX.Element {
         return;
       }
       setDraftTitle('');
-      void postUpdate({
+      sendCommand({
         type: 'create',
         clientId: clientIdRef.current,
         title: normalized,
@@ -271,18 +338,21 @@ export default function DevTestPage(): JSX.Element {
       });
       resetForm();
     },
-    [draftStatus, draftTitle, resetForm],
+    [draftStatus, draftTitle, resetForm, sendCommand],
   );
 
-  const updateStatus = useCallback((itemId: string, status: PulseStatus) => {
-    void postUpdate({
-      type: 'status',
-      clientId: clientIdRef.current,
-      itemId,
-      status,
-      owner: displayNameRef.current,
-    });
-  }, []);
+  const updateStatus = useCallback(
+    (itemId: string, status: PulseStatus) => {
+      sendCommand({
+        type: 'status',
+        clientId: clientIdRef.current,
+        itemId,
+        status,
+        owner: displayNameRef.current.length > 0 ? displayNameRef.current : null,
+      });
+    },
+    [sendCommand],
+  );
 
   const connectionBadge = useMemo(() => {
     switch (connection) {
