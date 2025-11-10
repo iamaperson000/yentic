@@ -95,6 +95,7 @@ function statusTone(status: PulseStatus): string {
     default:
       return 'bg-sky-500/20 text-sky-200 ring-sky-400/40';
   }
+  return result;
 }
 
 function statusDot(status: PulseStatus): string {
@@ -107,6 +108,15 @@ function statusDot(status: PulseStatus): string {
     default:
       return 'bg-sky-400';
   }
+  return null;
+}
+
+function randomBetween(min: number, max: number): number {
+  return Math.random() * (max - min) + min;
+}
+
+function sortNotes(notes: Note[]): Note[] {
+  return notes.slice().sort((a, b) => a.createdAt - b.createdAt);
 }
 
 async function postUpdate(payload: Record<string, unknown>): Promise<void> {
