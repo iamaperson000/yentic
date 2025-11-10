@@ -75,10 +75,6 @@ function generateClientId(): string {
   return `client-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
 }
 
-function createOperationId(clientId: string): string {
-  return `${clientId}:op:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
-}
-
 function base64Encode(input: string): string {
   if (typeof window === 'undefined') {
     return Buffer.from(input, 'utf-8').toString('base64');
@@ -147,20 +143,6 @@ function sanitizeProjectMap(map: ProjectFileMap): ProjectFileMap {
     }
   });
   return result;
-}
-
-function serializeOperation(operation: ProjectOperation): ProjectOperation {
-  if (operation.type === 'set-file') {
-    const sanitized = sanitizeProjectFile(operation.file);
-    if (!sanitized) {
-      throw new Error('Invalid file payload');
-    }
-    return { type: 'set-file', file: sanitized };
-  }
-  if (typeof operation.path !== 'string' || operation.path.trim().length === 0) {
-    throw new Error('Invalid remove path');
-  }
-  return { type: 'remove-file', path: operation.path.trim() };
 }
 
 function deserializeCollaborationEnvelope(serialized: string): CollaborationEnvelope | null {
@@ -283,13 +265,11 @@ export default function CollaborativeEditor({
   const seenOperationsRef = useRef<Set<string>>(new Set());
   const hasShareableStateRef = useRef(false);
   const suppressLocalSyncRef = useRef(false);
+  const pendingLocalUpdateRef = useRef<{ serialized: string; options?: PostOptions } | null>(null);
   const sendUpdateRef = useRef<(serialized: string, options?: PostOptions) => void>((serialized, options) => {
-    pendingLocalUpdatesRef.current.push({ serialized, options });
+    pendingLocalUpdateRef.current = { serialized, options };
   });
   const sendPresenceRef = useRef<(() => void) | null>(null);
-  const pendingLocalUpdatesRef = useRef<
-    Array<{ serialized: string; options?: PostOptions }>
-  >([]);
   const connectedRef = useRef(false);
   const knownPeersRef = useRef<Set<string>>(new Set());
   const localPresenceRef = useRef<LocalCollaboratorPresence | null>(null);
@@ -388,9 +368,9 @@ export default function CollaborativeEditor({
       filesRef.current = {};
       versionRef.current = 0;
       seenOperationsRef.current = new Set();
-      pendingLocalUpdatesRef.current = [];
+      pendingLocalUpdateRef.current = null;
       sendUpdateRef.current = (serialized, options) => {
-        pendingLocalUpdatesRef.current.push({ serialized, options });
+        pendingLocalUpdateRef.current = { serialized, options };
       };
       sendPresenceRef.current = null;
       snapshotRef.current = null;
@@ -476,15 +456,53 @@ export default function CollaborativeEditor({
       processPendingRequests();
     };
 
-    sendUpdateRef.current = (serialized, options) => {
-      postCollaboration({ type: 'update', update: serialized }, options);
+    let pendingBroadcast: { serialized: string; options?: PostOptions } | null = null;
+    let broadcastTimer: number | null = null;
+
+    const flushPendingBroadcast = (override?: { serialized?: string; options?: PostOptions }) => {
+      const candidate =
+        override && typeof override.serialized === 'string'
+          ? { serialized: override.serialized, options: override.options }
+          : pendingBroadcast;
+      if (!candidate) {
+        return;
+      }
+      pendingBroadcast = null;
+      if (broadcastTimer !== null) {
+        window.clearTimeout(broadcastTimer);
+        broadcastTimer = null;
+      }
+      postCollaboration({ type: 'update', update: candidate.serialized }, candidate.options);
     };
 
-    if (pendingLocalUpdatesRef.current.length > 0) {
-      const queued = pendingLocalUpdatesRef.current.splice(0, pendingLocalUpdatesRef.current.length);
-      queued.forEach(item => {
-        postCollaboration({ type: 'update', update: item.serialized }, item.options);
-      });
+    const scheduleBroadcast = (serialized: string, options?: PostOptions) => {
+      pendingBroadcast = { serialized, options };
+      if (options?.keepalive) {
+        flushPendingBroadcast({ serialized, options });
+        return;
+      }
+      if (broadcastTimer !== null) {
+        return;
+      }
+      broadcastTimer = window.setTimeout(() => {
+        broadcastTimer = null;
+        const candidate = pendingBroadcast;
+        pendingBroadcast = null;
+        if (!candidate) {
+          return;
+        }
+        postCollaboration({ type: 'update', update: candidate.serialized }, candidate.options);
+      }, 120);
+    };
+
+    sendUpdateRef.current = (serialized, options) => {
+      scheduleBroadcast(serialized, options);
+    };
+
+    if (pendingLocalUpdateRef.current) {
+      const { serialized, options } = pendingLocalUpdateRef.current;
+      pendingLocalUpdateRef.current = null;
+      scheduleBroadcast(serialized, options);
     }
 
     const buildPresencePayload = () => {
@@ -513,10 +531,13 @@ export default function CollaborativeEditor({
 
     const handlePageHide = () => {
       if (snapshotRef.current) {
-        postCollaboration({ type: 'update', update: snapshotRef.current }, {
-          keepalive: true,
-          preferBeacon: true,
-          allowDuringDispose: true,
+        flushPendingBroadcast({
+          serialized: snapshotRef.current,
+          options: {
+            keepalive: true,
+            preferBeacon: true,
+            allowDuringDispose: true,
+          },
         });
       }
       sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
@@ -524,11 +545,15 @@ export default function CollaborativeEditor({
 
     window.addEventListener('pagehide', handlePageHide);
 
-    const broadcastSnapshot = (options?: PostOptions) => {
+    const broadcastSnapshot = (options?: PostOptions, immediate = false) => {
       if (!hasShareableStateRef.current || !snapshotRef.current) {
         return;
       }
-      postCollaboration({ type: 'update', update: snapshotRef.current }, options);
+      if (immediate) {
+        flushPendingBroadcast({ serialized: snapshotRef.current, options });
+        return;
+      }
+      scheduleBroadcast(snapshotRef.current, options);
     };
 
     const handleUpdateEnvelope = (message: { update: string; clientId?: string }) => {
@@ -586,7 +611,7 @@ export default function CollaborativeEditor({
           reconnectTimer = null;
         }
         connectedRef.current = true;
-        broadcastSnapshot();
+        broadcastSnapshot(undefined, true);
         const payload = buildPresencePayload();
         if (payload) {
           sendPresence(payload);
@@ -685,6 +710,11 @@ export default function CollaborativeEditor({
         eventSource.close();
         eventSource = null;
       }
+      if (broadcastTimer !== null) {
+        window.clearTimeout(broadcastTimer);
+        broadcastTimer = null;
+      }
+      pendingBroadcast = null;
       window.removeEventListener('pagehide', handlePageHide);
       knownPeersRef.current = new Set();
       sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
@@ -713,68 +743,44 @@ export default function CollaborativeEditor({
     }
 
     const previous = filesRef.current;
-    const operations: ProjectOperation[] = [];
+    let hasChanges = false;
 
     Object.values(sanitized).forEach(file => {
       const prev = previous[file.path];
       if (!prev || prev.language !== file.language || prev.code !== file.code) {
-        operations.push({ type: 'set-file', file });
+        hasChanges = true;
       }
     });
 
-    Object.keys(previous).forEach(path => {
-      if (!sanitized[path]) {
-        operations.push({ type: 'remove-file', path });
+    if (!hasChanges) {
+      for (const path of Object.keys(previous)) {
+        if (!sanitized[path]) {
+          hasChanges = true;
+          break;
+        }
       }
-    });
-
-    if (!operations.length) {
-      filesRef.current = sanitized;
-      if (Object.keys(sanitized).length > 0) {
-        hasShareableStateRef.current = true;
-      }
-      const encoded = encodeSnapshotFromMap(sanitized);
-      onSnapshotChange?.(encoded);
-      snapshotRef.current = JSON.stringify({
-        kind: 'snapshot' as const,
-        version: versionRef.current,
-        files: Object.values(sanitized).map(file => cloneProjectFile(file)),
-      });
-      return;
     }
 
     filesRef.current = sanitized;
-    hasShareableStateRef.current = true;
+    if (Object.keys(sanitized).length > 0) {
+      hasShareableStateRef.current = true;
+    }
     const encoded = encodeSnapshotFromMap(sanitized);
     onSnapshotChange?.(encoded);
+
+    if (hasChanges) {
+      versionRef.current += 1;
+    }
+
     snapshotRef.current = JSON.stringify({
       kind: 'snapshot' as const,
       version: versionRef.current,
       files: Object.values(sanitized).map(file => cloneProjectFile(file)),
     });
 
-    operations.forEach(operation => {
-      const opId = createOperationId(clientIdRef.current);
-      seenOperationsRef.current.add(opId);
-      versionRef.current += 1;
-      try {
-        const serializedOp = serializeOperation(operation);
-        const envelope: OperationEnvelope = {
-          kind: 'op',
-          opId,
-          version: versionRef.current,
-          op: serializedOp,
-        };
-        snapshotRef.current = JSON.stringify({
-          kind: 'snapshot' as const,
-          version: versionRef.current,
-          files: Object.values(filesRef.current).map(file => cloneProjectFile(file)),
-        });
-        sendUpdateRef.current(JSON.stringify(envelope));
-      } catch (error) {
-        console.error('[CollaborativeEditor] Failed to serialize local operation:', error);
-      }
-    });
+    if (hasChanges) {
+      sendUpdateRef.current(snapshotRef.current);
+    }
   }, [files, onSnapshotChange, projectId]);
 
   useEffect(() => {
@@ -805,8 +811,9 @@ export default function CollaborativeEditor({
     return () => {
       disposeRef.current?.();
       disposeRef.current = null;
+      pendingLocalUpdateRef.current = null;
       sendUpdateRef.current = (serialized, options) => {
-        pendingLocalUpdatesRef.current.push({ serialized, options });
+        pendingLocalUpdateRef.current = { serialized, options };
       };
       sendPresenceRef.current = null;
     };
