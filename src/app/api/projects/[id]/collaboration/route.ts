@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+
+import { authOptions } from '@/lib/auth';
+import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -36,6 +40,54 @@ type ServerMessage =
   | { type: 'presence'; clients: ServerPresenceEntry[] };
 
 const rooms = new Map<string, Map<string, RoomClient>>();
+
+type AuthorizationResult =
+  | { kind: 'authorized'; userId: string; role: 'owner' | 'editor' | 'viewer' }
+  | { kind: 'unauthorized'; status: 401 | 403 | 404 };
+
+async function authorize(projectId: string): Promise<AuthorizationResult> {
+  const session = await getServerSession(authOptions);
+  const email = session?.user?.email ?? null;
+  if (!email) {
+    return { kind: 'unauthorized', status: 401 };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+
+  if (!user) {
+    return { kind: 'unauthorized', status: 401 };
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      userId: true,
+      collaborators: {
+        select: { userId: true, role: true },
+      },
+    },
+  });
+
+  if (!project) {
+    return { kind: 'unauthorized', status: 404 };
+  }
+
+  if (project.userId === user.id) {
+    return { kind: 'authorized', userId: user.id, role: 'owner' };
+  }
+
+  const membership = project.collaborators.find(entry => entry.userId === user.id);
+
+  if (!membership) {
+    return { kind: 'unauthorized', status: 403 };
+  }
+
+  const role = membership.role === 'editor' ? 'editor' : 'viewer';
+  return { kind: 'authorized', userId: user.id, role };
+}
 
 function serializePresence(room: Map<string, RoomClient>): ServerPresenceEntry[] {
   return Array.from(room.values()).map(client => ({
@@ -102,6 +154,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   if (!clientId) {
     return NextResponse.json({ error: 'clientId is required' }, { status: 400 });
+  }
+
+  const auth = await authorize(projectId);
+  if (auth.kind === 'unauthorized') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status });
   }
 
   const stream = new TransformStream();
@@ -193,6 +250,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'clientId is required' }, { status: 400 });
   }
 
+  const auth = await authorize(projectId);
+  if (auth.kind === 'unauthorized') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status });
+  }
+
   const room = rooms.get(projectId);
   if (!room || !room.has(clientId)) {
     return NextResponse.json({ ok: true });
@@ -204,6 +266,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (type === 'update') {
+    if (auth.role === 'viewer') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     if (typeof update !== 'string' || update.length === 0) {
       return NextResponse.json({ error: 'Missing update payload' }, { status: 400 });
     }
