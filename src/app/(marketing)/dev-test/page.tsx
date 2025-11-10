@@ -95,6 +95,7 @@ function statusTone(status: PulseStatus): string {
     default:
       return 'bg-sky-500/20 text-sky-200 ring-sky-400/40';
   }
+  return result;
 }
 
 function statusDot(status: PulseStatus): string {
