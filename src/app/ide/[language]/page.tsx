@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { notFound, useSearchParams } from 'next/navigation';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as Y from 'yjs';
 
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
@@ -65,17 +64,6 @@ function colorForUser(userId: string) {
   }
   const hue = Math.abs(hash) % 360;
   return `hsl(${hue}deg 75% 65%)`;
-}
-
-function encodeYjsUpdate(update: Uint8Array): string {
-  if (typeof window === 'undefined') {
-    return Buffer.from(update).toString('base64');
-  }
-  let binary = '';
-  update.forEach(value => {
-    binary += String.fromCharCode(value);
-  });
-  return btoa(binary);
 }
 
 type WorkspacePageProps = {
@@ -151,8 +139,8 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   const searchParams = useSearchParams();
   const [viewerRole, setViewerRole] = useState<ViewerRole>('owner');
   const [encodedYjsState, setEncodedYjsState] = useState<string | null>(null);
-  const [collaborativeDoc, setCollaborativeDoc] = useState<Y.Doc | null>(null);
-  const collaborativeDocDirtyRef = useRef(false);
+  const collaborativeSnapshotRef = useRef<string | null>(null);
+  const collaborativeDirtyRef = useRef(false);
   const collaborativeSaveInFlightRef = useRef(false);
   const [isShareModalOpen, setShareModalOpen] = useState(false);
   const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
@@ -207,22 +195,17 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     [activePath, config.defaultActivePath, slug]
   );
 
-  useEffect(() => {
-    if (!collaborativeDoc) {
-      collaborativeDocDirtyRef.current = false;
-      collaborativeSaveInFlightRef.current = false;
-      return;
-    }
-    collaborativeDocDirtyRef.current = false;
-    collaborativeSaveInFlightRef.current = false;
-    const markDirty = () => {
-      collaborativeDocDirtyRef.current = true;
-    };
-    collaborativeDoc.on('update', markDirty);
-    return () => {
-      collaborativeDoc.off('update', markDirty);
-    };
-  }, [collaborativeDoc]);
+  const handleSnapshotChange = useCallback(
+    (snapshot: string | null) => {
+      collaborativeSnapshotRef.current = snapshot;
+      setEncodedYjsState(snapshot ?? null);
+    },
+    [],
+  );
+
+  const markRemoteMutation = useCallback(() => {
+    collaborativeDirtyRef.current = true;
+  }, []);
 
   useEffect(() => {
     if (isNameRequired) {
@@ -498,7 +481,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       setCloudAuthRequired(false);
       setCloudError(null);
       setViewerRole(project.viewerRole ?? 'owner');
+      collaborativeSnapshotRef.current = project.yjsState ?? null;
       setEncodedYjsState(project.yjsState ?? null);
+      collaborativeDirtyRef.current = false;
       if (!options?.silent) {
         pushToast({ kind: 'success', message: `✅ Loaded project: ${normalizedName}` });
       }
@@ -522,16 +507,8 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
 
       saveProject(slug, files);
 
-      const doc = collaborativeDoc;
-      let yStateBase64: string | null = null;
-      if (doc) {
-        try {
-          const update = Y.encodeStateAsUpdate(doc);
-          yStateBase64 = encodeYjsUpdate(update);
-        } catch (error) {
-          console.error('Failed to encode collaborative state', error);
-        }
-      } else if (encodedYjsState) {
+      let yStateBase64: string | null = collaborativeSnapshotRef.current ?? null;
+      if (!yStateBase64 && encodedYjsState) {
         yStateBase64 = encodedYjsState;
       }
 
@@ -591,8 +568,9 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         cloudWarningShownRef.current = false;
         setIsNameRequired(false);
         setViewerRole(project.viewerRole ?? (projectMeta.id ? viewerRole : 'owner'));
+        collaborativeSnapshotRef.current = project.yjsState ?? null;
         setEncodedYjsState(project.yjsState ?? null);
-        collaborativeDocDirtyRef.current = false;
+        collaborativeDirtyRef.current = false;
         return { ok: true as const, project };
       } catch (error) {
         console.error('Save failed:', error);
@@ -606,7 +584,6 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       }
     },
     [
-      collaborativeDoc,
       defaultProjectName,
       encodedYjsState,
       files,
@@ -644,7 +621,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
     if (!projectMeta.id) {
       return Promise.resolve(false);
     }
-    if (!collaborativeDocDirtyRef.current) {
+    if (!collaborativeDirtyRef.current) {
       return Promise.resolve(false);
     }
     if (collaborativeSaveInFlightRef.current) {
@@ -657,20 +634,16 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
   }, [persistProject, projectMeta.id, viewerRole]);
 
   useEffect(() => {
-    if (!collaborativeDoc) return;
     if (!projectMeta.id) return;
     if (viewerRole === 'viewer') return;
     const interval = window.setInterval(() => {
       void flushCollaborativeState();
     }, 30000);
     return () => window.clearInterval(interval);
-  }, [collaborativeDoc, flushCollaborativeState, projectMeta.id, viewerRole]);
+  }, [flushCollaborativeState, projectMeta.id, viewerRole]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
-      return;
-    }
-    if (!collaborativeDoc) {
       return;
     }
     if (!projectMeta.id) {
@@ -693,7 +666,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [collaborativeDoc, flushCollaborativeState, projectMeta.id, viewerRole]);
+  }, [flushCollaborativeState, projectMeta.id, viewerRole]);
 
   const loadCollaborators = useCallback(async () => {
     if (!projectMeta.id) {
@@ -1158,9 +1131,10 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
         files={files}
         onFilesChange={handleCollaborativeFilesChange}
         encodedState={encodedYjsState}
-        onDoc={setCollaborativeDoc}
+        onSnapshotChange={handleSnapshotChange}
         localPresence={localCollaboratorPresence}
         onPresenceChange={setLiveCollaborators}
+        onRemoteMutation={markRemoteMutation}
       >
         {null}
       </CollaborativeEditor>
