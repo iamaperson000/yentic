@@ -224,7 +224,7 @@ function AuthenticatedHome({ userName }: { userName: string }) {
           {workspaceList.map(workspace => (
             <Link
               key={workspace.slug}
-              href={`/ide/${workspace.slug}?new=1`}
+              href={`/ide/${workspace.slug}`}
               className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 transition hover:-translate-y-1 hover:border-white/20 hover:bg-white/10"
             >
               <div className="pointer-events-none absolute inset-0 opacity-0 transition duration-300 group-hover:opacity-100">

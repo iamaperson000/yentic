@@ -31,6 +31,21 @@ export type WorkspaceConfig = {
 };
 
 const KEY_PREFIX = 'yentic.project.v1';
+const WORKSPACE_KEY_PREFIX = 'yentic.workspace.v1';
+const WORKSPACE_META_PREFIX = 'yentic.workspace.meta.v1';
+
+export type LocalWorkspaceMeta = {
+  slug: WorkspaceSlug;
+  name: string;
+};
+
+function workspaceStorageKey(workspaceId: string) {
+  return `${WORKSPACE_KEY_PREFIX}:${workspaceId}`;
+}
+
+function workspaceMetaStorageKey(workspaceId: string) {
+  return `${WORKSPACE_META_PREFIX}:${workspaceId}`;
+}
 
 export function resolveWorkspaceSlugFromLanguage(
   language: string,
@@ -236,6 +251,83 @@ function cloneProject(map: ProjectFileMap): ProjectFileMap {
 export function getStarterProject(slug: WorkspaceSlug): ProjectFileMap {
   const config = workspaceConfigs[slug] ?? workspaceConfigs.web;
   return cloneProject(config.starter);
+}
+
+function parseProjectFiles(raw: string | null): ProjectFileMap | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as ProjectFileMap;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readWorkspaceMeta(workspaceId: string): LocalWorkspaceMeta | null {
+  try {
+    const raw = localStorage.getItem(workspaceMetaStorageKey(workspaceId));
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<LocalWorkspaceMeta> | null;
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    if (!parsed.slug || typeof parsed.slug !== 'string') {
+      return null;
+    }
+    const slug = resolveWorkspaceSlugFromLanguage(parsed.slug);
+    const name = typeof parsed.name === 'string' && parsed.name.trim().length > 0 ? parsed.name.trim() : '';
+    return { slug, name };
+  } catch {
+    return null;
+  }
+}
+
+export function writeWorkspaceMeta(workspaceId: string, meta: LocalWorkspaceMeta) {
+  try {
+    localStorage.setItem(workspaceMetaStorageKey(workspaceId), JSON.stringify(meta));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function loadWorkspaceFiles(workspaceId: string, slug?: WorkspaceSlug): ProjectFileMap | null {
+  try {
+    const stored = parseProjectFiles(localStorage.getItem(workspaceStorageKey(workspaceId)));
+    if (stored) {
+      return stored;
+    }
+    if (slug) {
+      const legacy = loadProject(slug);
+      if (legacy) {
+        saveWorkspaceFiles(workspaceId, legacy);
+        return legacy;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveWorkspaceFiles(workspaceId: string, files: ProjectFileMap) {
+  try {
+    localStorage.setItem(workspaceStorageKey(workspaceId), JSON.stringify(files));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function clearWorkspace(workspaceId: string) {
+  try {
+    localStorage.removeItem(workspaceStorageKey(workspaceId));
+    localStorage.removeItem(workspaceMetaStorageKey(workspaceId));
+  } catch {
+    // ignore storage errors
+  }
 }
 
 export function loadProject(slug: WorkspaceSlug): ProjectFileMap | null {

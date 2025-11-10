@@ -3,8 +3,6 @@ import { getServerSession } from 'next-auth';
 
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { resolveWorkspaceSlugFromLanguage } from '@/lib/project';
-
 type PageProps = {
   params: Promise<{ id: string }>;
   searchParams?: Promise<{ invite?: string }>;
@@ -59,7 +57,5 @@ export default async function ProjectInvitePage({ params, searchParams }: PagePr
     }
   }
 
-  const slug = resolveWorkspaceSlugFromLanguage(project.language);
-
-  redirect(`/ide/${slug}?projectId=${project.id}`);
+  redirect(`/${project.id}`);
 }
