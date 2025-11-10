@@ -85,29 +85,24 @@ function relativeTime(timestamp: number): string {
   return `${days}d ago`;
 }
 
+const statusToneMap: Record<PulseStatus, string> = {
+  blocked: 'bg-rose-500/20 text-rose-200 ring-rose-400/40',
+  'in-progress': 'bg-sky-500/20 text-sky-200 ring-sky-400/40',
+  shipped: 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40',
+};
+
+const statusDotMap: Record<PulseStatus, string> = {
+  blocked: 'bg-rose-400',
+  'in-progress': 'bg-sky-400',
+  shipped: 'bg-emerald-400',
+};
+
 function statusTone(status: PulseStatus): string {
-  switch (status) {
-    case 'blocked':
-      return 'bg-rose-500/20 text-rose-200 ring-rose-400/40';
-    case 'shipped':
-      return 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40';
-    case 'in-progress':
-    default:
-      return 'bg-sky-500/20 text-sky-200 ring-sky-400/40';
-  }
-  return result;
+  return statusToneMap[status] ?? statusToneMap['in-progress'];
 }
 
 function statusDot(status: PulseStatus): string {
-  switch (status) {
-    case 'blocked':
-      return 'bg-rose-400';
-    case 'shipped':
-      return 'bg-emerald-400';
-    case 'in-progress':
-    default:
-      return 'bg-sky-400';
-  }
+  return statusDotMap[status] ?? statusDotMap['in-progress'];
 }
 
 export default function DevTestPage(): JSX.Element {
