@@ -2,63 +2,52 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
-type CollaborationMessage =
-  | { type: 'update'; update: string; clientId?: string }
-  | { type: 'presence'; clients: Array<{ clientId: string }> };
-
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 
-type Task = {
+type Note = {
   id: string;
   text: string;
-  completed: boolean;
+  color: string;
+  x: number;
+  y: number;
   author: string | null;
   createdAt: number;
 };
 
-type TaskOperation =
-  | { type: 'create'; task: Task }
-  | { type: 'set-text'; id: string; text: string }
-  | { type: 'set-completed'; id: string; completed: boolean }
-  | { type: 'remove'; id: string }
-  | { type: 'clear' };
-
-type OperationEnvelope = {
-  kind: 'op';
-  opId: string;
-  version: number | null;
-  op: TaskOperation;
+type PresenceEntry = {
+  clientId: string;
+  name: string | null;
+  color: string | null;
 };
 
-type SnapshotEnvelope = {
-  kind: 'snapshot';
-  version: number;
-  tasks: Task[];
-};
+type NotePatch = Partial<Pick<Note, 'text' | 'color' | 'x' | 'y'>>;
 
-type CollaborationEnvelope = OperationEnvelope | SnapshotEnvelope;
+type WallMessageWithoutIssuer =
+  | { kind: 'sync-request'; requesterId: string }
+  | { kind: 'sync'; notes: Note[]; revision: number }
+  | { kind: 'note-created'; note: Note; revision: number }
+  | { kind: 'note-updated'; noteId: string; patch: NotePatch; revision: number }
+  | { kind: 'note-removed'; noteId: string; revision: number };
 
-type PostOptions = {
-  keepalive?: boolean;
-  preferBeacon?: boolean;
-  allowDuringDispose?: boolean;
-};
+type WallMessage = WallMessageWithoutIssuer & { issuerId: string };
+
+const draftKey = 'yentic.dev-test.displayName';
+
+const palette = ['#FDE68A', '#FCA5A5', '#93C5FD', '#A7F3D0', '#FBCFE8', '#C4B5FD'];
 
 function generateClientId(): string {
   try {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
     }
-  } catch {}
+  } catch {
+    // ignore
+  }
   return `client-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
 }
 
-function createOperationId(clientId: string): string {
-  return `${clientId}:op:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function createTaskId(clientId: string): string {
-  return `${clientId}:task:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+function createNoteId(clientId: string): string {
+  return `${clientId}:note:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function colorForClient(clientId: string): string {
@@ -67,28 +56,49 @@ function colorForClient(clientId: string): string {
     hash = (hash << 5) - hash + clientId.charCodeAt(index);
     hash |= 0;
   }
-  const hue = Math.abs(hash) % 360;
-  return `hsl(${hue}deg 65% 60%)`;
+  const colors = ['#34d399', '#38bdf8', '#fbbf24', '#f472b6'];
+  return colors[Math.abs(hash) % colors.length];
 }
 
-function serializeTask(task: Task): Task {
-  return {
-    id: task.id,
-    text: task.text,
-    completed: task.completed,
-    author: task.author ?? null,
-    createdAt: task.createdAt,
-  };
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
-function sanitizeTask(raw: unknown): Task | null {
+function sanitizeText(text: unknown): string | null {
+  if (typeof text !== 'string') {
+    return null;
+  }
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return '';
+  }
+  return trimmed.length > 500 ? trimmed.slice(0, 500) : trimmed;
+}
+
+function sanitizeColor(color: unknown): string | null {
+  if (typeof color !== 'string') {
+    return null;
+  }
+  return color.slice(0, 32);
+}
+
+function sanitizeCoordinate(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+  return clamp(value, 0, 100);
+}
+
+function sanitizeNote(raw: unknown): Note | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
-  const { id, text, completed, author, createdAt } = raw as Partial<Task> & {
+  const { id, text, color, x, y, author, createdAt } = raw as Partial<Note> & {
     id?: unknown;
     text?: unknown;
-    completed?: unknown;
+    color?: unknown;
+    x?: unknown;
+    y?: unknown;
     author?: unknown;
     createdAt?: unknown;
   };
@@ -96,165 +106,154 @@ function sanitizeTask(raw: unknown): Task | null {
   if (typeof id !== 'string' || id.trim().length === 0) {
     return null;
   }
-  if (typeof text !== 'string') {
+
+  const normalizedText = sanitizeText(text);
+  if (normalizedText === null) {
     return null;
   }
-  const sanitizedText = text.length > 2000 ? text.slice(0, 2000) : text;
-  if (typeof completed !== 'boolean') {
-    return null;
+
+  const normalizedColor = sanitizeColor(color) ?? palette[0];
+  const normalizedX = sanitizeCoordinate(x) ?? 50;
+  const normalizedY = sanitizeCoordinate(y) ?? 50;
+
+  let normalizedAuthor: string | null = null;
+  if (typeof author === 'string') {
+    normalizedAuthor = author.slice(0, 120);
   }
-  const numericCreatedAt = typeof createdAt === 'number' && Number.isFinite(createdAt) ? createdAt : Date.now();
-  const normalizedAuthor =
-    typeof author === 'string'
-      ? author.slice(0, 120)
-      : author === null || typeof author === 'undefined'
-        ? null
-        : null;
+
+  const normalizedCreatedAt =
+    typeof createdAt === 'number' && Number.isFinite(createdAt) ? createdAt : Date.now();
 
   return {
     id,
-    text: sanitizedText,
-    completed,
+    text: normalizedText,
+    color: normalizedColor,
+    x: normalizedX,
+    y: normalizedY,
     author: normalizedAuthor,
-    createdAt: numericCreatedAt,
+    createdAt: normalizedCreatedAt,
   };
 }
 
-function sanitizeOperation(raw: unknown): TaskOperation | null {
+function sanitizePatch(raw: unknown): NotePatch | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
-  const { type } = raw as { type?: unknown };
-  if (type === 'create') {
-    const task = sanitizeTask((raw as { task?: unknown }).task);
-    if (!task) {
+  const patch = raw as NotePatch & {
+    text?: unknown;
+    color?: unknown;
+    x?: unknown;
+    y?: unknown;
+  };
+  const result: NotePatch = {};
+  if (Object.prototype.hasOwnProperty.call(patch, 'text')) {
+    const normalized = sanitizeText(patch.text);
+    if (normalized === null) {
       return null;
     }
-    return { type: 'create', task };
+    result.text = normalized;
   }
-  if (type === 'set-text') {
-    const id = (raw as { id?: unknown }).id;
-    const text = (raw as { text?: unknown }).text;
-    if (typeof id !== 'string' || id.trim().length === 0 || typeof text !== 'string') {
+  if (Object.prototype.hasOwnProperty.call(patch, 'color')) {
+    const normalized = sanitizeColor(patch.color);
+    if (normalized === null) {
       return null;
     }
-    const normalized = text.length > 2000 ? text.slice(0, 2000) : text;
-    return { type: 'set-text', id, text: normalized };
+    result.color = normalized;
   }
-  if (type === 'set-completed') {
-    const id = (raw as { id?: unknown }).id;
-    const completed = (raw as { completed?: unknown }).completed;
-    if (typeof id !== 'string' || id.trim().length === 0 || typeof completed !== 'boolean') {
+  if (Object.prototype.hasOwnProperty.call(patch, 'x')) {
+    const normalized = sanitizeCoordinate(patch.x);
+    if (normalized === null) {
       return null;
     }
-    return { type: 'set-completed', id, completed };
+    result.x = normalized;
   }
-  if (type === 'remove') {
-    const id = (raw as { id?: unknown }).id;
-    if (typeof id !== 'string' || id.trim().length === 0) {
+  if (Object.prototype.hasOwnProperty.call(patch, 'y')) {
+    const normalized = sanitizeCoordinate(patch.y);
+    if (normalized === null) {
       return null;
     }
-    return { type: 'remove', id };
+    result.y = normalized;
   }
-  if (type === 'clear') {
-    return { type: 'clear' };
-  }
-  return null;
+  return result;
 }
 
-function serializeOperation(operation: TaskOperation): TaskOperation {
-  switch (operation.type) {
-    case 'create':
-      return { type: 'create', task: serializeTask(operation.task) };
-    case 'set-text':
-      return { type: 'set-text', id: operation.id, text: operation.text };
-    case 'set-completed':
-      return { type: 'set-completed', id: operation.id, completed: operation.completed };
-    case 'remove':
-      return { type: 'remove', id: operation.id };
-    case 'clear':
-      return { type: 'clear' };
-    default:
-      return operation;
-  }
-}
-
-function deserializeCollaborationEnvelope(raw: string): CollaborationEnvelope | null {
+function parseWallMessage(raw: string): WallMessage | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (error) {
-    console.error('[Dev Test] Failed to parse collaboration payload:', error);
+  } catch {
     return null;
   }
-
   if (!parsed || typeof parsed !== 'object') {
     return null;
   }
-
-  const { kind } = parsed as { kind?: unknown };
-  if (kind === 'snapshot') {
-    const version = (parsed as { version?: unknown }).version;
-    if (typeof version !== 'number' || !Number.isFinite(version)) {
+  const { kind, issuerId } = parsed as { kind?: unknown; issuerId?: unknown };
+  if (typeof kind !== 'string' || typeof issuerId !== 'string' || issuerId.length === 0) {
+    return null;
+  }
+  if (kind === 'sync-request') {
+    const requesterId = (parsed as { requesterId?: unknown }).requesterId;
+    if (typeof requesterId !== 'string' || requesterId.length === 0) {
       return null;
     }
-    const tasksRaw = (parsed as { tasks?: unknown }).tasks;
-    if (!Array.isArray(tasksRaw)) {
+    return { kind, issuerId, requesterId };
+  }
+  if (kind === 'sync') {
+    const notesRaw = (parsed as { notes?: unknown }).notes;
+    const revision = (parsed as { revision?: unknown }).revision;
+    if (!Array.isArray(notesRaw) || typeof revision !== 'number' || !Number.isFinite(revision)) {
       return null;
     }
-    const tasks: Task[] = [];
-    tasksRaw.forEach(item => {
-      const task = sanitizeTask(item);
-      if (task) {
-        tasks.push(task);
+    const notes: Note[] = [];
+    notesRaw.forEach(item => {
+      const note = sanitizeNote(item);
+      if (note) {
+        notes.push(note);
       }
     });
-    tasks.sort((a, b) => a.createdAt - b.createdAt);
-    return { kind: 'snapshot', version, tasks };
+    notes.sort((a, b) => a.createdAt - b.createdAt);
+    return { kind, issuerId, notes, revision };
   }
-
-  if (kind === 'op') {
-    const opId = (parsed as { opId?: unknown }).opId;
-    const version = (parsed as { version?: unknown }).version;
-    const op = sanitizeOperation((parsed as { op?: unknown }).op);
-    if (typeof opId !== 'string' || opId.trim().length === 0 || !op) {
+  if (kind === 'note-created') {
+    const note = sanitizeNote((parsed as { note?: unknown }).note);
+    const revision = (parsed as { revision?: unknown }).revision;
+    if (!note || typeof revision !== 'number' || !Number.isFinite(revision)) {
       return null;
     }
-    const normalizedVersion = typeof version === 'number' && Number.isFinite(version) ? version : null;
-    return { kind: 'op', opId, version: normalizedVersion, op };
+    return { kind, issuerId, note, revision };
   }
-
+  if (kind === 'note-updated') {
+    const noteId = (parsed as { noteId?: unknown }).noteId;
+    const patch = sanitizePatch((parsed as { patch?: unknown }).patch);
+    const revision = (parsed as { revision?: unknown }).revision;
+    if (
+      typeof noteId !== 'string' ||
+      noteId.length === 0 ||
+      !patch ||
+      typeof revision !== 'number' ||
+      !Number.isFinite(revision)
+    ) {
+      return null;
+    }
+    return { kind, issuerId, noteId, patch, revision };
+  }
+  if (kind === 'note-removed') {
+    const noteId = (parsed as { noteId?: unknown }).noteId;
+    const revision = (parsed as { revision?: unknown }).revision;
+    if (typeof noteId !== 'string' || noteId.length === 0 || typeof revision !== 'number' || !Number.isFinite(revision)) {
+      return null;
+    }
+    return { kind, issuerId, noteId, revision };
+  }
   return null;
 }
 
-function reduceOperation(state: Task[], operation: TaskOperation): Task[] {
-  switch (operation.type) {
-    case 'create': {
-      const next = state.some(item => item.id === operation.task.id)
-        ? state.map(item => (item.id === operation.task.id ? { ...item, ...operation.task } : item))
-        : [...state, operation.task];
-      return next.slice().sort((a, b) => a.createdAt - b.createdAt);
-    }
-    case 'set-text': {
-      return state.map(item => (item.id === operation.id ? { ...item, text: operation.text } : item));
-    }
-    case 'set-completed': {
-      return state.map(item =>
-        item.id === operation.id ? { ...item, completed: operation.completed } : item,
-      );
-    }
-    case 'remove': {
-      return state.filter(item => item.id !== operation.id);
-    }
-    case 'clear': {
-      if (state.length === 0) {
-        return state;
-      }
-      return [];
-    }
-    default:
-      return state;
-  }
+function randomBetween(min: number, max: number): number {
+  return Math.random() * (max - min) + min;
+}
+
+function sortNotes(notes: Note[]): Note[] {
+  return notes.slice().sort((a, b) => a.createdAt - b.createdAt);
 }
 
 function formatTimestamp(timestamp: number): string {
@@ -268,58 +267,285 @@ function formatTimestamp(timestamp: number): string {
 export default function DevTestPage() {
   const clientIdRef = useRef<string>(generateClientId());
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
-  const [peerCount, setPeerCount] = useState(1);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [newTaskText, setNewTaskText] = useState('');
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [peers, setPeers] = useState<PresenceEntry[]>([]);
+  const [draftText, setDraftText] = useState('');
+  const [draftColor, setDraftColor] = useState(() => palette[0]);
   const [displayName, setDisplayName] = useState(() => {
     if (typeof window === 'undefined') {
       return '';
     }
     try {
-      return window.localStorage.getItem('yentic.dev-test.displayName') ?? '';
+      return window.localStorage.getItem(draftKey) ?? '';
     } catch {
       return '';
     }
   });
 
-  const tasksRef = useRef<Task[]>(tasks);
-  const hasShareableStateRef = useRef<boolean>(tasks.length > 0);
-  const versionRef = useRef<number>(0);
-  const seenOperationsRef = useRef<Set<string>>(new Set());
-  const knownPeersRef = useRef<Set<string>>(new Set());
-  const connectedRef = useRef<boolean>(false);
-  const statusGuardRef = useRef({ mounted: true });
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const notesRef = useRef<Note[]>(notes);
+  const revisionRef = useRef<number>(0);
   const displayNameRef = useRef<string>(displayName.trim());
-  const pendingLocalUpdatesRef = useRef<Array<{ serialized: string; options?: PostOptions }>>([]);
-  const sendUpdateRef = useRef<(serialized: string, options?: PostOptions) => void>((serialized, options) => {
-    pendingLocalUpdatesRef.current.push({ serialized, options });
-  });
-  const sendPresenceRef = useRef<(() => void) | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [clientColor] = useState(() => colorForClient(clientIdRef.current));
 
   useEffect(() => {
-    tasksRef.current = tasks;
-    hasShareableStateRef.current = tasks.length > 0;
-  }, [tasks]);
+    notesRef.current = notes;
+  }, [notes]);
 
   useEffect(() => {
-    displayNameRef.current = displayName.trim();
+    const trimmed = displayName.trim();
+    displayNameRef.current = trimmed;
     if (typeof window !== 'undefined') {
       try {
-        if (displayNameRef.current.length > 0) {
-          window.localStorage.setItem('yentic.dev-test.displayName', displayNameRef.current);
+        if (trimmed.length > 0) {
+          window.localStorage.setItem(draftKey, trimmed);
         } else {
-          window.localStorage.removeItem('yentic.dev-test.displayName');
+          window.localStorage.removeItem(draftKey);
         }
       } catch {
-        // ignore localStorage errors
+        // ignore storage errors
       }
-    }
-    if (sendPresenceRef.current) {
-      sendPresenceRef.current();
     }
   }, [displayName]);
 
-  const statusLabel = useMemo(() => {
+  const sendPresence = useCallback(
+    (presence: { id: string; name: string | null; color: string } | null, options?: { keepalive?: boolean; allowDuringDispose?: boolean }) => {
+      const body = JSON.stringify({ type: 'presence', clientId: clientIdRef.current, presence });
+      if (options?.allowDuringDispose && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        try {
+          const blob = new Blob([body], { type: 'application/json' });
+          navigator.sendBeacon('/api/projects/dev-test/collaboration', blob);
+          return;
+        } catch {
+          // fall through to fetch
+        }
+      }
+      void fetch('/api/projects/dev-test/collaboration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: options?.keepalive ?? false,
+      }).catch(error => {
+        console.error('[Realtime Wall] Failed to send presence', error);
+      });
+    },
+    [],
+  );
+
+  const sendWallMessage = useCallback(
+    (message: WallMessageWithoutIssuer) => {
+      const payload: WallMessage = { ...message, issuerId: clientIdRef.current };
+      const serialized = JSON.stringify(payload);
+      void fetch('/api/projects/dev-test/collaboration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'update', clientId: clientIdRef.current, update: serialized }),
+        keepalive: true,
+      }).catch(error => {
+        console.error('[Realtime Wall] Failed to broadcast message', error);
+      });
+    },
+    [],
+  );
+
+  const requestSync = useCallback(() => {
+    sendWallMessage({ kind: 'sync-request', requesterId: clientIdRef.current });
+  }, [sendWallMessage]);
+
+  const handleWallMessage = useCallback(
+    (message: WallMessage) => {
+      if (message.issuerId === clientIdRef.current) {
+        return;
+      }
+      switch (message.kind) {
+        case 'sync-request': {
+          if (notesRef.current.length === 0) {
+            return;
+          }
+          if (message.requesterId === clientIdRef.current) {
+            return;
+          }
+          const revision = revisionRef.current || Date.now();
+          sendWallMessage({ kind: 'sync', notes: notesRef.current, revision });
+          return;
+        }
+        case 'sync': {
+          if (message.revision >= revisionRef.current) {
+            revisionRef.current = message.revision;
+            setNotes(sortNotes(message.notes));
+          }
+          return;
+        }
+        case 'note-created': {
+          revisionRef.current = Math.max(revisionRef.current, message.revision);
+          setNotes(prev => {
+            const exists = prev.some(note => note.id === message.note.id);
+            if (exists) {
+              return sortNotes(prev.map(note => (note.id === message.note.id ? message.note : note)));
+            }
+            return sortNotes([...prev, message.note]);
+          });
+          return;
+        }
+        case 'note-updated': {
+          revisionRef.current = Math.max(revisionRef.current, message.revision);
+          setNotes(prev =>
+            prev.map(note =>
+              note.id === message.noteId
+                ? {
+                    ...note,
+                    ...message.patch,
+                  }
+                : note,
+            ),
+          );
+          return;
+        }
+        case 'note-removed': {
+          revisionRef.current = Math.max(revisionRef.current, message.revision);
+          setNotes(prev => prev.filter(note => note.id !== message.noteId));
+          return;
+        }
+        default:
+          return;
+      }
+    },
+    [sendWallMessage],
+  );
+
+  useEffect(() => {
+    let disposed = false;
+    const connect = () => {
+      const source = new EventSource(`/api/projects/dev-test/collaboration?clientId=${clientIdRef.current}`);
+      eventSourceRef.current = source;
+      setConnectionStatus('connecting');
+
+      source.onopen = () => {
+        setConnectionStatus('connected');
+        sendPresence({ id: clientIdRef.current, name: displayNameRef.current || null, color: clientColor });
+        requestSync();
+      };
+
+      source.onmessage = event => {
+        if (!event.data) {
+          return;
+        }
+        let payload: unknown;
+        try {
+          payload = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+        if (!payload || typeof payload !== 'object') {
+          return;
+        }
+        const { type } = payload as { type?: unknown };
+        if (type === 'presence') {
+          const list = (payload as { clients?: unknown }).clients;
+          if (Array.isArray(list)) {
+            const sanitized: PresenceEntry[] = [];
+            list.forEach(entry => {
+              if (!entry || typeof entry !== 'object') {
+                return;
+              }
+              const { clientId, name, color } = entry as PresenceEntry & {
+                clientId?: unknown;
+                name?: unknown;
+                color?: unknown;
+              };
+              if (typeof clientId === 'string' && clientId.length > 0) {
+                sanitized.push({
+                  clientId,
+                  name: typeof name === 'string' ? name.slice(0, 120) : null,
+                  color: typeof color === 'string' ? color.slice(0, 32) : null,
+                });
+              }
+            });
+            setPeers(sanitized);
+          }
+          return;
+        }
+        if (type === 'update') {
+          const update = (payload as { update?: unknown }).update;
+          if (typeof update === 'string' && update.length > 0) {
+            const parsed = parseWallMessage(update);
+            if (parsed) {
+              handleWallMessage(parsed);
+            }
+          }
+        }
+      };
+
+      source.onerror = () => {
+        setConnectionStatus('disconnected');
+        source.close();
+        if (!disposed) {
+          reconnectTimerRef.current = setTimeout(() => {
+            connect();
+          }, 1500);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      disposed = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      eventSourceRef.current?.close();
+      sendPresence(null, { allowDuringDispose: true });
+    };
+  }, [clientColor, handleWallMessage, requestSync, sendPresence]);
+
+  const handleCreateNote = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const normalized = draftText.trim();
+      if (normalized.length === 0) {
+        return;
+      }
+      const revision = Date.now();
+      revisionRef.current = Math.max(revisionRef.current, revision);
+      const note: Note = {
+        id: createNoteId(clientIdRef.current),
+        text: normalized.length > 500 ? normalized.slice(0, 500) : normalized,
+        color: draftColor,
+        x: clamp(randomBetween(8, 72), 5, 85),
+        y: clamp(randomBetween(10, 78), 5, 85),
+        author: displayNameRef.current.length > 0 ? displayNameRef.current : 'Guest',
+        createdAt: revision,
+      };
+      setNotes(prev => sortNotes([...prev, note]));
+      sendWallMessage({ kind: 'note-created', note, revision });
+      setDraftText('');
+    },
+    [draftColor, draftText, sendWallMessage],
+  );
+
+  const updateNote = useCallback(
+    (noteId: string, patch: NotePatch) => {
+      setNotes(prev => prev.map(note => (note.id === noteId ? { ...note, ...patch } : note)));
+      const revision = Date.now();
+      revisionRef.current = Math.max(revisionRef.current, revision);
+      sendWallMessage({ kind: 'note-updated', noteId, patch, revision });
+    },
+    [sendWallMessage],
+  );
+
+  const removeNote = useCallback(
+    (noteId: string) => {
+      setNotes(prev => prev.filter(note => note.id !== noteId));
+      const revision = Date.now();
+      revisionRef.current = Math.max(revisionRef.current, revision);
+      sendWallMessage({ kind: 'note-removed', noteId, revision });
+    },
+    [sendWallMessage],
+  );
+
+  const connectionLabel = useMemo(() => {
     switch (connectionStatus) {
       case 'connected':
         return 'Connected';
@@ -330,579 +556,171 @@ export default function DevTestPage() {
     }
   }, [connectionStatus]);
 
-  const applyTaskOperation = useCallback(
-    (operation: TaskOperation) => {
-      const next = reduceOperation(tasksRef.current, operation);
-      tasksRef.current = next;
-      hasShareableStateRef.current = next.length > 0;
-      setTasks(next);
-    },
-    [setTasks],
-  );
-
-  const applySnapshot = useCallback(
-    (taskList: Task[], version: number) => {
-      versionRef.current = version;
-      tasksRef.current = taskList;
-      hasShareableStateRef.current = taskList.length > 0;
-      setTasks(taskList);
-    },
-    [setTasks],
-  );
-
-  const sendTaskOperation = useCallback(
-    (operation: TaskOperation) => {
-      const opId = createOperationId(clientIdRef.current);
-      seenOperationsRef.current.add(opId);
-      const nextVersion = versionRef.current + 1;
-      versionRef.current = nextVersion;
-      applyTaskOperation(operation);
-      try {
-        const envelope: OperationEnvelope = {
-          kind: 'op',
-          opId,
-          version: nextVersion,
-          op: serializeOperation(operation),
-        };
-        const serialized = JSON.stringify(envelope);
-        sendUpdateRef.current(serialized);
-      } catch (error) {
-        console.error('[Dev Test] Failed to serialize operation:', error);
-      }
-    },
-    [applyTaskOperation],
-  );
-
-  const broadcastSnapshot = useCallback(
-    (options?: PostOptions) => {
-      if (!hasShareableStateRef.current) {
-        return;
-      }
-      try {
-        const envelope: SnapshotEnvelope = {
-          kind: 'snapshot',
-          version: versionRef.current,
-          tasks: tasksRef.current.map(task => serializeTask(task)),
-        };
-        const serialized = JSON.stringify(envelope);
-        sendUpdateRef.current(serialized, options);
-      } catch (error) {
-        console.error('[Dev Test] Failed to serialize snapshot:', error);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    statusGuardRef.current.mounted = true;
-    const endpoint = '/api/projects/dev-test/collaboration';
-    const pendingRequests: Array<{ body: string; keepalive: boolean; attempt: number; allowDuringDispose?: boolean }> = [];
-    let sendingRequest = false;
-    let eventSource: EventSource | null = null;
-    let disposed = false;
-    let reconnectTimer: number | null = null;
-    let reconnectAttempts = 0;
-    let presenceInterval: number | null = null;
-
-    const safeSetStatus = (status: ConnectionStatus) => {
-      if (statusGuardRef.current.mounted) {
-        setConnectionStatus(status);
-      }
-    };
-
-    const safeSetPeerCount = (count: number) => {
-      if (statusGuardRef.current.mounted) {
-        setPeerCount(Math.max(1, count));
-      }
-    };
-
-    const processPendingRequests = () => {
-      if (sendingRequest || pendingRequests.length === 0) {
-        return;
-      }
-      const next = pendingRequests.shift();
-      if (!next) {
-        return;
-      }
-      sendingRequest = true;
-      fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: next.body,
-        keepalive: next.keepalive,
-      })
-        .then(() => {
-          sendingRequest = false;
-          processPendingRequests();
-        })
-        .catch(error => {
-          console.error('[Dev Test] Failed to post collaboration payload:', error);
-          sendingRequest = false;
-          if (!disposed && typeof window !== 'undefined' && next.attempt < 3) {
-            const delay = Math.min(600 * 2 ** next.attempt, 5000);
-            window.setTimeout(() => {
-              pendingRequests.unshift({
-                body: next.body,
-                keepalive: next.keepalive,
-                attempt: next.attempt + 1,
-                allowDuringDispose: next.allowDuringDispose,
-              });
-              processPendingRequests();
-            }, delay);
-          }
-          processPendingRequests();
-        });
-    };
-
-    const postCollaboration = (
-      payload: { type: 'update'; update: string } | { type: 'presence'; presence: unknown },
-      options?: PostOptions,
-    ) => {
-      if (disposed && !options?.allowDuringDispose) {
-        return;
-      }
-      const bodyObject =
-        payload.type === 'update'
-          ? { type: 'update', update: payload.update, clientId: clientIdRef.current }
-          : { type: 'presence', presence: payload.presence, clientId: clientIdRef.current };
-      const body = JSON.stringify(bodyObject);
-
-      if (payload.type === 'presence' && options?.preferBeacon && typeof navigator !== 'undefined') {
-        try {
-          if (typeof navigator.sendBeacon === 'function' && navigator.sendBeacon(endpoint, body)) {
-            return;
-          }
-        } catch (error) {
-          console.error('[Dev Test] Failed to send beacon payload:', error);
-        }
-      }
-
-      pendingRequests.push({
-        body,
-        keepalive: options?.keepalive ?? payload.type === 'presence',
-        attempt: 0,
-        allowDuringDispose: options?.allowDuringDispose,
-      });
-      processPendingRequests();
-    };
-
-    sendUpdateRef.current = (serialized, options) => {
-      postCollaboration({ type: 'update', update: serialized }, options);
-    };
-
-    if (pendingLocalUpdatesRef.current.length > 0) {
-      const queued = pendingLocalUpdatesRef.current.splice(0, pendingLocalUpdatesRef.current.length);
-      queued.forEach(item => {
-        postCollaboration({ type: 'update', update: item.serialized }, item.options);
-      });
-    }
-
-    const buildPresencePayload = () => ({
-      id: clientIdRef.current,
-      name: displayNameRef.current.length > 0 ? displayNameRef.current : null,
-      color: colorForClient(clientIdRef.current),
-      avatar: null,
-    });
-
-    const sendPresence = (
-      presence: unknown,
-      options?: PostOptions,
-    ) => {
-      postCollaboration({ type: 'presence', presence }, options);
-    };
-
-    sendPresenceRef.current = () => {
-      sendPresence(buildPresencePayload(), { keepalive: true });
-    };
-
-    const handlePageHide = () => {
-      broadcastSnapshot({ allowDuringDispose: true, keepalive: true, preferBeacon: true });
-      sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('pagehide', handlePageHide);
-    }
-
-    const handleUpdateEnvelope = (message: { update: string; clientId?: string }) => {
-      if (!message.update) {
-        return;
-      }
-      if (message.clientId && message.clientId === clientIdRef.current) {
-        return;
-      }
-      const payload = deserializeCollaborationEnvelope(message.update);
-      if (!payload) {
-        return;
-      }
-      if (payload.kind === 'snapshot') {
-        if (payload.version >= versionRef.current) {
-          applySnapshot(payload.tasks, payload.version);
-        }
-        return;
-      }
-      if (seenOperationsRef.current.has(payload.opId)) {
-        return;
-      }
-      seenOperationsRef.current.add(payload.opId);
-      if (typeof payload.version === 'number' && Number.isFinite(payload.version)) {
-        versionRef.current = Math.max(versionRef.current, payload.version);
-      } else {
-        versionRef.current += 1;
-      }
-      applyTaskOperation(payload.op);
-    };
-
-    const openEventStream = () => {
-      if (eventSource) {
-        eventSource.close();
-      }
-
-      connectedRef.current = false;
-      safeSetStatus('connecting');
-      safeSetPeerCount(1);
-
-      try {
-        eventSource = new EventSource(`${endpoint}?clientId=${encodeURIComponent(clientIdRef.current)}`);
-      } catch (error) {
-        console.error('[Dev Test] Failed to initialize collaboration stream:', error);
-        safeSetStatus('disconnected');
-        return;
-      }
-
-      eventSource.onopen = () => {
-        reconnectAttempts = 0;
-        if (reconnectTimer !== null && typeof window !== 'undefined') {
-          window.clearTimeout(reconnectTimer);
-          reconnectTimer = null;
-        }
-        connectedRef.current = true;
-        safeSetStatus('connected');
-        broadcastSnapshot();
-        sendPresence(buildPresencePayload());
-        if (presenceInterval !== null && typeof window !== 'undefined') {
-          window.clearInterval(presenceInterval);
-        }
-        if (typeof window !== 'undefined') {
-          presenceInterval = window.setInterval(() => {
-            sendPresence(buildPresencePayload());
-          }, 20000);
-        }
-      };
-
-      eventSource.onmessage = event => {
-        if (!event.data) {
-          return;
-        }
-        let parsed: CollaborationMessage;
-        try {
-          parsed = JSON.parse(event.data) as CollaborationMessage;
-        } catch (error) {
-          console.error('[Dev Test] Failed to parse SSE payload:', error);
-          return;
-        }
-
-        if (parsed.type === 'update') {
-          handleUpdateEnvelope(parsed);
-          return;
-        }
-
-        const uniqueIds = new Set<string>();
-        const remoteIds = new Set<string>();
-        parsed.clients.forEach(client => {
-          if (typeof client.clientId === 'string') {
-            uniqueIds.add(client.clientId);
-            if (client.clientId !== clientIdRef.current) {
-              remoteIds.add(client.clientId);
-            }
-          }
-        });
-        const previous = knownPeersRef.current;
-        const newPeers: string[] = [];
-        remoteIds.forEach(id => {
-          if (!previous.has(id)) {
-            newPeers.push(id);
-          }
-        });
-        knownPeersRef.current = remoteIds;
-        safeSetPeerCount(Math.max(1, uniqueIds.size));
-        if (newPeers.length > 0 && connectedRef.current && hasShareableStateRef.current) {
-          broadcastSnapshot();
-        }
-      };
-
-      eventSource.onerror = error => {
-        console.error('[Dev Test] Collaboration stream error:', error);
-        connectedRef.current = false;
-        safeSetStatus('disconnected');
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
-        }
-        if (presenceInterval !== null && typeof window !== 'undefined') {
-          window.clearInterval(presenceInterval);
-          presenceInterval = null;
-        }
-        if (disposed || typeof window === 'undefined') {
-          return;
-        }
-        if (reconnectTimer !== null) {
-          window.clearTimeout(reconnectTimer);
-        }
-        const delay = Math.min(1000 * 2 ** reconnectAttempts, 12000);
-        reconnectAttempts += 1;
-        reconnectTimer = window.setTimeout(() => {
-          reconnectTimer = null;
-          openEventStream();
-        }, delay);
-      };
-    };
-
-    openEventStream();
-
-    return () => {
-      broadcastSnapshot({ allowDuringDispose: true, keepalive: true, preferBeacon: true });
-      sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
-      disposed = true;
-      connectedRef.current = false;
-      if (presenceInterval !== null && typeof window !== 'undefined') {
-        window.clearInterval(presenceInterval);
-      }
-      if (reconnectTimer !== null && typeof window !== 'undefined') {
-        window.clearTimeout(reconnectTimer);
-      }
-      if (eventSource) {
-        eventSource.close();
-        eventSource = null;
-      }
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('pagehide', handlePageHide);
-      }
-      safeSetStatus('disconnected');
-      safeSetPeerCount(1);
-      knownPeersRef.current = new Set();
-      statusGuardRef.current.mounted = false;
-      sendUpdateRef.current = (serialized, options) => {
-        pendingLocalUpdatesRef.current.push({ serialized, options });
-      };
-      sendPresenceRef.current = null;
-    };
-  }, [applySnapshot, applyTaskOperation, broadcastSnapshot]);
-
-  const handleSubmit = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      const trimmed = newTaskText.trim();
-      if (!trimmed) {
-        return;
-      }
-      const task: Task = {
-        id: createTaskId(clientIdRef.current),
-        text: trimmed.slice(0, 2000),
-        completed: false,
-        author: displayNameRef.current.length > 0 ? displayNameRef.current : null,
-        createdAt: Date.now(),
-      };
-      sendTaskOperation({ type: 'create', task });
-      setNewTaskText('');
-    },
-    [newTaskText, sendTaskOperation],
-  );
-
-  const handleToggleTask = useCallback(
-    (task: Task) => {
-      sendTaskOperation({ type: 'set-completed', id: task.id, completed: !task.completed });
-    },
-    [sendTaskOperation],
-  );
-
-  const handleRemoveTask = useCallback(
-    (task: Task) => {
-      sendTaskOperation({ type: 'remove', id: task.id });
-    },
-    [sendTaskOperation],
-  );
-
-  const handleRenameTask = useCallback(
-    (task: Task) => {
-      if (typeof window === 'undefined') {
-        return;
-      }
-      const nextText = window.prompt('Update the card text', task.text);
-      if (nextText === null) {
-        return;
-      }
-      const trimmed = nextText.trim();
-      if (!trimmed) {
-        sendTaskOperation({ type: 'remove', id: task.id });
-        return;
-      }
-      if (trimmed === task.text) {
-        return;
-      }
-      sendTaskOperation({ type: 'set-text', id: task.id, text: trimmed.slice(0, 2000) });
-    },
-    [sendTaskOperation],
-  );
-
-  const handleClearBoard = useCallback(() => {
-    if (tasksRef.current.length === 0) {
-      return;
-    }
-    sendTaskOperation({ type: 'clear' });
-  }, [sendTaskOperation]);
-
-  const handleManualSnapshot = useCallback(() => {
-    broadcastSnapshot();
-  }, [broadcastSnapshot]);
+  const activePeers = useMemo(() => peers.filter(entry => entry.clientId !== clientIdRef.current), [peers]);
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 py-10">
-      <div className="flex flex-col gap-2">
-        <p className="text-sm uppercase tracking-[0.3em] text-emerald-300/80">Dev Test</p>
-        <h1 className="text-3xl font-semibold">Realtime task wall</h1>
-        <p className="text-sm text-white/60">
-          Experiment with the collaboration bridge powering the IDE. Add or edit cards and watch every
-          connected browser stay in sync without relying on the Yjs document used elsewhere in the app.
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 py-12">
+      <header className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-8 shadow-lg shadow-emerald-500/10">
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-white/70">
+            Realtime Wall
+          </span>
+          <span
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
+              connectionStatus === 'connected'
+                ? 'bg-emerald-500/20 text-emerald-200'
+                : 'bg-amber-500/20 text-amber-100'
+            }`}
+          >
+            <span
+              className={`inline-block h-2 w-2 rounded-full ${
+                connectionStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400'
+              }`}
+            />
+            {connectionLabel}
+          </span>
+        </div>
+        <p className="max-w-3xl text-sm text-white/70">
+          Sketch ideas together on a shared canvas of sticky notes. Updates broadcast instantly over the collaboration
+          service—no refreshes, no polling, and no locks. Drop a card, edit in place, and watch changes sync to other
+          participants in real time.
         </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 text-xs text-white/60">
-        <span
-          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 font-medium transition ${
-            connectionStatus === 'connected'
-              ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-200'
-              : 'border-white/10 bg-white/5'
-          }`}
-        >
-          <span className={`h-2 w-2 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-300' : 'bg-yellow-300'}`} />
-          {statusLabel}
-        </span>
-        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-medium text-white/70">
-          {peerCount} {peerCount === 1 ? 'active tab' : 'active tabs'}
-        </span>
-        <button
-          type="button"
-          onClick={handleManualSnapshot}
-          className="rounded-full border border-emerald-300/40 px-3 py-1 font-medium text-emerald-200 transition hover:border-emerald-300 hover:text-emerald-100"
-        >
-          Broadcast snapshot now
-        </button>
-        <button
-          type="button"
-          onClick={handleClearBoard}
-          className="rounded-full border border-white/15 px-3 py-1 font-medium text-white/70 transition hover:border-red-400/60 hover:text-red-200"
-        >
-          Clear board
-        </button>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/40 p-6 shadow-inner shadow-black/40">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <label htmlFor="dev-test-new-card" className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">
-              Add a card
-            </label>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                id="dev-test-new-card"
-                value={newTaskText}
-                onChange={event => setNewTaskText(event.target.value)}
-                placeholder="Write a quick task or note and press Enter"
-                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90 outline-none transition focus:border-emerald-400/60 focus:bg-black/40"
-              />
-              <button
-                type="submit"
-                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!newTaskText.trim()}
-              >
-                Share update
-              </button>
-            </div>
-          </form>
-
-          <div className="rounded-xl border border-white/10 bg-white/5">
-            {tasks.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-6 py-10 text-center text-sm text-white/50">
-                <span>No cards yet.</span>
-                <span>Add something above and open another browser tab to watch it sync.</span>
-              </div>
+        <div className="flex flex-wrap items-center gap-4 text-xs text-white/60">
+          <div className="inline-flex items-center gap-2">
+            <span className="font-semibold text-white">You:</span>
+            <input
+              value={displayName}
+              onChange={event => setDisplayName(event.target.value)}
+              className="w-40 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white outline-none transition focus:border-emerald-300 focus:bg-black/40"
+              placeholder="Set a name"
+              maxLength={60}
+            />
+          </div>
+          <div className="inline-flex items-center gap-2">
+            <span className="font-semibold text-white">Peers online:</span>
+            {activePeers.length === 0 ? (
+              <span className="text-white/50">Just you for now</span>
             ) : (
-              <ul className="divide-y divide-white/5">
-                {tasks.map(task => (
-                  <li key={task.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-1 items-start gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleTask(task)}
-                        className={`mt-1 h-4 w-4 rounded border ${
-                          task.completed
-                            ? 'border-emerald-300 bg-emerald-400'
-                            : 'border-white/20 bg-transparent'
-                        } transition hover:border-emerald-300`}
-                        aria-pressed={task.completed}
-                        aria-label={task.completed ? 'Mark as incomplete' : 'Mark as complete'}
-                      />
-                      <div className="flex flex-col">
-                        <span className={`text-sm ${task.completed ? 'text-white/50 line-through' : 'text-white/90'}`}>
-                          {task.text}
-                        </span>
-                        <span className="text-xs text-white/40">
-                          {task.author ? `Added by ${task.author}` : 'Anonymous update'} · {formatTimestamp(task.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleRenameTask(task)}
-                        className="rounded-full border border-white/15 px-3 py-1 text-xs font-medium text-white/70 transition hover:border-white/40 hover:text-white"
-                      >
-                        Edit text
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTask(task)}
-                        className="rounded-full border border-white/15 px-3 py-1 text-xs font-medium text-red-200 transition hover:border-red-400/60 hover:text-red-100"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </li>
+              <div className="flex flex-wrap items-center gap-2">
+                {activePeers.map(peer => (
+                  <span
+                    key={peer.clientId}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white/70"
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: peer.color ?? '#94a3b8' }}
+                    />
+                    {peer.name ?? 'Anonymous'}
+                  </span>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         </div>
+      </header>
 
-        <aside className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
-          <div className="flex flex-col gap-2">
-            <label htmlFor="dev-test-display-name" className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">
-              Your label
-            </label>
-            <input
-              id="dev-test-display-name"
-              value={displayName}
-              onChange={event => setDisplayName(event.target.value.slice(0, 80))}
-              placeholder="Optional name shown to other testers"
-              className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white/90 outline-none transition focus:border-emerald-400/60"
-            />
+      <form
+        onSubmit={handleCreateNote}
+        className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-emerald-500/10 sm:flex-row sm:items-end"
+      >
+        <div className="flex-1">
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
+            New note
+          </label>
+          <textarea
+            value={draftText}
+            onChange={event => setDraftText(event.target.value)}
+            placeholder="Capture an idea to share with the room"
+            className="min-h-[96px] w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
+            maxLength={500}
+          />
+        </div>
+        <div className="flex flex-col gap-3">
+          <span className="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">Color</span>
+          <div className="flex flex-wrap gap-2">
+            {palette.map(color => (
+              <button
+                type="button"
+                key={color}
+                onClick={() => setDraftColor(color)}
+                className={`h-9 w-9 rounded-full border transition ${
+                  draftColor === color ? 'border-emerald-400 ring-2 ring-emerald-400/60' : 'border-white/30'
+                }`}
+                style={{ backgroundColor: color }}
+                aria-label={`Use ${color} for the note`}
+              />
+            ))}
           </div>
+        </div>
+        <button
+          type="submit"
+          className="h-12 rounded-2xl bg-emerald-500 px-6 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-white/30"
+          disabled={draftText.trim().length === 0}
+        >
+          Drop note
+        </button>
+      </form>
 
-          <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/60">
-            <p className="font-semibold text-white/80">How this test works</p>
-            <ul className="mt-2 space-y-2 text-xs">
-              <li>• Updates are broadcast as tiny JSON operations instead of Yjs binary patches.</li>
-              <li>• Snapshots are sent when new peers arrive or when you manually broadcast them.</li>
-              <li>• Presence data relies on the same SSE channel that powers the production IDE.</li>
-            </ul>
+      <section className="relative min-h-[520px] overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 p-10 shadow-2xl shadow-emerald-500/10">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.15),_transparent_55%)]" />
+        <div className="relative flex h-full flex-col gap-4">
+          <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-white/40">
+            <span>Shared canvas</span>
+            <span>{notes.length} notes</span>
           </div>
-
-          <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-xs text-white/50">
-            Tip: keep this tab open next to another device, add cards here, and confirm everything updates instantly.
+          <div className="relative flex-1">
+            <div className="absolute inset-0">
+              {notes.map(note => (
+                <article
+                  key={note.id}
+                  className="group absolute flex w-60 flex-col gap-3 rounded-2xl border border-black/10 p-4 text-slate-900 shadow-lg shadow-black/20 transition hover:scale-[1.02]"
+                  style={{
+                    left: `${note.x}%`,
+                    top: `${note.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                    backgroundColor: note.color,
+                  }}
+                >
+                  <textarea
+                    value={note.text}
+                    onChange={event => updateNote(note.id, { text: event.target.value })}
+                    className="h-24 w-full resize-none rounded-xl border border-black/10 bg-black/5 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-black/40"
+                    maxLength={500}
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] uppercase tracking-[0.2em] text-slate-700">
+                    <span>{note.author ?? 'Anonymous'}</span>
+                    <span>{formatTimestamp(note.createdAt)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1">
+                      {palette.map(color => (
+                        <button
+                          type="button"
+                          key={`${note.id}-${color}`}
+                          onClick={() => updateNote(note.id, { color })}
+                          className={`h-6 w-6 rounded-full border border-black/20 transition ${
+                            note.color === color ? 'ring-2 ring-black/50' : 'opacity-80 hover:opacity-100'
+                          }`}
+                          style={{ backgroundColor: color }}
+                          aria-label="Change note color"
+                        />
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeNote(note.id)}
+                      className="rounded-full border border-black/30 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-black/60 transition hover:border-black/60 hover:text-black"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
-        </aside>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }
