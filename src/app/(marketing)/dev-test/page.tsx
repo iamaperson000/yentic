@@ -1,47 +1,46 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type JSX,
+} from 'react';
 
-type CollaborationMessage =
-  | { type: 'update'; update: string; clientId?: string }
-  | { type: 'presence'; clients: Array<{ clientId: string }> };
+type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
-type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
+type PulseStatus = 'blocked' | 'in-progress' | 'shipped';
 
-type Task = {
+type PulseItem = {
   id: string;
-  text: string;
-  completed: boolean;
-  author: string | null;
-  createdAt: number;
+  title: string;
+  status: PulseStatus;
+  owner: string | null;
+  updatedAt: number;
 };
 
-type TaskOperation =
-  | { type: 'create'; task: Task }
-  | { type: 'set-text'; id: string; text: string }
-  | { type: 'set-completed'; id: string; completed: boolean }
-  | { type: 'remove'; id: string }
-  | { type: 'clear' };
-
-type OperationEnvelope = {
-  kind: 'op';
-  opId: string;
-  version: number | null;
-  op: TaskOperation;
+type Peer = {
+  clientId: string;
+  name: string | null;
+  color: string;
 };
 
-type SnapshotEnvelope = {
-  kind: 'snapshot';
-  version: number;
-  tasks: Task[];
-};
+type ServerMessage =
+  | { type: 'snapshot'; items: PulseItem[] }
+  | { type: 'item'; item: PulseItem }
+  | { type: 'presence'; peers: Peer[] };
 
-type CollaborationEnvelope = OperationEnvelope | SnapshotEnvelope;
+const displayNameKey = 'yentic.dev-test.display-name';
+const clientIdKey = 'yentic.dev-test.client-id';
 
-type PostOptions = {
-  keepalive?: boolean;
-  preferBeacon?: boolean;
-  allowDuringDispose?: boolean;
+const statusLabel: Record<PulseStatus, string> = {
+  blocked: 'Blocked',
+  'in-progress': 'In Progress',
+  shipped: 'Shipped',
 };
 
 function generateClientId(): string {
@@ -49,860 +48,460 @@ function generateClientId(): string {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
     }
-  } catch {}
-  return `client-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
-}
-
-function createOperationId(clientId: string): string {
-  return `${clientId}:op:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function createTaskId(clientId: string): string {
-  return `${clientId}:task:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function colorForClient(clientId: string): string {
-  let hash = 0;
-  for (let index = 0; index < clientId.length; index += 1) {
-    hash = (hash << 5) - hash + clientId.charCodeAt(index);
-    hash |= 0;
-  }
-  const hue = Math.abs(hash) % 360;
-  return `hsl(${hue}deg 65% 60%)`;
-}
-
-function serializeTask(task: Task): Task {
-  return {
-    id: task.id,
-    text: task.text,
-    completed: task.completed,
-    author: task.author ?? null,
-    createdAt: task.createdAt,
-  };
-}
-
-function sanitizeTask(raw: unknown): Task | null {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-  const { id, text, completed, author, createdAt } = raw as Partial<Task> & {
-    id?: unknown;
-    text?: unknown;
-    completed?: unknown;
-    author?: unknown;
-    createdAt?: unknown;
-  };
-
-  if (typeof id !== 'string' || id.trim().length === 0) {
-    return null;
-  }
-  if (typeof text !== 'string') {
-    return null;
-  }
-  const sanitizedText = text.length > 2000 ? text.slice(0, 2000) : text;
-  if (typeof completed !== 'boolean') {
-    return null;
-  }
-  const numericCreatedAt = typeof createdAt === 'number' && Number.isFinite(createdAt) ? createdAt : Date.now();
-  const normalizedAuthor =
-    typeof author === 'string'
-      ? author.slice(0, 120)
-      : author === null || typeof author === 'undefined'
-        ? null
-        : null;
-
-  return {
-    id,
-    text: sanitizedText,
-    completed,
-    author: normalizedAuthor,
-    createdAt: numericCreatedAt,
-  };
-}
-
-function sanitizeOperation(raw: unknown): TaskOperation | null {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-  const { type } = raw as { type?: unknown };
-  if (type === 'create') {
-    const task = sanitizeTask((raw as { task?: unknown }).task);
-    if (!task) {
-      return null;
-    }
-    return { type: 'create', task };
-  }
-  if (type === 'set-text') {
-    const id = (raw as { id?: unknown }).id;
-    const text = (raw as { text?: unknown }).text;
-    if (typeof id !== 'string' || id.trim().length === 0 || typeof text !== 'string') {
-      return null;
-    }
-    const normalized = text.length > 2000 ? text.slice(0, 2000) : text;
-    return { type: 'set-text', id, text: normalized };
-  }
-  if (type === 'set-completed') {
-    const id = (raw as { id?: unknown }).id;
-    const completed = (raw as { completed?: unknown }).completed;
-    if (typeof id !== 'string' || id.trim().length === 0 || typeof completed !== 'boolean') {
-      return null;
-    }
-    return { type: 'set-completed', id, completed };
-  }
-  if (type === 'remove') {
-    const id = (raw as { id?: unknown }).id;
-    if (typeof id !== 'string' || id.trim().length === 0) {
-      return null;
-    }
-    return { type: 'remove', id };
-  }
-  if (type === 'clear') {
-    return { type: 'clear' };
-  }
-  return null;
-}
-
-function serializeOperation(operation: TaskOperation): TaskOperation {
-  switch (operation.type) {
-    case 'create':
-      return { type: 'create', task: serializeTask(operation.task) };
-    case 'set-text':
-      return { type: 'set-text', id: operation.id, text: operation.text };
-    case 'set-completed':
-      return { type: 'set-completed', id: operation.id, completed: operation.completed };
-    case 'remove':
-      return { type: 'remove', id: operation.id };
-    case 'clear':
-      return { type: 'clear' };
-    default:
-      return operation;
-  }
-}
-
-function deserializeCollaborationEnvelope(raw: string): CollaborationEnvelope | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    console.error('[Dev Test] Failed to parse collaboration payload:', error);
-    return null;
-  }
-
-  if (!parsed || typeof parsed !== 'object') {
-    return null;
-  }
-
-  const { kind } = parsed as { kind?: unknown };
-  if (kind === 'snapshot') {
-    const version = (parsed as { version?: unknown }).version;
-    if (typeof version !== 'number' || !Number.isFinite(version)) {
-      return null;
-    }
-    const tasksRaw = (parsed as { tasks?: unknown }).tasks;
-    if (!Array.isArray(tasksRaw)) {
-      return null;
-    }
-    const tasks: Task[] = [];
-    tasksRaw.forEach(item => {
-      const task = sanitizeTask(item);
-      if (task) {
-        tasks.push(task);
-      }
-    });
-    tasks.sort((a, b) => a.createdAt - b.createdAt);
-    return { kind: 'snapshot', version, tasks };
-  }
-
-  if (kind === 'op') {
-    const opId = (parsed as { opId?: unknown }).opId;
-    const version = (parsed as { version?: unknown }).version;
-    const op = sanitizeOperation((parsed as { op?: unknown }).op);
-    if (typeof opId !== 'string' || opId.trim().length === 0 || !op) {
-      return null;
-    }
-    const normalizedVersion = typeof version === 'number' && Number.isFinite(version) ? version : null;
-    return { kind: 'op', opId, version: normalizedVersion, op };
-  }
-
-  return null;
-}
-
-function reduceOperation(state: Task[], operation: TaskOperation): Task[] {
-  switch (operation.type) {
-    case 'create': {
-      const next = state.some(item => item.id === operation.task.id)
-        ? state.map(item => (item.id === operation.task.id ? { ...item, ...operation.task } : item))
-        : [...state, operation.task];
-      return next.slice().sort((a, b) => a.createdAt - b.createdAt);
-    }
-    case 'set-text': {
-      return state.map(item => (item.id === operation.id ? { ...item, text: operation.text } : item));
-    }
-    case 'set-completed': {
-      return state.map(item =>
-        item.id === operation.id ? { ...item, completed: operation.completed } : item,
-      );
-    }
-    case 'remove': {
-      return state.filter(item => item.id !== operation.id);
-    }
-    case 'clear': {
-      if (state.length === 0) {
-        return state;
-      }
-      return [];
-    }
-    default:
-      return state;
-  }
-}
-
-function formatTimestamp(timestamp: number): string {
-  try {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   } catch {
-    return '';
+    // ignore and fall back to Math.random
+  }
+  return `client_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+}
+
+function getClientId(): string {
+  if (typeof window === 'undefined') {
+    return generateClientId();
+  }
+  const stored = window.localStorage.getItem(clientIdKey);
+  if (stored) {
+    return stored;
+  }
+  const created = generateClientId();
+  window.localStorage.setItem(clientIdKey, created);
+  return created;
+}
+
+function relativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = Math.max(0, now - timestamp);
+  const minutes = Math.round(diff / 60000);
+  if (minutes <= 1) {
+    return 'just now';
+  }
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+function statusTone(status: PulseStatus): string {
+  switch (status) {
+    case 'blocked':
+      return 'bg-rose-500/20 text-rose-200 ring-rose-400/40';
+    case 'shipped':
+      return 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40';
+    case 'in-progress':
+    default:
+      return 'bg-sky-500/20 text-sky-200 ring-sky-400/40';
   }
 }
 
-export default function DevTestPage() {
-  const clientIdRef = useRef<string>(generateClientId());
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
-  const [peerCount, setPeerCount] = useState(1);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [newTaskText, setNewTaskText] = useState('');
-  const [displayName, setDisplayName] = useState(() => {
-    if (typeof window === 'undefined') {
-      return '';
-    }
-    try {
-      return window.localStorage.getItem('yentic.dev-test.displayName') ?? '';
-    } catch {
-      return '';
-    }
-  });
+function statusDot(status: PulseStatus): string {
+  switch (status) {
+    case 'blocked':
+      return 'bg-rose-400';
+    case 'shipped':
+      return 'bg-emerald-400';
+    case 'in-progress':
+    default:
+      return 'bg-sky-400';
+  }
+}
 
-  const tasksRef = useRef<Task[]>(tasks);
-  const hasShareableStateRef = useRef<boolean>(tasks.length > 0);
-  const versionRef = useRef<number>(0);
-  const seenOperationsRef = useRef<Set<string>>(new Set());
-  const knownPeersRef = useRef<Set<string>>(new Set());
-  const connectedRef = useRef<boolean>(false);
-  const statusGuardRef = useRef({ mounted: true });
-  const displayNameRef = useRef<string>(displayName.trim());
-  const pendingLocalUpdatesRef = useRef<Array<{ serialized: string; options?: PostOptions }>>([]);
-  const sendUpdateRef = useRef<(serialized: string, options?: PostOptions) => void>((serialized, options) => {
-    pendingLocalUpdatesRef.current.push({ serialized, options });
-  });
-  const sendPresenceRef = useRef<(() => void) | null>(null);
+export default function DevTestPage(): JSX.Element {
+  const [connection, setConnection] = useState<ConnectionState>('connecting');
+  const [items, setItems] = useState<PulseItem[]>([]);
+  const [peers, setPeers] = useState<Peer[]>([]);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftStatus, setDraftStatus] = useState<PulseStatus>('in-progress');
+  const [displayName, setDisplayName] = useState<string>('');
 
-  useEffect(() => {
-    tasksRef.current = tasks;
-    hasShareableStateRef.current = tasks.length > 0;
-  }, [tasks]);
+  const clientIdRef = useRef<string>(getClientId());
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const displayNameRef = useRef<string>('');
+  const pendingQueueRef = useRef<Record<string, unknown>[]>([]);
+  const connectRef = useRef<() => void>(() => {});
 
-  useEffect(() => {
-    displayNameRef.current = displayName.trim();
-    if (typeof window !== 'undefined') {
-      try {
-        if (displayNameRef.current.length > 0) {
-          window.localStorage.setItem('yentic.dev-test.displayName', displayNameRef.current);
-        } else {
-          window.localStorage.removeItem('yentic.dev-test.displayName');
-        }
-      } catch {
-        // ignore localStorage errors
-      }
-    }
-    if (sendPresenceRef.current) {
-      sendPresenceRef.current();
-    }
-  }, [displayName]);
-
-  const statusLabel = useMemo(() => {
-    switch (connectionStatus) {
-      case 'connected':
-        return 'Connected';
-      case 'disconnected':
-        return 'Reconnecting…';
-      default:
-        return 'Connecting…';
-    }
-  }, [connectionStatus]);
-
-  const applyTaskOperation = useCallback(
-    (operation: TaskOperation) => {
-      const next = reduceOperation(tasksRef.current, operation);
-      tasksRef.current = next;
-      hasShareableStateRef.current = next.length > 0;
-      setTasks(next);
-    },
-    [setTasks],
-  );
-
-  const applySnapshot = useCallback(
-    (taskList: Task[], version: number) => {
-      versionRef.current = version;
-      tasksRef.current = taskList;
-      hasShareableStateRef.current = taskList.length > 0;
-      setTasks(taskList);
-    },
-    [setTasks],
-  );
-
-  const sendTaskOperation = useCallback(
-    (operation: TaskOperation) => {
-      const opId = createOperationId(clientIdRef.current);
-      seenOperationsRef.current.add(opId);
-      const nextVersion = versionRef.current + 1;
-      versionRef.current = nextVersion;
-      applyTaskOperation(operation);
-      try {
-        const envelope: OperationEnvelope = {
-          kind: 'op',
-          opId,
-          version: nextVersion,
-          op: serializeOperation(operation),
-        };
-        const serialized = JSON.stringify(envelope);
-        sendUpdateRef.current(serialized);
-      } catch (error) {
-        console.error('[Dev Test] Failed to serialize operation:', error);
-      }
-    },
-    [applyTaskOperation],
-  );
-
-  const broadcastSnapshot = useCallback(
-    (options?: PostOptions) => {
-      if (!hasShareableStateRef.current) {
-        return;
-      }
-      try {
-        const envelope: SnapshotEnvelope = {
-          kind: 'snapshot',
-          version: versionRef.current,
-          tasks: tasksRef.current.map(task => serializeTask(task)),
-        };
-        const serialized = JSON.stringify(envelope);
-        sendUpdateRef.current(serialized, options);
-      } catch (error) {
-        console.error('[Dev Test] Failed to serialize snapshot:', error);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    statusGuardRef.current.mounted = true;
-    const endpoint = '/api/projects/dev-test/collaboration';
-    const pendingRequests: Array<{ body: string; keepalive: boolean; attempt: number; allowDuringDispose?: boolean }> = [];
-    let sendingRequest = false;
-    let eventSource: EventSource | null = null;
-    let disposed = false;
-    let reconnectTimer: number | null = null;
-    let reconnectAttempts = 0;
-    let presenceInterval: number | null = null;
-
-    const safeSetStatus = (status: ConnectionStatus) => {
-      if (statusGuardRef.current.mounted) {
-        setConnectionStatus(status);
-      }
-    };
-
-    const safeSetPeerCount = (count: number) => {
-      if (statusGuardRef.current.mounted) {
-        setPeerCount(Math.max(1, count));
-      }
-    };
-
-    const processPendingRequests = () => {
-      if (sendingRequest || pendingRequests.length === 0) {
-        return;
-      }
-      const next = pendingRequests.shift();
-      if (!next) {
-        return;
-      }
-      sendingRequest = true;
-      fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: next.body,
-        keepalive: next.keepalive,
-      })
-        .then(() => {
-          sendingRequest = false;
-          processPendingRequests();
-        })
-        .catch(error => {
-          console.error('[Dev Test] Failed to post collaboration payload:', error);
-          sendingRequest = false;
-          if (!disposed && typeof window !== 'undefined' && next.attempt < 3) {
-            const delay = Math.min(600 * 2 ** next.attempt, 5000);
-            window.setTimeout(() => {
-              pendingRequests.unshift({
-                body: next.body,
-                keepalive: next.keepalive,
-                attempt: next.attempt + 1,
-                allowDuringDispose: next.allowDuringDispose,
-              });
-              processPendingRequests();
-            }, delay);
-          }
-          processPendingRequests();
-        });
-    };
-
-    const postCollaboration = (
-      payload: { type: 'update'; update: string } | { type: 'presence'; presence: unknown },
-      options?: PostOptions,
-    ) => {
-      if (disposed && !options?.allowDuringDispose) {
-        return;
-      }
-      const bodyObject =
-        payload.type === 'update'
-          ? { type: 'update', update: payload.update, clientId: clientIdRef.current }
-          : { type: 'presence', presence: payload.presence, clientId: clientIdRef.current };
-      const body = JSON.stringify(bodyObject);
-
-      if (payload.type === 'presence' && options?.preferBeacon && typeof navigator !== 'undefined') {
-        try {
-          if (typeof navigator.sendBeacon === 'function' && navigator.sendBeacon(endpoint, body)) {
-            return;
-          }
-        } catch (error) {
-          console.error('[Dev Test] Failed to send beacon payload:', error);
-        }
-      }
-
-      pendingRequests.push({
-        body,
-        keepalive: options?.keepalive ?? payload.type === 'presence',
-        attempt: 0,
-        allowDuringDispose: options?.allowDuringDispose,
-      });
-      processPendingRequests();
-    };
-
-    sendUpdateRef.current = (serialized, options) => {
-      postCollaboration({ type: 'update', update: serialized }, options);
-    };
-
-    if (pendingLocalUpdatesRef.current.length > 0) {
-      const queued = pendingLocalUpdatesRef.current.splice(0, pendingLocalUpdatesRef.current.length);
-      queued.forEach(item => {
-        postCollaboration({ type: 'update', update: item.serialized }, item.options);
-      });
-    }
-
-    const buildPresencePayload = () => ({
-      id: clientIdRef.current,
-      name: displayNameRef.current.length > 0 ? displayNameRef.current : null,
-      color: colorForClient(clientIdRef.current),
-      avatar: null,
-    });
-
-    const sendPresence = (
-      presence: unknown,
-      options?: PostOptions,
-    ) => {
-      postCollaboration({ type: 'presence', presence }, options);
-    };
-
-    sendPresenceRef.current = () => {
-      sendPresence(buildPresencePayload(), { keepalive: true });
-    };
-
-    const handlePageHide = () => {
-      broadcastSnapshot({ allowDuringDispose: true, keepalive: true, preferBeacon: true });
-      sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('pagehide', handlePageHide);
-    }
-
-    const handleUpdateEnvelope = (message: { update: string; clientId?: string }) => {
-      if (!message.update) {
-        return;
-      }
-      if (message.clientId && message.clientId === clientIdRef.current) {
-        return;
-      }
-      const payload = deserializeCollaborationEnvelope(message.update);
-      if (!payload) {
-        return;
-      }
-      if (payload.kind === 'snapshot') {
-        if (payload.version >= versionRef.current) {
-          applySnapshot(payload.tasks, payload.version);
-        }
-        return;
-      }
-      if (seenOperationsRef.current.has(payload.opId)) {
-        return;
-      }
-      seenOperationsRef.current.add(payload.opId);
-      if (typeof payload.version === 'number' && Number.isFinite(payload.version)) {
-        versionRef.current = Math.max(versionRef.current, payload.version);
-      } else {
-        versionRef.current += 1;
-      }
-      applyTaskOperation(payload.op);
-    };
-
-    const openEventStream = () => {
-      if (eventSource) {
-        eventSource.close();
-      }
-
-      connectedRef.current = false;
-      safeSetStatus('connecting');
-      safeSetPeerCount(1);
-
-      try {
-        eventSource = new EventSource(`${endpoint}?clientId=${encodeURIComponent(clientIdRef.current)}`);
-      } catch (error) {
-        console.error('[Dev Test] Failed to initialize collaboration stream:', error);
-        safeSetStatus('disconnected');
-        return;
-      }
-
-      eventSource.onopen = () => {
-        reconnectAttempts = 0;
-        if (reconnectTimer !== null && typeof window !== 'undefined') {
-          window.clearTimeout(reconnectTimer);
-          reconnectTimer = null;
-        }
-        connectedRef.current = true;
-        safeSetStatus('connected');
-        broadcastSnapshot();
-        sendPresence(buildPresencePayload());
-        if (presenceInterval !== null && typeof window !== 'undefined') {
-          window.clearInterval(presenceInterval);
-        }
-        if (typeof window !== 'undefined') {
-          presenceInterval = window.setInterval(() => {
-            sendPresence(buildPresencePayload());
-          }, 20000);
-        }
-      };
-
-      eventSource.onmessage = event => {
-        if (!event.data) {
-          return;
-        }
-        let parsed: CollaborationMessage;
-        try {
-          parsed = JSON.parse(event.data) as CollaborationMessage;
-        } catch (error) {
-          console.error('[Dev Test] Failed to parse SSE payload:', error);
-          return;
-        }
-
-        if (parsed.type === 'update') {
-          handleUpdateEnvelope(parsed);
-          return;
-        }
-
-        const uniqueIds = new Set<string>();
-        const remoteIds = new Set<string>();
-        parsed.clients.forEach(client => {
-          if (typeof client.clientId === 'string') {
-            uniqueIds.add(client.clientId);
-            if (client.clientId !== clientIdRef.current) {
-              remoteIds.add(client.clientId);
-            }
-          }
-        });
-        const previous = knownPeersRef.current;
-        const newPeers: string[] = [];
-        remoteIds.forEach(id => {
-          if (!previous.has(id)) {
-            newPeers.push(id);
-          }
-        });
-        knownPeersRef.current = remoteIds;
-        safeSetPeerCount(Math.max(1, uniqueIds.size));
-        if (newPeers.length > 0 && connectedRef.current && hasShareableStateRef.current) {
-          broadcastSnapshot();
-        }
-      };
-
-      eventSource.onerror = error => {
-        console.error('[Dev Test] Collaboration stream error:', error);
-        connectedRef.current = false;
-        safeSetStatus('disconnected');
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
-        }
-        if (presenceInterval !== null && typeof window !== 'undefined') {
-          window.clearInterval(presenceInterval);
-          presenceInterval = null;
-        }
-        if (disposed || typeof window === 'undefined') {
-          return;
-        }
-        if (reconnectTimer !== null) {
-          window.clearTimeout(reconnectTimer);
-        }
-        const delay = Math.min(1000 * 2 ** reconnectAttempts, 12000);
-        reconnectAttempts += 1;
-        reconnectTimer = window.setTimeout(() => {
-          reconnectTimer = null;
-          openEventStream();
-        }, delay);
-      };
-    };
-
-    openEventStream();
-
-    return () => {
-      broadcastSnapshot({ allowDuringDispose: true, keepalive: true, preferBeacon: true });
-      sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
-      disposed = true;
-      connectedRef.current = false;
-      if (presenceInterval !== null && typeof window !== 'undefined') {
-        window.clearInterval(presenceInterval);
-      }
-      if (reconnectTimer !== null && typeof window !== 'undefined') {
-        window.clearTimeout(reconnectTimer);
-      }
-      if (eventSource) {
-        eventSource.close();
-        eventSource = null;
-      }
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('pagehide', handlePageHide);
-      }
-      safeSetStatus('disconnected');
-      safeSetPeerCount(1);
-      knownPeersRef.current = new Set();
-      statusGuardRef.current.mounted = false;
-      sendUpdateRef.current = (serialized, options) => {
-        pendingLocalUpdatesRef.current.push({ serialized, options });
-      };
-      sendPresenceRef.current = null;
-    };
-  }, [applySnapshot, applyTaskOperation, broadcastSnapshot]);
-
-  const handleSubmit = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      const trimmed = newTaskText.trim();
-      if (!trimmed) {
-        return;
-      }
-      const task: Task = {
-        id: createTaskId(clientIdRef.current),
-        text: trimmed.slice(0, 2000),
-        completed: false,
-        author: displayNameRef.current.length > 0 ? displayNameRef.current : null,
-        createdAt: Date.now(),
-      };
-      sendTaskOperation({ type: 'create', task });
-      setNewTaskText('');
-    },
-    [newTaskText, sendTaskOperation],
-  );
-
-  const handleToggleTask = useCallback(
-    (task: Task) => {
-      sendTaskOperation({ type: 'set-completed', id: task.id, completed: !task.completed });
-    },
-    [sendTaskOperation],
-  );
-
-  const handleRemoveTask = useCallback(
-    (task: Task) => {
-      sendTaskOperation({ type: 'remove', id: task.id });
-    },
-    [sendTaskOperation],
-  );
-
-  const handleRenameTask = useCallback(
-    (task: Task) => {
-      if (typeof window === 'undefined') {
-        return;
-      }
-      const nextText = window.prompt('Update the card text', task.text);
-      if (nextText === null) {
-        return;
-      }
-      const trimmed = nextText.trim();
-      if (!trimmed) {
-        sendTaskOperation({ type: 'remove', id: task.id });
-        return;
-      }
-      if (trimmed === task.text) {
-        return;
-      }
-      sendTaskOperation({ type: 'set-text', id: task.id, text: trimmed.slice(0, 2000) });
-    },
-    [sendTaskOperation],
-  );
-
-  const handleClearBoard = useCallback(() => {
-    if (tasksRef.current.length === 0) {
+  const flushPending = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
       return;
     }
-    sendTaskOperation({ type: 'clear' });
-  }, [sendTaskOperation]);
+    if (pendingQueueRef.current.length === 0) {
+      return;
+    }
+    const queued = pendingQueueRef.current.splice(0, pendingQueueRef.current.length);
+    for (let index = 0; index < queued.length; index += 1) {
+      const payload = queued[index];
+      try {
+        socket.send(JSON.stringify(payload));
+      } catch {
+        const remaining = queued.slice(index);
+        pendingQueueRef.current = [...remaining, ...pendingQueueRef.current];
+        break;
+      }
+    }
+  }, []);
 
-  const handleManualSnapshot = useCallback(() => {
-    broadcastSnapshot();
-  }, [broadcastSnapshot]);
+  const sendCommand = useCallback((payload: Record<string, unknown>) => {
+    const socket = socketRef.current;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      try {
+        socket.send(JSON.stringify(payload));
+        return;
+      } catch {
+        // fall through to queueing on failure
+      }
+    }
+    pendingQueueRef.current.push(payload);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const stored = window.localStorage.getItem(displayNameKey);
+    if (stored) {
+      setDisplayName(stored);
+      const normalizedStored = stored.trim();
+      displayNameRef.current = normalizedStored;
+      sendCommand({
+        type: 'presence',
+        clientId: clientIdRef.current,
+        name: normalizedStored.length > 0 ? normalizedStored : null,
+      });
+    }
+  }, [sendCommand]);
+
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => b.updatedAt - a.updatedAt),
+    [items],
+  );
+
+  const handleServerMessage = useCallback((message: ServerMessage) => {
+    if (message.type === 'snapshot') {
+      setItems(message.items);
+      return;
+    }
+    if (message.type === 'item') {
+      setItems(prev => {
+        const next = prev.filter(item => item.id !== message.item.id);
+        next.push(message.item);
+        return next;
+      });
+      return;
+    }
+    if (message.type === 'presence') {
+      setPeers(message.peers);
+    }
+  }, []);
+
+  const connect = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (socketRef.current) {
+      try {
+        socketRef.current.close();
+      } catch {
+        // ignore errors while closing previous sockets
+      }
+    }
+
+    setConnection('connecting');
+
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${protocol}://${window.location.host}/api/dev-test/realtime?clientId=${encodeURIComponent(
+      clientIdRef.current,
+    )}`;
+    const socket = new WebSocket(url);
+    socketRef.current = socket;
+
+    socket.addEventListener('open', () => {
+      setConnection('connected');
+      flushPending();
+      sendCommand({
+        type: 'presence',
+        clientId: clientIdRef.current,
+        name: displayNameRef.current.length > 0 ? displayNameRef.current : null,
+      });
+    });
+
+    socket.addEventListener('message', event => {
+      if (typeof event.data !== 'string') {
+        return;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (!parsed || typeof parsed !== 'object') {
+        return;
+      }
+      const { type } = parsed as { type?: unknown };
+      if (type === 'snapshot' || type === 'item' || type === 'presence') {
+        handleServerMessage(parsed as ServerMessage);
+      }
+    });
+
+    const scheduleReconnect = () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      reconnectTimerRef.current = setTimeout(() => {
+        connectRef.current();
+      }, 1500);
+    };
+
+    socket.addEventListener('close', () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
+      socketRef.current = null;
+      setConnection('disconnected');
+      scheduleReconnect();
+    });
+
+    socket.addEventListener('error', () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
+      try {
+        socket.close();
+      } catch {
+        // ignore
+      }
+    });
+  }, [flushPending, handleServerMessage, sendCommand]);
+
+  connectRef.current = connect;
+
+  useEffect(() => {
+    connect();
+    return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      if (socketRef.current) {
+        try {
+          socketRef.current.close();
+        } catch {
+          // ignore errors when closing during unmount
+        }
+      }
+    };
+  }, [connect]);
+
+  const handleDisplayNameChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setDisplayName(value);
+      const normalized = value.trim();
+      displayNameRef.current = normalized;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(displayNameKey, value);
+      }
+      sendCommand({
+        type: 'presence',
+        clientId: clientIdRef.current,
+        name: normalized.length > 0 ? normalized : null,
+      });
+    },
+    [sendCommand],
+  );
+
+  const resetForm = useCallback(() => {
+    setDraftTitle('');
+    setDraftStatus('in-progress');
+  }, []);
+
+  const handleCreate = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const normalized = draftTitle.trim();
+      if (normalized.length === 0) {
+        return;
+      }
+      setDraftTitle('');
+      sendCommand({
+        type: 'create',
+        clientId: clientIdRef.current,
+        title: normalized,
+        status: draftStatus,
+        owner: displayNameRef.current.length > 0 ? displayNameRef.current : null,
+      });
+      resetForm();
+    },
+    [draftStatus, draftTitle, resetForm, sendCommand],
+  );
+
+  const updateStatus = useCallback(
+    (itemId: string, status: PulseStatus) => {
+      sendCommand({
+        type: 'status',
+        clientId: clientIdRef.current,
+        itemId,
+        status,
+        owner: displayNameRef.current.length > 0 ? displayNameRef.current : null,
+      });
+    },
+    [sendCommand],
+  );
+
+  const connectionBadge = useMemo(() => {
+    switch (connection) {
+      case 'connected':
+        return 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/50';
+      case 'connecting':
+        return 'bg-amber-500/20 text-amber-200 ring-amber-400/50';
+      case 'disconnected':
+      default:
+        return 'bg-rose-500/20 text-rose-200 ring-rose-400/40';
+    }
+  }, [connection]);
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 py-10">
-      <div className="flex flex-col gap-2">
-        <p className="text-sm uppercase tracking-[0.3em] text-emerald-300/80">Dev Test</p>
-        <h1 className="text-3xl font-semibold">Realtime task wall</h1>
-        <p className="text-sm text-white/60">
-          Experiment with the collaboration bridge powering the IDE. Add or edit cards and watch every
-          connected browser stay in sync without relying on the Yjs document used elsewhere in the app.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 text-xs text-white/60">
-        <span
-          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 font-medium transition ${
-            connectionStatus === 'connected'
-              ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-200'
-              : 'border-white/10 bg-white/5'
-          }`}
-        >
-          <span className={`h-2 w-2 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-300' : 'bg-yellow-300'}`} />
-          {statusLabel}
-        </span>
-        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-medium text-white/70">
-          {peerCount} {peerCount === 1 ? 'active tab' : 'active tabs'}
-        </span>
-        <button
-          type="button"
-          onClick={handleManualSnapshot}
-          className="rounded-full border border-emerald-300/40 px-3 py-1 font-medium text-emerald-200 transition hover:border-emerald-300 hover:text-emerald-100"
-        >
-          Broadcast snapshot now
-        </button>
-        <button
-          type="button"
-          onClick={handleClearBoard}
-          className="rounded-full border border-white/15 px-3 py-1 font-medium text-white/70 transition hover:border-red-400/60 hover:text-red-200"
-        >
-          Clear board
-        </button>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/40 p-6 shadow-inner shadow-black/40">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <label htmlFor="dev-test-new-card" className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">
-              Add a card
-            </label>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                id="dev-test-new-card"
-                value={newTaskText}
-                onChange={event => setNewTaskText(event.target.value)}
-                placeholder="Write a quick task or note and press Enter"
-                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90 outline-none transition focus:border-emerald-400/60 focus:bg-black/40"
-              />
-              <button
-                type="submit"
-                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!newTaskText.trim()}
-              >
-                Share update
-              </button>
-            </div>
-          </form>
-
-          <div className="rounded-xl border border-white/10 bg-white/5">
-            {tasks.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-6 py-10 text-center text-sm text-white/50">
-                <span>No cards yet.</span>
-                <span>Add something above and open another browser tab to watch it sync.</span>
-              </div>
-            ) : (
-              <ul className="divide-y divide-white/5">
-                {tasks.map(task => (
-                  <li key={task.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-1 items-start gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleTask(task)}
-                        className={`mt-1 h-4 w-4 rounded border ${
-                          task.completed
-                            ? 'border-emerald-300 bg-emerald-400'
-                            : 'border-white/20 bg-transparent'
-                        } transition hover:border-emerald-300`}
-                        aria-pressed={task.completed}
-                        aria-label={task.completed ? 'Mark as incomplete' : 'Mark as complete'}
-                      />
-                      <div className="flex flex-col">
-                        <span className={`text-sm ${task.completed ? 'text-white/50 line-through' : 'text-white/90'}`}>
-                          {task.text}
-                        </span>
-                        <span className="text-xs text-white/40">
-                          {task.author ? `Added by ${task.author}` : 'Anonymous update'} · {formatTimestamp(task.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleRenameTask(task)}
-                        className="rounded-full border border-white/15 px-3 py-1 text-xs font-medium text-white/70 transition hover:border-white/40 hover:text-white"
-                      >
-                        Edit text
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTask(task)}
-                        className="rounded-full border border-white/15 px-3 py-1 text-xs font-medium text-red-200 transition hover:border-red-400/60 hover:text-red-100"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+    <div className="flex min-h-screen flex-col gap-10 bg-[#05070B] px-6 pb-16 pt-14 text-white sm:px-10">
+      <header className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">Realtime Lab</p>
+            <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Pulseboard command center</h1>
+            <p className="mt-3 max-w-2xl text-sm text-white/60">
+              A low-latency status wall that streams updates over a dedicated realtime channel. Every change you make is
+              broadcast instantly without refreshes or auth requirements.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.35em] ring-1 ring-inset transition ${connectionBadge}`}>
+              <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-current" />
+              {connection}
+            </span>
           </div>
         </div>
 
-        <aside className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
-          <div className="flex flex-col gap-2">
-            <label htmlFor="dev-test-display-name" className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">
-              Your label
+        <div className="grid gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-emerald-500/10 sm:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-3">
+            <label className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60" htmlFor="display-name">
+              Your handle
             </label>
             <input
-              id="dev-test-display-name"
+              id="display-name"
               value={displayName}
-              onChange={event => setDisplayName(event.target.value.slice(0, 80))}
-              placeholder="Optional name shown to other testers"
-              className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white/90 outline-none transition focus:border-emerald-400/60"
+              onChange={handleDisplayNameChange}
+              placeholder="Let the room know who is adjusting the dials"
+              className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
+              maxLength={80}
             />
           </div>
-
-          <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/60">
-            <p className="font-semibold text-white/80">How this test works</p>
-            <ul className="mt-2 space-y-2 text-xs">
-              <li>• Updates are broadcast as tiny JSON operations instead of Yjs binary patches.</li>
-              <li>• Snapshots are sent when new peers arrive or when you manually broadcast them.</li>
-              <li>• Presence data relies on the same SSE channel that powers the production IDE.</li>
-            </ul>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">Active peers</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {peers.length === 0 && (
+                <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/40">
+                  Just you in here
+                </span>
+              )}
+              {peers.map(peer => (
+                <span
+                  key={peer.clientId}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/80"
+                >
+                  <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{ backgroundColor: peer.color }} />
+                  {peer.name ?? 'Anonymous builder'}
+                </span>
+              ))}
+            </div>
           </div>
+        </div>
+      </header>
 
-          <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-xs text-white/50">
-            Tip: keep this tab open next to another device, add cards here, and confirm everything updates instantly.
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-emerald-500/10">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">Add a pulse</p>
+            <h2 className="mt-2 text-xl font-semibold">Push a new track to the board</h2>
           </div>
-        </aside>
-      </div>
+          <form onSubmit={handleCreate} className="flex w-full flex-col gap-4 sm:w-auto sm:flex-row sm:items-center">
+            <input
+              value={draftTitle}
+              onChange={event => setDraftTitle(event.target.value)}
+              placeholder="Ship realtime notifications"
+              className="flex-1 rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
+              maxLength={160}
+            />
+            <select
+              value={draftStatus}
+              onChange={event => setDraftStatus(event.target.value as PulseStatus)}
+              className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
+            >
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="shipped">Shipped</option>
+            </select>
+            <button
+              type="submit"
+              className="rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-500/30"
+              disabled={draftTitle.trim().length === 0}
+            >
+              Broadcast
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {sortedItems.map(item => (
+          <article
+            key={item.id}
+            className="group flex flex-col gap-4 rounded-3xl border border-white/10 bg-black/40 p-6 text-sm text-white shadow-lg shadow-black/40 transition hover:border-emerald-300/60 hover:shadow-emerald-400/20"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white/90">{item.title}</h3>
+                <p className="mt-1 text-xs uppercase tracking-[0.35em] text-white/40">Last update {relativeTime(item.updatedAt)}</p>
+              </div>
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.35em] ring-1 ring-inset ${statusTone(item.status)}`}>
+                <span className={`inline-flex h-2 w-2 rounded-full ${statusDot(item.status)}`} />
+                {statusLabel[item.status]}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-white/60">
+              <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] uppercase tracking-[0.35em] text-white/70">
+                {item.owner ?? 'Unclaimed'}
+              </span>
+              <span className="text-[11px] uppercase tracking-[0.35em] text-white/40">•</span>
+              <span className="text-[11px] uppercase tracking-[0.35em] text-white/50">{item.id.slice(-6)}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(['in-progress', 'blocked', 'shipped'] as PulseStatus[]).map(status => (
+                <button
+                  key={`${item.id}-${status}`}
+                  type="button"
+                  onClick={() => updateStatus(item.id, status)}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] transition ${
+                    item.status === status
+                      ? 'bg-white text-black'
+                      : 'border border-white/15 text-white/70 hover:border-emerald-300/60 hover:text-emerald-200'
+                  }`}
+                >
+                  {statusLabel[status]}
+                </button>
+              ))}
+            </div>
+          </article>
+        ))}
+        {sortedItems.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-white/10 bg-black/20 p-10 text-center text-sm text-white/50">
+            Waiting for the first broadcast…
+          </div>
+        )}
+      </section>
     </div>
   );
 }
