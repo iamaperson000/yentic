@@ -1,39 +1,47 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type JSX,
+} from 'react';
 
-type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
+type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
-type Note = {
+type PulseStatus = 'blocked' | 'in-progress' | 'shipped';
+
+type PulseItem = {
   id: string;
-  text: string;
-  color: string;
-  x: number;
-  y: number;
-  author: string | null;
-  createdAt: number;
+  title: string;
+  status: PulseStatus;
+  owner: string | null;
+  updatedAt: number;
 };
 
-type PresenceEntry = {
+type Peer = {
   clientId: string;
   name: string | null;
-  color: string | null;
+  color: string;
 };
 
-type NotePatch = Partial<Pick<Note, 'text' | 'color' | 'x' | 'y'>>;
+type ServerMessage =
+  | { type: 'snapshot'; items: PulseItem[] }
+  | { type: 'item'; item: PulseItem }
+  | { type: 'presence'; peers: Peer[] };
 
-type WallMessageWithoutIssuer =
-  | { kind: 'sync-request'; requesterId: string }
-  | { kind: 'sync'; notes: Note[]; revision: number }
-  | { kind: 'note-created'; note: Note; revision: number }
-  | { kind: 'note-updated'; noteId: string; patch: NotePatch; revision: number }
-  | { kind: 'note-removed'; noteId: string; revision: number };
+const displayNameKey = 'yentic.dev-test.display-name';
+const clientIdKey = 'yentic.dev-test.client-id';
 
-type WallMessage = WallMessageWithoutIssuer & { issuerId: string };
-
-const draftKey = 'yentic.dev-test.displayName';
-
-const palette = ['#FDE68A', '#FCA5A5', '#93C5FD', '#A7F3D0', '#FBCFE8', '#C4B5FD'];
+const statusLabel: Record<PulseStatus, string> = {
+  blocked: 'Blocked',
+  'in-progress': 'In Progress',
+  shipped: 'Shipped',
+};
 
 function generateClientId(): string {
   try {
@@ -41,209 +49,64 @@ function generateClientId(): string {
       return crypto.randomUUID();
     }
   } catch {
-    // ignore
+    // ignore and fall back to Math.random
   }
-  return `client-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+  return `client_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
 }
 
-function createNoteId(clientId: string): string {
-  return `${clientId}:note:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+function getClientId(): string {
+  if (typeof window === 'undefined') {
+    return generateClientId();
+  }
+  const stored = window.localStorage.getItem(clientIdKey);
+  if (stored) {
+    return stored;
+  }
+  const created = generateClientId();
+  window.localStorage.setItem(clientIdKey, created);
+  return created;
 }
 
-function colorForClient(clientId: string): string {
-  let hash = 0;
-  for (let index = 0; index < clientId.length; index += 1) {
-    hash = (hash << 5) - hash + clientId.charCodeAt(index);
-    hash |= 0;
+function relativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = Math.max(0, now - timestamp);
+  const minutes = Math.round(diff / 60000);
+  if (minutes <= 1) {
+    return 'just now';
   }
-  const colors = ['#34d399', '#38bdf8', '#fbbf24', '#f472b6'];
-  return colors[Math.abs(hash) % colors.length];
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function sanitizeText(text: unknown): string | null {
-  if (typeof text !== 'string') {
-    return null;
-  }
-  const trimmed = text.trim();
-  if (trimmed.length === 0) {
-    return '';
-  }
-  return trimmed.length > 500 ? trimmed.slice(0, 500) : trimmed;
-}
-
-function sanitizeColor(color: unknown): string | null {
-  if (typeof color !== 'string') {
-    return null;
-  }
-  return color.slice(0, 32);
-}
-
-function sanitizeCoordinate(value: unknown): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return null;
-  }
-  return clamp(value, 0, 100);
-}
-
-function sanitizeNote(raw: unknown): Note | null {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-  const { id, text, color, x, y, author, createdAt } = raw as Partial<Note> & {
-    id?: unknown;
-    text?: unknown;
-    color?: unknown;
-    x?: unknown;
-    y?: unknown;
-    author?: unknown;
-    createdAt?: unknown;
-  };
-
-  if (typeof id !== 'string' || id.trim().length === 0) {
-    return null;
-  }
-
-  const normalizedText = sanitizeText(text);
-  if (normalizedText === null) {
-    return null;
-  }
-
-  const normalizedColor = sanitizeColor(color) ?? palette[0];
-  const normalizedX = sanitizeCoordinate(x) ?? 50;
-  const normalizedY = sanitizeCoordinate(y) ?? 50;
-
-  let normalizedAuthor: string | null = null;
-  if (typeof author === 'string') {
-    normalizedAuthor = author.slice(0, 120);
-  }
-
-  const normalizedCreatedAt =
-    typeof createdAt === 'number' && Number.isFinite(createdAt) ? createdAt : Date.now();
-
-  return {
-    id,
-    text: normalizedText,
-    color: normalizedColor,
-    x: normalizedX,
-    y: normalizedY,
-    author: normalizedAuthor,
-    createdAt: normalizedCreatedAt,
-  };
-}
-
-function sanitizePatch(raw: unknown): NotePatch | null {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-  const patch = raw as NotePatch & {
-    text?: unknown;
-    color?: unknown;
-    x?: unknown;
-    y?: unknown;
-  };
-  const result: NotePatch = {};
-  if (Object.prototype.hasOwnProperty.call(patch, 'text')) {
-    const normalized = sanitizeText(patch.text);
-    if (normalized === null) {
-      return null;
-    }
-    result.text = normalized;
-  }
-  if (Object.prototype.hasOwnProperty.call(patch, 'color')) {
-    const normalized = sanitizeColor(patch.color);
-    if (normalized === null) {
-      return null;
-    }
-    result.color = normalized;
-  }
-  if (Object.prototype.hasOwnProperty.call(patch, 'x')) {
-    const normalized = sanitizeCoordinate(patch.x);
-    if (normalized === null) {
-      return null;
-    }
-    result.x = normalized;
-  }
-  if (Object.prototype.hasOwnProperty.call(patch, 'y')) {
-    const normalized = sanitizeCoordinate(patch.y);
-    if (normalized === null) {
-      return null;
-    }
-    result.y = normalized;
+function statusTone(status: PulseStatus): string {
+  switch (status) {
+    case 'blocked':
+      return 'bg-rose-500/20 text-rose-200 ring-rose-400/40';
+    case 'shipped':
+      return 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40';
+    case 'in-progress':
+    default:
+      return 'bg-sky-500/20 text-sky-200 ring-sky-400/40';
   }
   return result;
 }
 
-function parseWallMessage(raw: string): WallMessage | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== 'object') {
-    return null;
-  }
-  const { kind, issuerId } = parsed as { kind?: unknown; issuerId?: unknown };
-  if (typeof kind !== 'string' || typeof issuerId !== 'string' || issuerId.length === 0) {
-    return null;
-  }
-  if (kind === 'sync-request') {
-    const requesterId = (parsed as { requesterId?: unknown }).requesterId;
-    if (typeof requesterId !== 'string' || requesterId.length === 0) {
-      return null;
-    }
-    return { kind, issuerId, requesterId };
-  }
-  if (kind === 'sync') {
-    const notesRaw = (parsed as { notes?: unknown }).notes;
-    const revision = (parsed as { revision?: unknown }).revision;
-    if (!Array.isArray(notesRaw) || typeof revision !== 'number' || !Number.isFinite(revision)) {
-      return null;
-    }
-    const notes: Note[] = [];
-    notesRaw.forEach(item => {
-      const note = sanitizeNote(item);
-      if (note) {
-        notes.push(note);
-      }
-    });
-    notes.sort((a, b) => a.createdAt - b.createdAt);
-    return { kind, issuerId, notes, revision };
-  }
-  if (kind === 'note-created') {
-    const note = sanitizeNote((parsed as { note?: unknown }).note);
-    const revision = (parsed as { revision?: unknown }).revision;
-    if (!note || typeof revision !== 'number' || !Number.isFinite(revision)) {
-      return null;
-    }
-    return { kind, issuerId, note, revision };
-  }
-  if (kind === 'note-updated') {
-    const noteId = (parsed as { noteId?: unknown }).noteId;
-    const patch = sanitizePatch((parsed as { patch?: unknown }).patch);
-    const revision = (parsed as { revision?: unknown }).revision;
-    if (
-      typeof noteId !== 'string' ||
-      noteId.length === 0 ||
-      !patch ||
-      typeof revision !== 'number' ||
-      !Number.isFinite(revision)
-    ) {
-      return null;
-    }
-    return { kind, issuerId, noteId, patch, revision };
-  }
-  if (kind === 'note-removed') {
-    const noteId = (parsed as { noteId?: unknown }).noteId;
-    const revision = (parsed as { revision?: unknown }).revision;
-    if (typeof noteId !== 'string' || noteId.length === 0 || typeof revision !== 'number' || !Number.isFinite(revision)) {
-      return null;
-    }
-    return { kind, issuerId, noteId, revision };
+function statusDot(status: PulseStatus): string {
+  switch (status) {
+    case 'blocked':
+      return 'bg-rose-400';
+    case 'shipped':
+      return 'bg-emerald-400';
+    case 'in-progress':
+    default:
+      return 'bg-sky-400';
   }
   return null;
 }
@@ -256,470 +119,319 @@ function sortNotes(notes: Note[]): Note[] {
   return notes.slice().sort((a, b) => a.createdAt - b.createdAt);
 }
 
-function formatTimestamp(timestamp: number): string {
+async function postUpdate(payload: Record<string, unknown>): Promise<void> {
   try {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    await fetch('/api/dev-test/realtime', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
   } catch {
-    return '';
+    // fire-and-forget; UI will reconcile from stream
   }
 }
 
-export default function DevTestPage() {
-  const clientIdRef = useRef<string>(generateClientId());
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [peers, setPeers] = useState<PresenceEntry[]>([]);
-  const [draftText, setDraftText] = useState('');
-  const [draftColor, setDraftColor] = useState(() => palette[0]);
-  const [displayName, setDisplayName] = useState(() => {
-    if (typeof window === 'undefined') {
-      return '';
-    }
-    try {
-      return window.localStorage.getItem(draftKey) ?? '';
-    } catch {
-      return '';
-    }
-  });
+export default function DevTestPage(): JSX.Element {
+  const [connection, setConnection] = useState<ConnectionState>('connecting');
+  const [items, setItems] = useState<PulseItem[]>([]);
+  const [peers, setPeers] = useState<Peer[]>([]);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftStatus, setDraftStatus] = useState<PulseStatus>('in-progress');
+  const [displayName, setDisplayName] = useState<string>('');
 
+  const clientIdRef = useRef<string>(getClientId());
   const eventSourceRef = useRef<EventSource | null>(null);
-  const notesRef = useRef<Note[]>(notes);
-  const revisionRef = useRef<number>(0);
-  const displayNameRef = useRef<string>(displayName.trim());
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [clientColor] = useState(() => colorForClient(clientIdRef.current));
+  const displayNameRef = useRef<string>('');
 
   useEffect(() => {
-    notesRef.current = notes;
-  }, [notes]);
-
-  useEffect(() => {
-    const trimmed = displayName.trim();
-    displayNameRef.current = trimmed;
-    if (typeof window !== 'undefined') {
-      try {
-        if (trimmed.length > 0) {
-          window.localStorage.setItem(draftKey, trimmed);
-        } else {
-          window.localStorage.removeItem(draftKey);
-        }
-      } catch {
-        // ignore storage errors
-      }
+    if (typeof window === 'undefined') {
+      return;
     }
-  }, [displayName]);
+    const stored = window.localStorage.getItem(displayNameKey);
+    if (stored) {
+      setDisplayName(stored);
+      displayNameRef.current = stored;
+      void postUpdate({ type: 'presence', clientId: clientIdRef.current, name: stored });
+    }
+  }, []);
 
-  const sendPresence = useCallback(
-    (presence: { id: string; name: string | null; color: string } | null, options?: { keepalive?: boolean; allowDuringDispose?: boolean }) => {
-      const body = JSON.stringify({ type: 'presence', clientId: clientIdRef.current, presence });
-      if (options?.allowDuringDispose && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-        try {
-          const blob = new Blob([body], { type: 'application/json' });
-          navigator.sendBeacon('/api/projects/dev-test/collaboration', blob);
-          return;
-        } catch {
-          // fall through to fetch
-        }
-      }
-      void fetch('/api/projects/dev-test/collaboration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        keepalive: options?.keepalive ?? false,
-      }).catch(error => {
-        console.error('[Realtime Wall] Failed to send presence', error);
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => b.updatedAt - a.updatedAt),
+    [items],
+  );
+
+  const handleServerMessage = useCallback((message: ServerMessage) => {
+    if (message.type === 'snapshot') {
+      setItems(message.items);
+      return;
+    }
+    if (message.type === 'item') {
+      setItems(prev => {
+        const next = prev.filter(item => item.id !== message.item.id);
+        next.push(message.item);
+        return next;
       });
-    },
-    [],
-  );
+      return;
+    }
+    if (message.type === 'presence') {
+      setPeers(message.peers);
+    }
+  }, []);
 
-  const sendWallMessage = useCallback(
-    (message: WallMessageWithoutIssuer) => {
-      const payload: WallMessage = { ...message, issuerId: clientIdRef.current };
-      const serialized = JSON.stringify(payload);
-      void fetch('/api/projects/dev-test/collaboration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'update', clientId: clientIdRef.current, update: serialized }),
-        keepalive: true,
-      }).catch(error => {
-        console.error('[Realtime Wall] Failed to broadcast message', error);
-      });
-    },
-    [],
-  );
+  const connect = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    setConnection('connecting');
+    const source = new EventSource(`/api/dev-test/realtime?clientId=${clientIdRef.current}`);
+    eventSourceRef.current = source;
 
-  const requestSync = useCallback(() => {
-    sendWallMessage({ kind: 'sync-request', requesterId: clientIdRef.current });
-  }, [sendWallMessage]);
-
-  const handleWallMessage = useCallback(
-    (message: WallMessage) => {
-      if (message.issuerId === clientIdRef.current) {
-        return;
-      }
-      switch (message.kind) {
-        case 'sync-request': {
-          if (notesRef.current.length === 0) {
-            return;
-          }
-          if (message.requesterId === clientIdRef.current) {
-            return;
-          }
-          const revision = revisionRef.current || Date.now();
-          sendWallMessage({ kind: 'sync', notes: notesRef.current, revision });
-          return;
-        }
-        case 'sync': {
-          if (message.revision >= revisionRef.current) {
-            revisionRef.current = message.revision;
-            setNotes(sortNotes(message.notes));
-          }
-          return;
-        }
-        case 'note-created': {
-          revisionRef.current = Math.max(revisionRef.current, message.revision);
-          setNotes(prev => {
-            const exists = prev.some(note => note.id === message.note.id);
-            if (exists) {
-              return sortNotes(prev.map(note => (note.id === message.note.id ? message.note : note)));
-            }
-            return sortNotes([...prev, message.note]);
-          });
-          return;
-        }
-        case 'note-updated': {
-          revisionRef.current = Math.max(revisionRef.current, message.revision);
-          setNotes(prev =>
-            prev.map(note =>
-              note.id === message.noteId
-                ? {
-                    ...note,
-                    ...message.patch,
-                  }
-                : note,
-            ),
-          );
-          return;
-        }
-        case 'note-removed': {
-          revisionRef.current = Math.max(revisionRef.current, message.revision);
-          setNotes(prev => prev.filter(note => note.id !== message.noteId));
-          return;
-        }
-        default:
-          return;
-      }
-    },
-    [sendWallMessage],
-  );
-
-  useEffect(() => {
-    let disposed = false;
-    const connect = () => {
-      const source = new EventSource(`/api/projects/dev-test/collaboration?clientId=${clientIdRef.current}`);
-      eventSourceRef.current = source;
-      setConnectionStatus('connecting');
-
-      source.onopen = () => {
-        setConnectionStatus('connected');
-        sendPresence({ id: clientIdRef.current, name: displayNameRef.current || null, color: clientColor });
-        requestSync();
-      };
-
-      source.onmessage = event => {
-        if (!event.data) {
-          return;
-        }
-        let payload: unknown;
-        try {
-          payload = JSON.parse(event.data);
-        } catch {
-          return;
-        }
-        if (!payload || typeof payload !== 'object') {
-          return;
-        }
-        const { type } = payload as { type?: unknown };
-        if (type === 'presence') {
-          const list = (payload as { clients?: unknown }).clients;
-          if (Array.isArray(list)) {
-            const sanitized: PresenceEntry[] = [];
-            list.forEach(entry => {
-              if (!entry || typeof entry !== 'object') {
-                return;
-              }
-              const { clientId, name, color } = entry as PresenceEntry & {
-                clientId?: unknown;
-                name?: unknown;
-                color?: unknown;
-              };
-              if (typeof clientId === 'string' && clientId.length > 0) {
-                sanitized.push({
-                  clientId,
-                  name: typeof name === 'string' ? name.slice(0, 120) : null,
-                  color: typeof color === 'string' ? color.slice(0, 32) : null,
-                });
-              }
-            });
-            setPeers(sanitized);
-          }
-          return;
-        }
-        if (type === 'update') {
-          const update = (payload as { update?: unknown }).update;
-          if (typeof update === 'string' && update.length > 0) {
-            const parsed = parseWallMessage(update);
-            if (parsed) {
-              handleWallMessage(parsed);
-            }
-          }
-        }
-      };
-
-      source.onerror = () => {
-        setConnectionStatus('disconnected');
-        source.close();
-        if (!disposed) {
-          reconnectTimerRef.current = setTimeout(() => {
-            connect();
-          }, 1500);
-        }
-      };
+    source.onopen = () => {
+      setConnection('connected');
+      void postUpdate({ type: 'presence', clientId: clientIdRef.current, name: displayNameRef.current });
     };
 
-    connect();
+    source.onmessage = event => {
+      if (!event.data) {
+        return;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (!parsed || typeof parsed !== 'object') {
+        return;
+      }
+      const { type } = parsed as { type?: unknown };
+      if (type === 'snapshot' || type === 'item' || type === 'presence') {
+        handleServerMessage(parsed as ServerMessage);
+      }
+    };
 
+    source.onerror = () => {
+      setConnection('disconnected');
+      source.close();
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      reconnectTimerRef.current = setTimeout(() => {
+        connect();
+      }, 1500);
+    };
+  }, [handleServerMessage]);
+
+  useEffect(() => {
+    connect();
     return () => {
-      disposed = true;
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
       eventSourceRef.current?.close();
-      sendPresence(null, { allowDuringDispose: true });
     };
-  }, [clientColor, handleWallMessage, requestSync, sendPresence]);
+  }, [connect]);
 
-  const handleCreateNote = useCallback(
+  const handleDisplayNameChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setDisplayName(value);
+      displayNameRef.current = value.trim();
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(displayNameKey, value);
+      }
+      void postUpdate({ type: 'presence', clientId: clientIdRef.current, name: displayNameRef.current });
+    },
+    [],
+  );
+
+  const resetForm = useCallback(() => {
+    setDraftTitle('');
+    setDraftStatus('in-progress');
+  }, []);
+
+  const handleCreate = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      const normalized = draftText.trim();
+      const normalized = draftTitle.trim();
       if (normalized.length === 0) {
         return;
       }
-      const revision = Date.now();
-      revisionRef.current = Math.max(revisionRef.current, revision);
-      const note: Note = {
-        id: createNoteId(clientIdRef.current),
-        text: normalized.length > 500 ? normalized.slice(0, 500) : normalized,
-        color: draftColor,
-        x: clamp(randomBetween(8, 72), 5, 85),
-        y: clamp(randomBetween(10, 78), 5, 85),
-        author: displayNameRef.current.length > 0 ? displayNameRef.current : 'Guest',
-        createdAt: revision,
-      };
-      setNotes(prev => sortNotes([...prev, note]));
-      sendWallMessage({ kind: 'note-created', note, revision });
-      setDraftText('');
+      setDraftTitle('');
+      void postUpdate({
+        type: 'create',
+        clientId: clientIdRef.current,
+        title: normalized,
+        status: draftStatus,
+        owner: displayNameRef.current.length > 0 ? displayNameRef.current : null,
+      });
+      resetForm();
     },
-    [draftColor, draftText, sendWallMessage],
+    [draftStatus, draftTitle, resetForm],
   );
 
-  const updateNote = useCallback(
-    (noteId: string, patch: NotePatch) => {
-      setNotes(prev => prev.map(note => (note.id === noteId ? { ...note, ...patch } : note)));
-      const revision = Date.now();
-      revisionRef.current = Math.max(revisionRef.current, revision);
-      sendWallMessage({ kind: 'note-updated', noteId, patch, revision });
-    },
-    [sendWallMessage],
-  );
+  const updateStatus = useCallback((itemId: string, status: PulseStatus) => {
+    void postUpdate({
+      type: 'status',
+      clientId: clientIdRef.current,
+      itemId,
+      status,
+      owner: displayNameRef.current,
+    });
+  }, []);
 
-  const removeNote = useCallback(
-    (noteId: string) => {
-      setNotes(prev => prev.filter(note => note.id !== noteId));
-      const revision = Date.now();
-      revisionRef.current = Math.max(revisionRef.current, revision);
-      sendWallMessage({ kind: 'note-removed', noteId, revision });
-    },
-    [sendWallMessage],
-  );
-
-  const connectionLabel = useMemo(() => {
-    switch (connectionStatus) {
+  const connectionBadge = useMemo(() => {
+    switch (connection) {
       case 'connected':
-        return 'Connected';
+        return 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/50';
+      case 'connecting':
+        return 'bg-amber-500/20 text-amber-200 ring-amber-400/50';
       case 'disconnected':
-        return 'Reconnecting…';
       default:
-        return 'Connecting…';
+        return 'bg-rose-500/20 text-rose-200 ring-rose-400/40';
     }
-  }, [connectionStatus]);
-
-  const activePeers = useMemo(() => peers.filter(entry => entry.clientId !== clientIdRef.current), [peers]);
+  }, [connection]);
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 py-12">
-      <header className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-8 shadow-lg shadow-emerald-500/10">
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-white/70">
-            Realtime Wall
-          </span>
-          <span
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
-              connectionStatus === 'connected'
-                ? 'bg-emerald-500/20 text-emerald-200'
-                : 'bg-amber-500/20 text-amber-100'
-            }`}
-          >
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${
-                connectionStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400'
-              }`}
-            />
-            {connectionLabel}
-          </span>
+    <div className="flex min-h-screen flex-col gap-10 bg-[#05070B] px-6 pb-16 pt-14 text-white sm:px-10">
+      <header className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">Realtime Lab</p>
+            <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Pulseboard command center</h1>
+            <p className="mt-3 max-w-2xl text-sm text-white/60">
+              A low-latency status wall that streams updates over a dedicated realtime channel. Every change you make is
+              broadcast instantly without refreshes or auth requirements.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.35em] ring-1 ring-inset transition ${connectionBadge}`}>
+              <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-current" />
+              {connection}
+            </span>
+          </div>
         </div>
-        <p className="max-w-3xl text-sm text-white/70">
-          Sketch ideas together on a shared canvas of sticky notes. Updates broadcast instantly over the collaboration
-          service—no refreshes, no polling, and no locks. Drop a card, edit in place, and watch changes sync to other
-          participants in real time.
-        </p>
-        <div className="flex flex-wrap items-center gap-4 text-xs text-white/60">
-          <div className="inline-flex items-center gap-2">
-            <span className="font-semibold text-white">You:</span>
+
+        <div className="grid gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-emerald-500/10 sm:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-3">
+            <label className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60" htmlFor="display-name">
+              Your handle
+            </label>
             <input
+              id="display-name"
               value={displayName}
-              onChange={event => setDisplayName(event.target.value)}
-              className="w-40 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white outline-none transition focus:border-emerald-300 focus:bg-black/40"
-              placeholder="Set a name"
-              maxLength={60}
+              onChange={handleDisplayNameChange}
+              placeholder="Let the room know who is adjusting the dials"
+              className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
+              maxLength={80}
             />
           </div>
-          <div className="inline-flex items-center gap-2">
-            <span className="font-semibold text-white">Peers online:</span>
-            {activePeers.length === 0 ? (
-              <span className="text-white/50">Just you for now</span>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                {activePeers.map(peer => (
-                  <span
-                    key={peer.clientId}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white/70"
-                  >
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: peer.color ?? '#94a3b8' }}
-                    />
-                    {peer.name ?? 'Anonymous'}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <form
-        onSubmit={handleCreateNote}
-        className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-emerald-500/10 sm:flex-row sm:items-end"
-      >
-        <div className="flex-1">
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
-            New note
-          </label>
-          <textarea
-            value={draftText}
-            onChange={event => setDraftText(event.target.value)}
-            placeholder="Capture an idea to share with the room"
-            className="min-h-[96px] w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
-            maxLength={500}
-          />
-        </div>
-        <div className="flex flex-col gap-3">
-          <span className="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">Color</span>
-          <div className="flex flex-wrap gap-2">
-            {palette.map(color => (
-              <button
-                type="button"
-                key={color}
-                onClick={() => setDraftColor(color)}
-                className={`h-9 w-9 rounded-full border transition ${
-                  draftColor === color ? 'border-emerald-400 ring-2 ring-emerald-400/60' : 'border-white/30'
-                }`}
-                style={{ backgroundColor: color }}
-                aria-label={`Use ${color} for the note`}
-              />
-            ))}
-          </div>
-        </div>
-        <button
-          type="submit"
-          className="h-12 rounded-2xl bg-emerald-500 px-6 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-white/30"
-          disabled={draftText.trim().length === 0}
-        >
-          Drop note
-        </button>
-      </form>
-
-      <section className="relative min-h-[520px] overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70 p-10 shadow-2xl shadow-emerald-500/10">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.15),_transparent_55%)]" />
-        <div className="relative flex h-full flex-col gap-4">
-          <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-white/40">
-            <span>Shared canvas</span>
-            <span>{notes.length} notes</span>
-          </div>
-          <div className="relative flex-1">
-            <div className="absolute inset-0">
-              {notes.map(note => (
-                <article
-                  key={note.id}
-                  className="group absolute flex w-60 flex-col gap-3 rounded-2xl border border-black/10 p-4 text-slate-900 shadow-lg shadow-black/20 transition hover:scale-[1.02]"
-                  style={{
-                    left: `${note.x}%`,
-                    top: `${note.y}%`,
-                    transform: 'translate(-50%, -50%)',
-                    backgroundColor: note.color,
-                  }}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">Active peers</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {peers.length === 0 && (
+                <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/40">
+                  Just you in here
+                </span>
+              )}
+              {peers.map(peer => (
+                <span
+                  key={peer.clientId}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/80"
                 >
-                  <textarea
-                    value={note.text}
-                    onChange={event => updateNote(note.id, { text: event.target.value })}
-                    className="h-24 w-full resize-none rounded-xl border border-black/10 bg-black/5 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-black/40"
-                    maxLength={500}
-                  />
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] uppercase tracking-[0.2em] text-slate-700">
-                    <span>{note.author ?? 'Anonymous'}</span>
-                    <span>{formatTimestamp(note.createdAt)}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-1">
-                      {palette.map(color => (
-                        <button
-                          type="button"
-                          key={`${note.id}-${color}`}
-                          onClick={() => updateNote(note.id, { color })}
-                          className={`h-6 w-6 rounded-full border border-black/20 transition ${
-                            note.color === color ? 'ring-2 ring-black/50' : 'opacity-80 hover:opacity-100'
-                          }`}
-                          style={{ backgroundColor: color }}
-                          aria-label="Change note color"
-                        />
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeNote(note.id)}
-                      className="rounded-full border border-black/30 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-black/60 transition hover:border-black/60 hover:text-black"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </article>
+                  <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{ backgroundColor: peer.color }} />
+                  {peer.name ?? 'Anonymous builder'}
+                </span>
               ))}
             </div>
           </div>
         </div>
+      </header>
+
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-emerald-500/10">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">Add a pulse</p>
+            <h2 className="mt-2 text-xl font-semibold">Push a new track to the board</h2>
+          </div>
+          <form onSubmit={handleCreate} className="flex w-full flex-col gap-4 sm:w-auto sm:flex-row sm:items-center">
+            <input
+              value={draftTitle}
+              onChange={event => setDraftTitle(event.target.value)}
+              placeholder="Ship realtime notifications"
+              className="flex-1 rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
+              maxLength={160}
+            />
+            <select
+              value={draftStatus}
+              onChange={event => setDraftStatus(event.target.value as PulseStatus)}
+              className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
+            >
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="shipped">Shipped</option>
+            </select>
+            <button
+              type="submit"
+              className="rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-500/30"
+              disabled={draftTitle.trim().length === 0}
+            >
+              Broadcast
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {sortedItems.map(item => (
+          <article
+            key={item.id}
+            className="group flex flex-col gap-4 rounded-3xl border border-white/10 bg-black/40 p-6 text-sm text-white shadow-lg shadow-black/40 transition hover:border-emerald-300/60 hover:shadow-emerald-400/20"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white/90">{item.title}</h3>
+                <p className="mt-1 text-xs uppercase tracking-[0.35em] text-white/40">Last update {relativeTime(item.updatedAt)}</p>
+              </div>
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.35em] ring-1 ring-inset ${statusTone(item.status)}`}>
+                <span className={`inline-flex h-2 w-2 rounded-full ${statusDot(item.status)}`} />
+                {statusLabel[item.status]}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-white/60">
+              <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] uppercase tracking-[0.35em] text-white/70">
+                {item.owner ?? 'Unclaimed'}
+              </span>
+              <span className="text-[11px] uppercase tracking-[0.35em] text-white/40">•</span>
+              <span className="text-[11px] uppercase tracking-[0.35em] text-white/50">{item.id.slice(-6)}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(['in-progress', 'blocked', 'shipped'] as PulseStatus[]).map(status => (
+                <button
+                  key={`${item.id}-${status}`}
+                  type="button"
+                  onClick={() => updateStatus(item.id, status)}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] transition ${
+                    item.status === status
+                      ? 'bg-white text-black'
+                      : 'border border-white/15 text-white/70 hover:border-emerald-300/60 hover:text-emerald-200'
+                  }`}
+                >
+                  {statusLabel[status]}
+                </button>
+              ))}
+            </div>
+          </article>
+        ))}
+        {sortedItems.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-white/10 bg-black/20 p-10 text-center text-sm text-white/50">
+            Waiting for the first broadcast…
+          </div>
+        )}
       </section>
     </div>
   );

@@ -96,7 +96,7 @@ function MarketingLanding() {
               href="/dev-test"
               className="rounded-full border border-emerald-400/40 px-6 py-3 text-sm font-semibold text-emerald-200 transition hover:border-emerald-300/80 hover:text-emerald-100"
             >
-              Open the realtime wall
+              Try the Pulseboard lab
             </Link>
           </div>
         </div>
