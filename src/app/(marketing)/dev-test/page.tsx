@@ -10,6 +10,8 @@ import {
   type ChangeEvent,
   type JSX,
 } from 'react';
+import sharedbClient from 'sharedb/lib/client';
+import type { Connection as ShareDBConnection, Doc as ShareDBDoc, JSONOp } from 'sharedb/lib/client';
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
@@ -29,10 +31,12 @@ type Peer = {
   color: string;
 };
 
-type ServerMessage =
-  | { type: 'snapshot'; items: PulseItem[] }
-  | { type: 'item'; item: PulseItem }
-  | { type: 'presence'; peers: Peer[] };
+type PulseboardDoc = {
+  items: Record<string, PulseItem>;
+  peers: Record<string, Peer>;
+};
+
+type TimerHandle = ReturnType<typeof setTimeout>;
 
 const displayNameKey = 'yentic.dev-test.display-name';
 const clientIdKey = 'yentic.dev-test.client-id';
@@ -42,6 +46,20 @@ const statusLabel: Record<PulseStatus, string> = {
   'in-progress': 'In Progress',
   shipped: 'Shipped',
 };
+
+const statusToneMap: Record<PulseStatus, string> = {
+  blocked: 'bg-rose-500/20 text-rose-200 ring-rose-400/40',
+  'in-progress': 'bg-sky-500/20 text-sky-200 ring-sky-400/40',
+  shipped: 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40',
+};
+
+const statusDotMap: Record<PulseStatus, string> = {
+  blocked: 'bg-rose-400',
+  'in-progress': 'bg-sky-400',
+  shipped: 'bg-emerald-400',
+};
+
+const palette = ['#22d3ee', '#a855f7', '#f97316', '#22c55e', '#14b8a6', '#f59e0b', '#facc15', '#ef4444'];
 
 function generateClientId(): string {
   try {
@@ -67,6 +85,26 @@ function getClientId(): string {
   return created;
 }
 
+function generateId(prefix: string): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return `${prefix}_${crypto.randomUUID()}`;
+    }
+  } catch {
+    // ignore and fall back to Math.random
+  }
+  return `${prefix}_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+}
+
+function colorForClient(clientId: string): string {
+  let hash = 0;
+  for (let index = 0; index < clientId.length; index += 1) {
+    hash = (hash << 5) - hash + clientId.charCodeAt(index);
+    hash |= 0;
+  }
+  return palette[Math.abs(hash) % palette.length];
+}
+
 function relativeTime(timestamp: number): string {
   const now = Date.now();
   const diff = Math.max(0, now - timestamp);
@@ -84,18 +122,6 @@ function relativeTime(timestamp: number): string {
   const days = Math.round(hours / 24);
   return `${days}d ago`;
 }
-
-const statusToneMap: Record<PulseStatus, string> = {
-  blocked: 'bg-rose-500/20 text-rose-200 ring-rose-400/40',
-  'in-progress': 'bg-sky-500/20 text-sky-200 ring-sky-400/40',
-  shipped: 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40',
-};
-
-const statusDotMap: Record<PulseStatus, string> = {
-  blocked: 'bg-rose-400',
-  'in-progress': 'bg-sky-400',
-  shipped: 'bg-emerald-400',
-};
 
 function statusTone(status: PulseStatus): string {
   return statusToneMap[status] ?? statusToneMap['in-progress'];
@@ -115,144 +141,148 @@ export default function DevTestPage(): JSX.Element {
 
   const clientIdRef = useRef<string>(getClientId());
   const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const displayNameRef = useRef<string>('');
-  const pendingQueueRef = useRef<Record<string, unknown>[]>([]);
+  const connectionRef = useRef<ShareDBConnection | null>(null);
+  const docRef = useRef<ShareDBDoc<PulseboardDoc> | null>(null);
+  const reconnectTimerRef = useRef<TimerHandle | null>(null);
+  const displayNameValueRef = useRef<string>('');
   const connectRef = useRef<() => void>(() => {});
 
-  const flushPending = useCallback(() => {
-    const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
+  const applyDocSnapshot = useCallback(() => {
+    const doc = docRef.current;
+    const data = doc?.data;
+    if (!data) {
       return;
     }
-    if (pendingQueueRef.current.length === 0) {
-      return;
+    const nextItems = Object.values(data.items ?? {});
+    const nextPeers = Object.values(data.peers ?? {});
+
+    const self = data.peers?.[clientIdRef.current];
+    if (
+      self &&
+      typeof self.name === 'string' &&
+      self.name.length > 0 &&
+      displayNameValueRef.current.trim().length === 0
+    ) {
+      displayNameValueRef.current = self.name;
+      setDisplayName(self.name);
     }
-    const queued = pendingQueueRef.current.splice(0, pendingQueueRef.current.length);
-    for (let index = 0; index < queued.length; index += 1) {
-      const payload = queued[index];
-      try {
-        socket.send(JSON.stringify(payload));
-      } catch {
-        const remaining = queued.slice(index);
-        pendingQueueRef.current = [...remaining, ...pendingQueueRef.current];
-        break;
-      }
-    }
+
+    setItems(nextItems);
+    setPeers(nextPeers);
   }, []);
 
-  const sendCommand = useCallback((payload: Record<string, unknown>) => {
-    const socket = socketRef.current;
-    if (socket && socket.readyState === WebSocket.OPEN) {
+  const handleDocError = useCallback((error: Error) => {
+    console.error('ShareDB document error', error);
+  }, []);
+
+  const cleanupShareDB = useCallback(() => {
+    const doc = docRef.current;
+    if (doc) {
+      doc.removeListener('op', applyDocSnapshot);
+      doc.removeListener('load', applyDocSnapshot);
+      doc.removeListener('error', handleDocError);
+      doc.destroy();
+      docRef.current = null;
+    }
+    const connection = connectionRef.current;
+    if (connection) {
       try {
-        socket.send(JSON.stringify(payload));
+        connection.close();
+      } catch {
+        // ignore connection close errors
+      }
+      connectionRef.current = null;
+    }
+  }, [applyDocSnapshot, handleDocError]);
+
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+    }
+    reconnectTimerRef.current = setTimeout(() => {
+      connectRef.current();
+    }, 1500);
+  }, []);
+
+  const updatePeerName = useCallback(
+    (value: string) => {
+      const doc = docRef.current;
+      const data = doc?.data;
+      if (!doc || !data || !data.peers) {
         return;
-      } catch {
-        // fall through to queueing on failure
       }
-    }
-    pendingQueueRef.current.push(payload);
-  }, []);
+      const normalized = value.trim();
+      const nextValue = normalized.length > 0 ? normalized : null;
+      const clientId = clientIdRef.current;
+      const existing = data.peers[clientId];
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const stored = window.localStorage.getItem(displayNameKey);
-    if (stored) {
-      setDisplayName(stored);
-      const normalizedStored = stored.trim();
-      displayNameRef.current = normalizedStored;
-      sendCommand({
-        type: 'presence',
-        clientId: clientIdRef.current,
-        name: normalizedStored.length > 0 ? normalizedStored : null,
+      const ops: JSONOp = [];
+
+      if (!existing) {
+        const peer: Peer = {
+          clientId,
+          name: nextValue,
+          color: colorForClient(clientId),
+        };
+        ops.push({
+          p: ['peers', clientId],
+          oi: peer,
+        });
+      } else if ((existing.name ?? null) !== nextValue) {
+        ops.push({
+          p: ['peers', clientId, 'name'],
+          oi: nextValue,
+          od: existing.name ?? null,
+        });
+      } else {
+        return;
+      }
+
+      doc.submitOp(ops, { source: 'client:presence:update' }, error => {
+        if (error) {
+          console.error('Failed to update presence', error);
+        }
       });
-    }
-  }, [sendCommand]);
-
-  const sortedItems = useMemo(
-    () => [...items].sort((a, b) => b.updatedAt - a.updatedAt),
-    [items],
+    },
+    [],
   );
-
-  const handleServerMessage = useCallback((message: ServerMessage) => {
-    if (message.type === 'snapshot') {
-      setItems(message.items);
-      return;
-    }
-    if (message.type === 'item') {
-      setItems(prev => {
-        const next = prev.filter(item => item.id !== message.item.id);
-        next.push(message.item);
-        return next;
-      });
-      return;
-    }
-    if (message.type === 'presence') {
-      setPeers(message.peers);
-    }
-  }, []);
 
   const connect = useCallback(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
-    if (socketRef.current) {
-      try {
-        socketRef.current.close();
-      } catch {
-        // ignore errors while closing previous sockets
-      }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
     }
 
-    setConnection('connecting');
+    cleanupShareDB();
+
+    const existingSocket = socketRef.current;
+    if (existingSocket) {
+      try {
+        existingSocket.close();
+      } catch {
+        // ignore close errors on stale sockets
+      }
+    }
 
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const url = `${protocol}://${window.location.host}/api/dev-test/realtime?clientId=${encodeURIComponent(
       clientIdRef.current,
     )}`;
+
     const socket = new WebSocket(url);
     socketRef.current = socket;
+    setConnection('connecting');
 
     socket.addEventListener('open', () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
       setConnection('connected');
-      flushPending();
-      sendCommand({
-        type: 'presence',
-        clientId: clientIdRef.current,
-        name: displayNameRef.current.length > 0 ? displayNameRef.current : null,
-      });
     });
-
-    socket.addEventListener('message', event => {
-      if (typeof event.data !== 'string') {
-        return;
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(event.data);
-      } catch {
-        return;
-      }
-      if (!parsed || typeof parsed !== 'object') {
-        return;
-      }
-      const { type } = parsed as { type?: unknown };
-      if (type === 'snapshot' || type === 'item' || type === 'presence') {
-        handleServerMessage(parsed as ServerMessage);
-      }
-    });
-
-    const scheduleReconnect = () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-      }
-      reconnectTimerRef.current = setTimeout(() => {
-        connectRef.current();
-      }, 1500);
-    };
 
     socket.addEventListener('close', () => {
       if (socketRef.current !== socket) {
@@ -260,6 +290,7 @@ export default function DevTestPage(): JSX.Element {
       }
       socketRef.current = null;
       setConnection('disconnected');
+      cleanupShareDB();
       scheduleReconnect();
     });
 
@@ -267,13 +298,28 @@ export default function DevTestPage(): JSX.Element {
       if (socketRef.current !== socket) {
         return;
       }
-      try {
-        socket.close();
-      } catch {
-        // ignore
-      }
+      socket.close();
     });
-  }, [flushPending, handleServerMessage, sendCommand]);
+
+    const connection = new sharedbClient.Connection(socket);
+    connectionRef.current = connection;
+
+    const doc = connection.get<PulseboardDoc>('dev-test', 'pulseboard');
+    docRef.current = doc;
+
+    doc.on('op', applyDocSnapshot);
+    doc.on('load', applyDocSnapshot);
+    doc.on('error', handleDocError);
+
+    doc.subscribe(error => {
+      if (error) {
+        console.error('Failed to subscribe to ShareDB document', error);
+        return;
+      }
+      applyDocSnapshot();
+      updatePeerName(displayNameValueRef.current);
+    });
+  }, [applyDocSnapshot, cleanupShareDB, handleDocError, scheduleReconnect, updatePeerName]);
 
   connectRef.current = connect;
 
@@ -283,32 +329,46 @@ export default function DevTestPage(): JSX.Element {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
-      if (socketRef.current) {
+      const socket = socketRef.current;
+      if (socket) {
         try {
-          socketRef.current.close();
+          socket.close();
         } catch {
-          // ignore errors when closing during unmount
+          // ignore close errors on unmount
         }
       }
+      cleanupShareDB();
     };
-  }, [connect]);
+  }, [cleanupShareDB, connect]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const stored = window.localStorage.getItem(displayNameKey);
+    if (stored) {
+      setDisplayName(stored);
+      displayNameValueRef.current = stored;
+      updatePeerName(stored);
+    }
+  }, [updatePeerName]);
+
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => b.updatedAt - a.updatedAt),
+    [items],
+  );
 
   const handleDisplayNameChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value;
       setDisplayName(value);
-      const normalized = value.trim();
-      displayNameRef.current = normalized;
+      displayNameValueRef.current = value;
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(displayNameKey, value);
       }
-      sendCommand({
-        type: 'presence',
-        clientId: clientIdRef.current,
-        name: normalized.length > 0 ? normalized : null,
-      });
+      updatePeerName(value);
     },
-    [sendCommand],
+    [updatePeerName],
   );
 
   const resetForm = useCallback(() => {
@@ -323,30 +383,90 @@ export default function DevTestPage(): JSX.Element {
       if (normalized.length === 0) {
         return;
       }
-      setDraftTitle('');
-      sendCommand({
-        type: 'create',
-        clientId: clientIdRef.current,
+      const doc = docRef.current;
+      if (!doc || !doc.data || !doc.data.items) {
+        return;
+      }
+      const owner = displayNameValueRef.current.trim();
+      const item: PulseItem = {
+        id: generateId('pulse'),
         title: normalized,
         status: draftStatus,
-        owner: displayNameRef.current.length > 0 ? displayNameRef.current : null,
-      });
+        owner: owner.length > 0 ? owner : null,
+        updatedAt: Date.now(),
+      };
+
+      doc.submitOp(
+        [
+          {
+            p: ['items', item.id],
+            oi: item,
+          },
+        ],
+        { source: 'client:item:create' },
+        error => {
+          if (error) {
+            console.error('Failed to create item', error);
+          }
+        },
+      );
+
       resetForm();
     },
-    [draftStatus, draftTitle, resetForm, sendCommand],
+    [draftStatus, draftTitle, resetForm],
   );
 
   const updateStatus = useCallback(
     (itemId: string, status: PulseStatus) => {
-      sendCommand({
-        type: 'status',
-        clientId: clientIdRef.current,
-        itemId,
-        status,
-        owner: displayNameRef.current.length > 0 ? displayNameRef.current : null,
+      const doc = docRef.current;
+      const data = doc?.data;
+      if (!doc || !data || !data.items) {
+        return;
+      }
+      const current = data.items[itemId];
+      if (!current) {
+        return;
+      }
+
+      const ops: JSONOp = [];
+      let changed = false;
+
+      if (current.status !== status) {
+        ops.push({
+          p: ['items', itemId, 'status'],
+          oi: status,
+          od: current.status,
+        });
+        changed = true;
+      }
+
+      const owner = displayNameValueRef.current.trim();
+      if (owner.length > 0 && (current.owner ?? null) !== owner) {
+        ops.push({
+          p: ['items', itemId, 'owner'],
+          oi: owner,
+          od: current.owner ?? null,
+        });
+        changed = true;
+      }
+
+      if (!changed) {
+        return;
+      }
+
+      ops.push({
+        p: ['items', itemId, 'updatedAt'],
+        oi: Date.now(),
+        od: current.updatedAt,
+      });
+
+      doc.submitOp(ops, { source: 'client:item:update' }, error => {
+        if (error) {
+          console.error('Failed to update item', error);
+        }
       });
     },
-    [sendCommand],
+    [],
   );
 
   const connectionBadge = useMemo(() => {
@@ -374,7 +494,9 @@ export default function DevTestPage(): JSX.Element {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <span className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.35em] ring-1 ring-inset transition ${connectionBadge}`}>
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.35em] ring-1 ring-inset transition ${connectionBadge}`}
+            >
               <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-current" />
               {connection}
             </span>
@@ -462,7 +584,9 @@ export default function DevTestPage(): JSX.Element {
                 <h3 className="text-lg font-semibold text-white/90">{item.title}</h3>
                 <p className="mt-1 text-xs uppercase tracking-[0.35em] text-white/40">Last update {relativeTime(item.updatedAt)}</p>
               </div>
-              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.35em] ring-1 ring-inset ${statusTone(item.status)}`}>
+              <span
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.35em] ring-1 ring-inset ${statusTone(item.status)}`}
+              >
                 <span className={`inline-flex h-2 w-2 rounded-full ${statusDot(item.status)}`} />
                 {statusLabel[item.status]}
               </span>
