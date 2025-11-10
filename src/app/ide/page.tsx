@@ -222,7 +222,7 @@ export default async function WorkspacePicker() {
             return (
               <Link
                 key={workspace.slug}
-                href={`/ide/${workspace.slug}?new=1`}
+                href={`/ide/${workspace.slug}`}
                 className={`group relative flex min-h-[220px] flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 transition duration-300 hover:-translate-y-1.5 hover:border-white/20 hover:bg-white/10 ${glow}`}
               >
                 <div
@@ -284,7 +284,7 @@ export default async function WorkspacePicker() {
                     {ownedProjectCards.map(project => (
                       <Link
                         key={project.id}
-                        href={`/ide/${project.slug}?projectId=${project.id}`}
+                        href={`/${project.id}`}
                         className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-6 transition hover:-translate-y-1 hover:border-white/20 hover:bg-black/50"
                       >
                         <div className="space-y-2">
@@ -317,7 +317,7 @@ export default async function WorkspacePicker() {
                     {sharedProjectCards.map(project => (
                       <Link
                         key={project.id}
-                        href={`/ide/${project.slug}?projectId=${project.id}`}
+                        href={`/${project.id}`}
                         className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-6 transition hover:-translate-y-1 hover:border-white/20 hover:bg-black/50"
                       >
                         <div className="flex items-center justify-between gap-4">
