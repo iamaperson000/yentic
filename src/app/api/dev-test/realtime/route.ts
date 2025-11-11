@@ -38,6 +38,8 @@ const backend = new ShareDB();
 const connection = backend.connect();
 const doc = connection.get<PulseboardDoc>('dev-test', 'pulseboard');
 
+const textDecoder = new TextDecoder();
+
 const docReady: Promise<void> = new Promise((resolve, reject) => {
   doc.subscribe(error => {
     if (error) {
@@ -45,7 +47,7 @@ const docReady: Promise<void> = new Promise((resolve, reject) => {
       return;
     }
     if (doc.type === null) {
-      doc.create(buildInitialData(), err => {
+      doc.create(buildInitialData(), 'json0', err => {
         if (err) {
           reject(err);
           return;
@@ -72,14 +74,25 @@ class ShareDBWebSocketStream extends Duplex {
       if (this.isClosed) {
         return;
       }
-      try {
-        const data = parseJSON(event.data);
-        if (data !== undefined) {
-          this.push(data);
-        }
-      } catch (error) {
-        this.destroy(error as Error);
+
+      const { data } = event;
+
+      if (typeof Blob !== 'undefined' && data instanceof Blob) {
+        void data
+          .text()
+          .then(text => {
+            if (this.isClosed) {
+              return;
+            }
+            this.handleIncomingMessage(text);
+          })
+          .catch(error => {
+            this.destroy(error as Error);
+          });
+        return;
       }
+
+      this.handleIncomingMessage(data);
     });
 
     socket.addEventListener('close', () => {
@@ -128,6 +141,17 @@ class ShareDBWebSocketStream extends Duplex {
     }
     callback();
   }
+
+  private handleIncomingMessage(payload: unknown): void {
+    try {
+      const data = parseJSON(payload);
+      if (data !== undefined) {
+        this.push(data);
+      }
+    } catch (error) {
+      this.destroy(error as Error);
+    }
+  }
 }
 
 function parseJSON(payload: unknown): unknown {
@@ -135,7 +159,9 @@ function parseJSON(payload: unknown): unknown {
     return JSON.parse(payload);
   }
   if (payload instanceof ArrayBuffer) {
-    const textDecoder = new TextDecoder();
+    return JSON.parse(textDecoder.decode(payload));
+  }
+  if (ArrayBuffer.isView(payload)) {
     return JSON.parse(textDecoder.decode(payload));
   }
   if (typeof Blob !== 'undefined' && payload instanceof Blob) {
