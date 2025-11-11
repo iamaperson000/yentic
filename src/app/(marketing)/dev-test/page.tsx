@@ -200,7 +200,7 @@ export default function DevTestPage(): JSX.Element {
       clearTimeout(reconnectTimerRef.current);
     }
     reconnectTimerRef.current = setTimeout(() => {
-      connectRef.current();
+      void connectRef.current();
     }, 1500);
   }, []);
 
@@ -247,7 +247,7 @@ export default function DevTestPage(): JSX.Element {
     [],
   );
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -255,6 +255,18 @@ export default function DevTestPage(): JSX.Element {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
+    }
+
+    try {
+      const response = await fetch('/api/dev-test/realtime');
+      if (!response.ok) {
+        throw new Error(`Warmup request failed with status ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Failed to prepare realtime endpoint', error);
+      setConnection('disconnected');
+      scheduleReconnect();
+      return;
     }
 
     cleanupShareDB();
@@ -324,7 +336,7 @@ export default function DevTestPage(): JSX.Element {
   connectRef.current = connect;
 
   useEffect(() => {
-    connect();
+    void connect();
     return () => {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
