@@ -1,11 +1,13 @@
+import { Buffer } from 'node:buffer';
+import type { Server as HTTPServer } from 'node:http';
+import type { Socket } from 'node:net';
 import { Duplex } from 'node:stream';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import ShareDB from 'sharedb';
 import type { Doc, JSONOp } from 'sharedb';
-import { NextRequest } from 'next/server';
-
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
+import type WebSocket from 'ws';
+import { WebSocketServer } from 'ws';
+import type { RawData } from 'ws';
 
 type ConnectionStateDoc = Doc<PulseboardDoc>;
 
@@ -38,14 +40,17 @@ const backend = new ShareDB();
 const connection = backend.connect();
 const doc = connection.get<PulseboardDoc>('dev-test', 'pulseboard');
 
+const textDecoder = new TextDecoder();
+
 const docReady: Promise<void> = new Promise((resolve, reject) => {
   doc.subscribe(error => {
     if (error) {
       reject(error);
       return;
     }
+
     if (doc.type === null) {
-      doc.create(buildInitialData(), err => {
+      doc.create(buildInitialData(), 'json0', err => {
         if (err) {
           reject(err);
           return;
@@ -54,6 +59,7 @@ const docReady: Promise<void> = new Promise((resolve, reject) => {
       });
       return;
     }
+
     resolve();
   });
 });
@@ -68,21 +74,15 @@ class ShareDBWebSocketStream extends Duplex {
     super({ objectMode: true });
     this.socket = socket;
 
-    socket.addEventListener('message', event => {
+    socket.on('message', data => {
       if (this.isClosed) {
         return;
       }
-      try {
-        const data = parseJSON(event.data);
-        if (data !== undefined) {
-          this.push(data);
-        }
-      } catch (error) {
-        this.destroy(error as Error);
-      }
+
+      this.handleIncomingMessage(data);
     });
 
-    socket.addEventListener('close', () => {
+    socket.on('close', () => {
       if (this.isClosed) {
         return;
       }
@@ -91,12 +91,12 @@ class ShareDBWebSocketStream extends Duplex {
       this.emit('close');
     });
 
-    socket.addEventListener('error', () => {
+    socket.on('error', error => {
       if (this.isClosed) {
         return;
       }
       this.isClosed = true;
-      this.destroy(new Error('WebSocket error'));
+      this.destroy(error as Error);
     });
   }
 
@@ -109,6 +109,7 @@ class ShareDBWebSocketStream extends Duplex {
       callback();
       return;
     }
+
     try {
       this.socket.send(JSON.stringify(chunk));
       callback();
@@ -119,28 +120,46 @@ class ShareDBWebSocketStream extends Duplex {
 
   _final(callback: (error?: Error | null) => void): void {
     if (!this.isClosed) {
+      this.isClosed = true;
       try {
         this.socket.close();
       } catch {
         // Ignore close errors
       }
-      this.isClosed = true;
     }
     callback();
   }
+
+  private handleIncomingMessage(payload: RawData): void {
+    try {
+      const data = parseJSON(payload);
+      if (data !== undefined) {
+        this.push(data);
+      }
+    } catch (error) {
+      this.destroy(error as Error);
+    }
+  }
 }
 
-function parseJSON(payload: unknown): unknown {
+function parseJSON(payload: RawData): unknown {
   if (typeof payload === 'string') {
     return JSON.parse(payload);
   }
+
+  if (Array.isArray(payload)) {
+    const buffer = Buffer.concat(payload as Buffer[]);
+    return parseJSON(buffer);
+  }
+
   if (payload instanceof ArrayBuffer) {
-    const textDecoder = new TextDecoder();
     return JSON.parse(textDecoder.decode(payload));
   }
-  if (typeof Blob !== 'undefined' && payload instanceof Blob) {
-    return undefined;
+
+  if (ArrayBuffer.isView(payload)) {
+    return JSON.parse(textDecoder.decode(payload));
   }
+
   return undefined;
 }
 
@@ -234,12 +253,16 @@ async function removePeer(clientId: string): Promise<void> {
   if (!existing) {
     return;
   }
-  await submitOp(doc, [
-    {
-      p: ['peers', clientId],
-      od: existing,
-    },
-  ], { source: 'server:peer:remove' });
+  await submitOp(
+    doc,
+    [
+      {
+        p: ['peers', clientId],
+        od: existing,
+      },
+    ],
+    { source: 'server:peer:remove' },
+  );
 }
 
 function submitOp(targetDoc: ConnectionStateDoc, op: JSONOp, options: SubmitOptions): Promise<void> {
@@ -254,48 +277,82 @@ function submitOp(targetDoc: ConnectionStateDoc, op: JSONOp, options: SubmitOpti
   });
 }
 
-export async function GET(request: NextRequest) {
-  if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') {
-    return new Response('Expected WebSocket upgrade', { status: 426 });
+type ServerWithRealtime = HTTPServer & {
+  devTestRealtimeWss?: WebSocketServer;
+};
+
+function getOrCreateWebSocketServer(server: ServerWithRealtime): WebSocketServer {
+  if (server.devTestRealtimeWss) {
+    return server.devTestRealtimeWss;
   }
 
-  const { searchParams } = new URL(request.url);
-  const clientId = searchParams.get('clientId') ?? generateId('client');
+  const wss = new WebSocketServer({ noServer: true });
 
-  const { WebSocketPair } = globalThis as typeof globalThis & {
-    WebSocketPair?: new () => { 0: WebSocket; 1: WebSocket };
-  };
+  wss.on('connection', (socket, request) => {
+    void handleConnection(socket, request.url ?? '/api/dev-test/realtime', request.headers.host ?? 'localhost');
+  });
 
-  if (!WebSocketPair) {
-    return new Response('WebSocketPair not supported in this environment', { status: 500 });
-  }
+  server.devTestRealtimeWss = wss;
+  return wss;
+}
 
-  const pair = new WebSocketPair();
-  const clientSocket = pair[0];
-  const serverSocket = pair[1];
-  (serverSocket as unknown as { accept: () => void }).accept();
+async function handleConnection(socket: WebSocket, requestUrl: string, host: string): Promise<void> {
+  const url = new URL(requestUrl, `http://${host}`);
+  const clientId = url.searchParams.get('clientId') ?? generateId('client');
 
-  const stream = new ShareDBWebSocketStream(serverSocket);
+  const stream = new ShareDBWebSocketStream(socket);
 
   try {
     await ensurePeer(clientId);
   } catch (error) {
     stream.destroy(error as Error);
-    return new Response('Failed to initialise peer', { status: 500 });
+    try {
+      socket.close(1011, 'Failed to initialise peer');
+    } catch {
+      // ignore socket close errors
+    }
+    return;
   }
 
   backend.listen(stream);
 
-  stream.on('close', () => {
+  const cleanup = () => {
     void removePeer(clientId);
-  });
+  };
 
-  stream.on('error', () => {
-    void removePeer(clientId);
-  });
+  stream.on('close', cleanup);
+  stream.on('error', cleanup);
+}
 
-  return new Response(null, {
-    status: 101,
-    webSocket: clientSocket,
-  } as ResponseInit & { webSocket: WebSocket });
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+export default function realtimeHandler(request: NextApiRequest, response: NextApiResponse): void {
+  if (request.headers.upgrade?.toLowerCase() !== 'websocket') {
+    response.status(426).setHeader('Connection', 'Upgrade');
+    response.setHeader('Upgrade', 'websocket');
+    response.send('Expected WebSocket upgrade');
+    return;
+  }
+
+  const socket = request.socket;
+  if (!socket) {
+    response.status(500).end('Socket unavailable');
+    return;
+  }
+
+  const nodeSocket = socket as Socket & { server?: HTTPServer };
+  const server = nodeSocket.server as ServerWithRealtime | undefined;
+  if (!server) {
+    response.status(500).end('Server unavailable');
+    return;
+  }
+  const wss = getOrCreateWebSocketServer(server);
+
+  wss.handleUpgrade(request, nodeSocket, Buffer.alloc(0), ws => {
+    wss.emit('connection', ws, request);
+  });
 }
