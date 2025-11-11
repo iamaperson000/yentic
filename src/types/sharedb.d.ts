@@ -18,6 +18,13 @@ declare module 'sharedb' {
     subscribe(callback: (error?: Error | null) => void): void;
     fetch(callback: (error?: Error | null) => void): void;
     create(data: T, callback: (error?: Error | null) => void): void;
+    create(data: T, type: string | null, callback: (error?: Error | null) => void): void;
+    create(
+      data: T,
+      type: string | null,
+      options: Record<string, unknown>,
+      callback: (error?: Error | null) => void,
+    ): void;
     submitOp(op: JSONOp, options: SubmitOptions, callback: (error?: Error | null) => void): void;
   }
 
