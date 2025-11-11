@@ -10,10 +10,6 @@ import {
   type ChangeEvent,
   type JSX,
 } from 'react';
-import sharedbClient from 'sharedb/lib/client';
-import type { Connection as ShareDBConnection, Doc as ShareDBDoc, JSONOp } from 'sharedb/lib/client';
-
-type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
 type PulseStatus = 'blocked' | 'in-progress' | 'shipped';
 
@@ -25,21 +21,8 @@ type PulseItem = {
   updatedAt: number;
 };
 
-type Peer = {
-  clientId: string;
-  name: string | null;
-  color: string;
-};
-
-type PulseboardDoc = {
-  items: Record<string, PulseItem>;
-  peers: Record<string, Peer>;
-};
-
-type TimerHandle = ReturnType<typeof setTimeout>;
-
 const displayNameKey = 'yentic.dev-test.display-name';
-const clientIdKey = 'yentic.dev-test.client-id';
+const storageKey = 'yentic.dev-test.pulseboard';
 
 const statusLabel: Record<PulseStatus, string> = {
   blocked: 'Blocked',
@@ -59,30 +42,8 @@ const statusDotMap: Record<PulseStatus, string> = {
   shipped: 'bg-emerald-400',
 };
 
-const palette = ['#22d3ee', '#a855f7', '#f97316', '#22c55e', '#14b8a6', '#f59e0b', '#facc15', '#ef4444'];
-
-function generateClientId(): string {
-  try {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-  } catch {
-    // ignore and fall back to Math.random
-  }
-  return `client_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
-}
-
-function getClientId(): string {
-  if (typeof window === 'undefined') {
-    return generateClientId();
-  }
-  const stored = window.localStorage.getItem(clientIdKey);
-  if (stored) {
-    return stored;
-  }
-  const created = generateClientId();
-  window.localStorage.setItem(clientIdKey, created);
-  return created;
+function isPulseStatus(value: unknown): value is PulseStatus {
+  return value === 'blocked' || value === 'in-progress' || value === 'shipped';
 }
 
 function generateId(prefix: string): string {
@@ -91,18 +52,9 @@ function generateId(prefix: string): string {
       return `${prefix}_${crypto.randomUUID()}`;
     }
   } catch {
-    // ignore and fall back to Math.random
+    // Ignore and fall back to Math.random.
   }
   return `${prefix}_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
-}
-
-function colorForClient(clientId: string): string {
-  let hash = 0;
-  for (let index = 0; index < clientId.length; index += 1) {
-    hash = (hash << 5) - hash + clientId.charCodeAt(index);
-    hash |= 0;
-  }
-  return palette[Math.abs(hash) % palette.length];
 }
 
 function relativeTime(timestamp: number): string {
@@ -131,227 +83,100 @@ function statusDot(status: PulseStatus): string {
   return statusDotMap[status] ?? statusDotMap['in-progress'];
 }
 
+function buildInitialItems(): PulseItem[] {
+  const now = Date.now();
+  return [
+    {
+      id: generateId('pulse'),
+      title: 'Architect service boundaries',
+      status: 'in-progress',
+      owner: 'Jess',
+      updatedAt: now - 1000 * 60 * 3,
+    },
+    {
+      id: generateId('pulse'),
+      title: 'Wire realtime dashboards',
+      status: 'blocked',
+      owner: 'Taylor',
+      updatedAt: now - 1000 * 60 * 7,
+    },
+    {
+      id: generateId('pulse'),
+      title: 'Polish onboarding tour',
+      status: 'shipped',
+      owner: 'Sam',
+      updatedAt: now - 1000 * 60 * 12,
+    },
+    {
+      id: generateId('pulse'),
+      title: 'Benchmark production replicas',
+      status: 'in-progress',
+      owner: 'Dev',
+      updatedAt: now - 1000 * 60 * 18,
+    },
+  ];
+}
+
+function parseStoredItems(serialized: string | null): PulseItem[] | null {
+  if (!serialized) {
+    return null;
+  }
+
+  try {
+    const data: unknown = JSON.parse(serialized);
+    if (!Array.isArray(data)) {
+      return null;
+    }
+
+    if (data.length === 0) {
+      return [];
+    }
+
+    const result: PulseItem[] = data.map(item => {
+      if (
+        !item ||
+        typeof item !== 'object' ||
+        typeof (item as { id?: unknown }).id !== 'string' ||
+        typeof (item as { title?: unknown }).title !== 'string' ||
+        !isPulseStatus((item as { status?: unknown }).status) ||
+        typeof (item as { updatedAt?: unknown }).updatedAt !== 'number'
+      ) {
+        throw new Error('Invalid pulse item');
+      }
+
+      const owner = (item as { owner?: unknown }).owner;
+
+      return {
+        id: (item as { id: string }).id,
+        title: (item as { title: string }).title,
+        status: (item as { status: PulseStatus }).status,
+        owner: typeof owner === 'string' && owner.trim().length > 0 ? owner : null,
+        updatedAt: (item as { updatedAt: number }).updatedAt,
+      };
+    });
+
+    return result;
+  } catch {
+    return null;
+  }
+}
+
 export default function DevTestPage(): JSX.Element {
-  const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [items, setItems] = useState<PulseItem[]>([]);
-  const [peers, setPeers] = useState<Peer[]>([]);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftStatus, setDraftStatus] = useState<PulseStatus>('in-progress');
   const [displayName, setDisplayName] = useState<string>('');
-
-  const clientIdRef = useRef<string>(getClientId());
-  const socketRef = useRef<WebSocket | null>(null);
-  const connectionRef = useRef<ShareDBConnection | null>(null);
-  const docRef = useRef<ShareDBDoc<PulseboardDoc> | null>(null);
-  const reconnectTimerRef = useRef<TimerHandle | null>(null);
-  const displayNameValueRef = useRef<string>('');
-  const connectRef = useRef<() => void>(() => {});
-
-  const applyDocSnapshot = useCallback(() => {
-    const doc = docRef.current;
-    const data = doc?.data;
-    if (!data) {
-      return;
-    }
-    const nextItems = Object.values(data.items ?? {});
-    const nextPeers = Object.values(data.peers ?? {});
-
-    const self = data.peers?.[clientIdRef.current];
-    if (
-      self &&
-      typeof self.name === 'string' &&
-      self.name.length > 0 &&
-      displayNameValueRef.current.trim().length === 0
-    ) {
-      displayNameValueRef.current = self.name;
-      setDisplayName(self.name);
-    }
-
-    setItems(nextItems);
-    setPeers(nextPeers);
-  }, []);
-
-  const handleDocError = useCallback((error: Error) => {
-    console.error('ShareDB document error', error);
-  }, []);
-
-  const cleanupShareDB = useCallback(() => {
-    const doc = docRef.current;
-    if (doc) {
-      doc.removeListener('op', applyDocSnapshot);
-      doc.removeListener('load', applyDocSnapshot);
-      doc.removeListener('error', handleDocError);
-      doc.destroy();
-      docRef.current = null;
-    }
-    const connection = connectionRef.current;
-    if (connection) {
-      try {
-        connection.close();
-      } catch {
-        // ignore connection close errors
-      }
-      connectionRef.current = null;
-    }
-  }, [applyDocSnapshot, handleDocError]);
-
-  const scheduleReconnect = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-    }
-    reconnectTimerRef.current = setTimeout(() => {
-      void connectRef.current();
-    }, 1500);
-  }, []);
-
-  const updatePeerName = useCallback(
-    (value: string) => {
-      const doc = docRef.current;
-      const data = doc?.data;
-      if (!doc || !data || !data.peers) {
-        return;
-      }
-      const normalized = value.trim();
-      const nextValue = normalized.length > 0 ? normalized : null;
-      const clientId = clientIdRef.current;
-      const existing = data.peers[clientId];
-
-      const ops: JSONOp = [];
-
-      if (!existing) {
-        const peer: Peer = {
-          clientId,
-          name: nextValue,
-          color: colorForClient(clientId),
-        };
-        ops.push({
-          p: ['peers', clientId],
-          oi: peer,
-        });
-      } else if ((existing.name ?? null) !== nextValue) {
-        ops.push({
-          p: ['peers', clientId, 'name'],
-          oi: nextValue,
-          od: existing.name ?? null,
-        });
-      } else {
-        return;
-      }
-
-      doc.submitOp(ops, { source: 'client:presence:update' }, error => {
-        if (error) {
-          console.error('Failed to update presence', error);
-        }
-      });
-    },
-    [],
-  );
-
-  const connect = useCallback(async () => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-
-    try {
-      const response = await fetch('/api/dev-test/realtime');
-      if (!response.ok) {
-        throw new Error(`Warmup request failed with status ${response.status}`);
-      }
-    } catch (error) {
-      console.error('Failed to prepare realtime endpoint', error);
-      setConnection('disconnected');
-      scheduleReconnect();
-      return;
-    }
-
-    cleanupShareDB();
-
-    const existingSocket = socketRef.current;
-    if (existingSocket) {
-      try {
-        existingSocket.close();
-      } catch {
-        // ignore close errors on stale sockets
-      }
-    }
-
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${protocol}://${window.location.host}/api/dev-test/realtime?clientId=${encodeURIComponent(
-      clientIdRef.current,
-    )}`;
-
-    const socket = new WebSocket(url);
-    socketRef.current = socket;
-    setConnection('connecting');
-
-    socket.addEventListener('open', () => {
-      if (socketRef.current !== socket) {
-        return;
-      }
-      setConnection('connected');
-    });
-
-    socket.addEventListener('close', () => {
-      if (socketRef.current !== socket) {
-        return;
-      }
-      socketRef.current = null;
-      setConnection('disconnected');
-      cleanupShareDB();
-      scheduleReconnect();
-    });
-
-    socket.addEventListener('error', () => {
-      if (socketRef.current !== socket) {
-        return;
-      }
-      socket.close();
-    });
-
-    const connection = new sharedbClient.Connection(socket);
-    connectionRef.current = connection;
-
-    const doc = connection.get<PulseboardDoc>('dev-test', 'pulseboard');
-    docRef.current = doc;
-
-    doc.on('op', applyDocSnapshot);
-    doc.on('load', applyDocSnapshot);
-    doc.on('error', handleDocError);
-
-    doc.subscribe(error => {
-      if (error) {
-        console.error('Failed to subscribe to ShareDB document', error);
-        return;
-      }
-      applyDocSnapshot();
-      updatePeerName(displayNameValueRef.current);
-    });
-  }, [applyDocSnapshot, cleanupShareDB, handleDocError, scheduleReconnect, updatePeerName]);
-
-  connectRef.current = connect;
+  const hasHydratedRef = useRef(false);
 
   useEffect(() => {
-    void connect();
-    return () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-      }
-      const socket = socketRef.current;
-      if (socket) {
-        try {
-          socket.close();
-        } catch {
-          // ignore close errors on unmount
-        }
-      }
-      cleanupShareDB();
-    };
-  }, [cleanupShareDB, connect]);
+    if (typeof window === 'undefined') {
+      setItems(buildInitialItems());
+      return;
+    }
+
+    const stored = parseStoredItems(window.localStorage.getItem(storageKey));
+    setItems(stored ?? buildInitialItems());
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -360,10 +185,25 @@ export default function DevTestPage(): JSX.Element {
     const stored = window.localStorage.getItem(displayNameKey);
     if (stored) {
       setDisplayName(stored);
-      displayNameValueRef.current = stored;
-      updatePeerName(stored);
     }
-  }, [updatePeerName]);
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(items));
+    } catch {
+      // Ignore persistence errors (e.g. storage disabled).
+    }
+  }, [items]);
 
   const sortedItems = useMemo(
     () => [...items].sort((a, b) => b.updatedAt - a.updatedAt),
@@ -374,13 +214,15 @@ export default function DevTestPage(): JSX.Element {
     (event: ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value;
       setDisplayName(value);
-      displayNameValueRef.current = value;
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem(displayNameKey, value);
+        try {
+          window.localStorage.setItem(displayNameKey, value);
+        } catch {
+          // Ignore storage errors.
+        }
       }
-      updatePeerName(value);
     },
-    [updatePeerName],
+    [],
   );
 
   const resetForm = useCallback(() => {
@@ -395,11 +237,8 @@ export default function DevTestPage(): JSX.Element {
       if (normalized.length === 0) {
         return;
       }
-      const doc = docRef.current;
-      if (!doc || !doc.data || !doc.data.items) {
-        return;
-      }
-      const owner = displayNameValueRef.current.trim();
+
+      const owner = displayName.trim();
       const item: PulseItem = {
         id: generateId('pulse'),
         title: normalized,
@@ -408,101 +247,53 @@ export default function DevTestPage(): JSX.Element {
         updatedAt: Date.now(),
       };
 
-      doc.submitOp(
-        [
-          {
-            p: ['items', item.id],
-            oi: item,
-          },
-        ],
-        { source: 'client:item:create' },
-        error => {
-          if (error) {
-            console.error('Failed to create item', error);
-          }
-        },
-      );
-
+      setItems(previous => [...previous, item]);
       resetForm();
     },
-    [draftStatus, draftTitle, resetForm],
+    [displayName, draftStatus, draftTitle, resetForm],
   );
 
   const updateStatus = useCallback(
     (itemId: string, status: PulseStatus) => {
-      const doc = docRef.current;
-      const data = doc?.data;
-      if (!doc || !data || !data.items) {
-        return;
-      }
-      const current = data.items[itemId];
-      if (!current) {
-        return;
-      }
+      const owner = displayName.trim();
+      const nextOwner = owner.length > 0 ? owner : null;
 
-      const ops: JSONOp = [];
-      let changed = false;
+      setItems(previous =>
+        previous.map(item => {
+          if (item.id !== itemId) {
+            return item;
+          }
 
-      if (current.status !== status) {
-        ops.push({
-          p: ['items', itemId, 'status'],
-          oi: status,
-          od: current.status,
-        });
-        changed = true;
-      }
+          if (item.status === status && (item.owner ?? null) === nextOwner) {
+            return item;
+          }
 
-      const owner = displayNameValueRef.current.trim();
-      if (owner.length > 0 && (current.owner ?? null) !== owner) {
-        ops.push({
-          p: ['items', itemId, 'owner'],
-          oi: owner,
-          od: current.owner ?? null,
-        });
-        changed = true;
-      }
-
-      if (!changed) {
-        return;
-      }
-
-      ops.push({
-        p: ['items', itemId, 'updatedAt'],
-        oi: Date.now(),
-        od: current.updatedAt,
-      });
-
-      doc.submitOp(ops, { source: 'client:item:update' }, error => {
-        if (error) {
-          console.error('Failed to update item', error);
-        }
-      });
+          return {
+            ...item,
+            status,
+            owner: nextOwner,
+            updatedAt: Date.now(),
+          };
+        }),
+      );
     },
-    [],
+    [displayName],
   );
 
-  const connectionBadge = useMemo(() => {
-    switch (connection) {
-      case 'connected':
-        return 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/50';
-      case 'connecting':
-        return 'bg-amber-500/20 text-amber-200 ring-amber-400/50';
-      case 'disconnected':
-      default:
-        return 'bg-rose-500/20 text-rose-200 ring-rose-400/40';
-    }
-  }, [connection]);
+  const connectionLabel = 'local-only';
+  const connectionBadge = 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/50';
+  const normalizedDisplayName = displayName.trim();
 
   return (
     <div className="flex min-h-screen flex-col gap-10 bg-[#05070B] px-6 pb-16 pt-14 text-white sm:px-10">
       <header className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">Realtime Lab</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-white/60">Local Lab</p>
             <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Pulseboard command center</h1>
             <p className="mt-3 max-w-2xl text-sm text-white/60">
-              A low-latency status wall that streams updates over a dedicated realtime channel. Every change you make is
-              broadcast instantly without refreshes or auth requirements.
+              An interactive status wall that saves straight to your browser. No websockets, no background services—everything
+              stays local to this session.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -510,7 +301,7 @@ export default function DevTestPage(): JSX.Element {
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.35em] ring-1 ring-inset transition ${connectionBadge}`}
             >
               <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-current" />
-              {connection}
+              {connectionLabel}
             </span>
           </div>
         </div>
@@ -524,7 +315,7 @@ export default function DevTestPage(): JSX.Element {
               id="display-name"
               value={displayName}
               onChange={handleDisplayNameChange}
-              placeholder="Let the room know who is adjusting the dials"
+              placeholder="Let the session know who is adjusting the dials"
               className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
               maxLength={80}
             />
@@ -532,20 +323,18 @@ export default function DevTestPage(): JSX.Element {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">Active peers</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {peers.length === 0 && (
+              <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/40">
+                Local session only
+              </span>
+              {normalizedDisplayName.length > 0 ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/80">
+                  {normalizedDisplayName}
+                </span>
+              ) : (
                 <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/40">
-                  Just you in here
+                  Set a handle to tag updates
                 </span>
               )}
-              {peers.map(peer => (
-                <span
-                  key={peer.clientId}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white/80"
-                >
-                  <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{ backgroundColor: peer.color }} />
-                  {peer.name ?? 'Anonymous builder'}
-                </span>
-              ))}
             </div>
           </div>
         </div>
@@ -561,7 +350,7 @@ export default function DevTestPage(): JSX.Element {
             <input
               value={draftTitle}
               onChange={event => setDraftTitle(event.target.value)}
-              placeholder="Ship realtime notifications"
+              placeholder="Ship local notifications"
               className="flex-1 rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-300 focus:bg-black/60"
               maxLength={160}
             />

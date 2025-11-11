@@ -18,12 +18,12 @@ const featureGroups = [
     ]
   },
   {
-    title: 'Collaboration ready',
-    description: 'Designed for multiplayer from the start, even before the realtime cursor work lands.',
+    title: 'Local-first flow',
+    description: 'Stable offline editing that keeps your work in the browser until optional sync returns.',
     bullets: [
-      'Presence indicators, follow mode, and cursor streaming on the roadmap.',
-      'Invite teammates via share links once authentication rolls out.',
-      'Role-based permissions to separate viewers, editors, and owners.'
+      'Instant persistence using local storage with no dependency on external services.',
+      'Tag updates with session handles so you remember who tweaked the board on this device.',
+      'Opt-in sharing and permissions will ship alongside the future cloud sync relaunch.'
     ]
   }
 ];
@@ -62,7 +62,7 @@ export default function FeaturesPage() {
       <section className="rounded-3xl border border-white/10 bg-black/40 p-8">
         <h2 className="text-2xl font-semibold">Coming next</h2>
         <p className="mt-2 text-sm text-white/70">
-          Server-backed autosave, multiplayer cursors, and first-class support for Python, Rust, and Go builds are in
+          Server-backed autosave, optional workspace sync, and first-class support for Python, Rust, and Go builds are in
           active development. Subscribe to the roadmap to follow along.
         </p>
       </section>

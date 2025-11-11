@@ -17,8 +17,8 @@ const marketingHighlights = [
     body: 'Sandpack-powered preview mirrors every keystroke so you can ship UI changes without guessing.',
   },
   {
-    title: 'Cloud persistence',
-    body: 'Projects sync to the cloud so you can swap devices without losing context.',
+    title: 'Local persistence',
+    body: 'Work offline with automatic browser saves and zero backend dependencies until sync returns.',
   },
 ];
 
@@ -29,9 +29,9 @@ const marketingWorkflow = [
       'Start with the opinionated HTML/CSS/JS starter or import your own repo via GitHub.',
   },
   {
-    label: 'Collaborate',
+    label: 'Annotate',
     description:
-      'Invite teammates into the same workspace and pair program in real time (multiplayer in progress).',
+      'Tag updates with session handles so you remember what changed on this device.',
   },
   {
     label: 'Ship',
@@ -76,8 +76,8 @@ function MarketingLanding() {
           </h1>
           <p className="text-lg text-white/70">
             Edit, preview, and share projects instantly with a minimal interface,
-            multiplayer-ready foundation, and thoughtful defaults. Yentic keeps the
-            tooling out of your way so you can stay in flow.
+            local-first foundation, and thoughtful defaults. Yentic keeps the
+            tooling out of your way so you can stay in flow—even when you&apos;re offline.
           </p>
           <div className="flex flex-wrap gap-4">
             <Link
@@ -145,8 +145,8 @@ function MarketingLanding() {
       <section className="flex flex-col gap-6 rounded-3xl border border-white/10 bg-emerald-500/10 p-10">
         <h2 className="text-3xl font-semibold">Ready when you are</h2>
         <p className="text-base text-white/70">
-          Create your account with Google or email, invite collaborators, and let Yentic keep your projects synced across
-          devices. Multiplayer editing, build logs, and workspace history are rolling out over the next few sprints.
+          Create your account with Google or email, capture feedback, and let Yentic keep your projects stored locally until
+          optional sync rolls out. Shared sessions, build logs, and workspace history are returning over the next few sprints.
         </p>
         <div className="flex flex-wrap gap-4">
           <Link

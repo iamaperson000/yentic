@@ -12,11 +12,11 @@ const benefits = [
   },
   {
     title: 'Stay in sync',
-    body: 'Your projects follow you—switch devices and keep momentum with automatic cloud saves (coming soon).'
+    body: 'Your projects follow you—switch devices and keep momentum with automatic local saves today and cloud sync soon.'
   },
   {
-    title: 'Collaborate smoothly',
-    body: 'Invite teammates, share sandboxes, and pair program in a UI designed to stay out of the way.'
+    title: 'Plan for teamwork',
+    body: 'Use session handles to track who updated a board locally while we rebuild the hosted sharing features.'
   }
 ]
 
@@ -31,8 +31,9 @@ const faqs = [
     answer: 'Yes. Sign up to start building for free and upgrade only when you need advanced collaboration features.'
   },
   {
-    question: 'When will multiplayer ship?',
-    answer: 'Multiplayer editing is in active development. New sign-ups get early access invites as we expand the beta.'
+    question: 'What about multiplayer?',
+    answer:
+      'Online co-editing is paused while we focus on the local-first experience. Sign up to be notified when opt-in sync and shared sessions return.'
   }
 ]
 

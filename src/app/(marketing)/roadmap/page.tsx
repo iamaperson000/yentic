@@ -20,7 +20,7 @@ const roadmapPhases = [
   {
     phase: 'Later',
     highlights: [
-      'Realtime collaboration with operational transforms streaming through Supabase Realtime channels.',
+      'Opt-in shared sessions with conflict-aware merges once the hosted backend returns.',
       'Background build agents for Python, Rust, Go, and more using containerized sandboxes.',
       'Project insights such as activity timelines and restore points.'
     ]
@@ -41,7 +41,7 @@ const autosavePlan = [
   {
     title: 'Conflict resolution',
     detail:
-      'When multiplayer lands, edits merge through operational transforms. Until then, the server keeps the latest snapshot and prior versions are archived so you can roll back if needed.'
+      'While we focus on local-first editing, the latest snapshot stays in your browser. When shared sessions return, they will merge changes through conflict-aware transforms with restore points for safety.'
   }
 ];
 
@@ -52,7 +52,7 @@ export default function RoadmapPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-300/80">Roadmap</p>
         <h1 className="text-4xl font-semibold">Where Yentic is headed.</h1>
         <p className="max-w-2xl text-base text-white/70">
-          We ship in small, deliberate increments. Autosave and multiplayer are the next major milestones, followed by a
+          We ship in small, deliberate increments. Autosave and optional sync are the next major milestones, followed by a
           cloud execution layer for more languages.
         </p>
       </header>
@@ -92,7 +92,7 @@ export default function RoadmapPage() {
       <section className="rounded-3xl border border-white/10 bg-black/40 p-8">
         <h2 className="text-2xl font-semibold">Get involved</h2>
         <p className="mt-3 text-sm text-white/70">
-          We&apos;re looking for teams who want to dogfood the multiplayer builds. Reach out at{' '}
+          We&apos;re looking for teams who want to shape the local-first workflow and upcoming sync relaunch. Reach out at{' '}
           <a className="underline decoration-emerald-400/60 underline-offset-4" href={`mailto:${site.contactEmail}`}>
             {site.contactEmail}
           </a>{' '}
