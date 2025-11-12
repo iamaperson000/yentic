@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yentic Collaborative Chatroom</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/ot/lib/ot.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
+          'Segoe UI', sans-serif;
+        --bg: #020617;
+        --panel: rgba(15, 23, 42, 0.82);
+        --border: rgba(148, 163, 184, 0.25);
+        --accent: #34d399;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at top, rgba(56, 189, 248, 0.2), transparent 45%),
+          var(--bg);
+        color: #e2e8f0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        padding: 1.5rem clamp(1.5rem, 3vw, 3rem);
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: blur(24px);
+        background: rgba(2, 6, 23, 0.75);
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: clamp(1.75rem, 3vw, 2.5rem);
+        font-weight: 600;
+      }
+
+      header p {
+        margin: 0.5rem 0 0;
+        color: rgba(226, 232, 240, 0.7);
+      }
+
+      main {
+        display: grid;
+        gap: 1.5rem;
+        padding: clamp(1.5rem, 3vw, 3rem);
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      @media (min-width: 960px) {
+        main {
+          grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+        }
+      }
+
+      .editor-card,
+      .sidebar-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: clamp(1.25rem, 2vw, 1.75rem);
+        box-shadow: 0 20px 50px -25px rgba(15, 118, 110, 0.55);
+      }
+
+      textarea {
+        width: 100%;
+        height: clamp(260px, 45vh, 420px);
+        resize: vertical;
+        background: rgba(15, 23, 42, 0.75);
+        color: inherit;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 12px;
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco,
+          Consolas, 'Liberation Mono', 'Courier New', monospace;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        padding: 1rem;
+        transition: border 150ms ease, box-shadow 150ms ease;
+      }
+
+      textarea:focus {
+        outline: none;
+        border-color: rgba(74, 222, 128, 0.55);
+        box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.45);
+      }
+
+      .status-bar {
+        margin-top: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        color: rgba(226, 232, 240, 0.7);
+        font-size: 0.85rem;
+      }
+
+      .status-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+      }
+
+      .sidebar-card h2 {
+        margin: 0 0 1rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+
+      .sidebar-card section + section {
+        margin-top: 1.5rem;
+      }
+
+      ul.user-list,
+      ul.log-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      ul.user-list li {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+      }
+
+      ul.user-list .color-swatch {
+        width: 12px;
+        height: 12px;
+        border-radius: 6px;
+      }
+
+      form#name-form {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+
+      form#name-form input {
+        flex: 1;
+        border-radius: 999px;
+        padding: 0.55rem 0.9rem;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.7);
+        color: inherit;
+      }
+
+      form#name-form button {
+        border: none;
+        border-radius: 999px;
+        padding: 0.55rem 1.2rem;
+        background: var(--accent);
+        color: #041316;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 150ms ease, box-shadow 150ms ease;
+      }
+
+      form#name-form button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 25px -10px rgba(52, 211, 153, 0.65);
+      }
+
+      ul.log-list li {
+        padding: 0.5rem 0.75rem;
+        border-left: 3px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.45);
+        border-radius: 0 12px 12px 0;
+        font-size: 0.85rem;
+        color: rgba(226, 232, 240, 0.75);
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      ul.log-list time {
+        color: rgba(148, 163, 184, 0.65);
+        white-space: nowrap;
+      }
+
+      footer {
+        margin-top: auto;
+        padding: 1rem clamp(1.5rem, 3vw, 3rem);
+        color: rgba(148, 163, 184, 0.65);
+        font-size: 0.8rem;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Pulseboard Chatroom Lab</h1>
+      <p>
+        This sandbox demonstrates collaborative editing powered by operational
+        transforms. Share the link with teammates and watch edits merge in real
+        time.
+      </p>
+    </header>
+
+    <main>
+      <section class="editor-card">
+        <label for="shared-text" style="display: block; margin-bottom: 0.75rem; font-weight: 600;">
+          Shared conversation canvas
+        </label>
+        <textarea id="shared-text" spellcheck="false"></textarea>
+        <div class="status-bar" id="status-bar">
+          <span><span class="status-dot" id="connection-dot"></span><span id="connection-label">Connecting…</span></span>
+          <span id="pending-indicator">Waiting for edits</span>
+        </div>
+      </section>
+
+      <aside class="sidebar-card">
+        <section>
+          <h2>Set your display name</h2>
+          <form id="name-form" autocomplete="off">
+            <input id="display-name" type="text" maxlength="32" placeholder="e.g. Casey from design" />
+            <button type="submit">Save</button>
+          </form>
+        </section>
+        <section>
+          <h2>Active collaborators</h2>
+          <ul class="user-list" id="user-list"></ul>
+        </section>
+        <section>
+          <h2>Operation timeline</h2>
+          <ul class="log-list" id="event-log"></ul>
+        </section>
+      </aside>
+    </main>
+
+    <footer>
+      npm install · node server.js · open <strong>http://localhost:3000/chat</strong>
+    </footer>
+
+    <script>
+      (function () {
+        const socket = io({ transports: ['websocket'], upgrade: true });
+        const { TextOperation } = window.ot;
+
+        const textarea = document.getElementById('shared-text');
+        const userListEl = document.getElementById('user-list');
+        const logListEl = document.getElementById('event-log');
+        const connectionDot = document.getElementById('connection-dot');
+        const connectionLabel = document.getElementById('connection-label');
+        const pendingIndicator = document.getElementById('pending-indicator');
+        const nameForm = document.getElementById('name-form');
+        const displayNameInput = document.getElementById('display-name');
+
+        const state = {
+          revision: 0,
+          doc: '',
+          pending: null,
+          buffer: null,
+          suppress: false,
+          userId: null,
+        };
+
+        function setConnectionState(text, tone) {
+          connectionDot.style.backgroundColor = tone;
+          connectionLabel.textContent = text;
+        }
+
+        function formatTimestamp(timestamp) {
+          const date = new Date(timestamp);
+          return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        function addLog(message, options = {}) {
+          const { color = 'rgba(148, 163, 184, 0.65)', timestamp = Date.now() } = options;
+          const item = document.createElement('li');
+          const textSpan = document.createElement('span');
+          textSpan.textContent = message;
+          textSpan.style.color = color;
+          const timeEl = document.createElement('time');
+          timeEl.dateTime = new Date(timestamp).toISOString();
+          timeEl.textContent = formatTimestamp(timestamp);
+          item.appendChild(textSpan);
+          item.appendChild(timeEl);
+          logListEl.prepend(item);
+          while (logListEl.childNodes.length > 25) {
+            logListEl.removeChild(logListEl.lastChild);
+          }
+          console.log('[log]', message);
+        }
+
+        function renderUsers(users) {
+          userListEl.innerHTML = '';
+          users.forEach(user => {
+            const item = document.createElement('li');
+            const swatch = document.createElement('span');
+            swatch.className = 'color-swatch';
+            swatch.style.backgroundColor = user.color;
+            const name = document.createElement('span');
+            name.textContent = user.name || user.id;
+            if (user.id === state.userId) {
+              name.innerHTML = name.textContent + ' <span style="color: var(--accent); font-size: 0.8rem;">(you)</span>';
+            }
+            item.appendChild(swatch);
+            item.appendChild(name);
+            userListEl.appendChild(item);
+          });
+        }
+
+        function diffToOperation(oldText, newText) {
+          if (oldText === newText) {
+            return null;
+          }
+
+          let start = 0;
+          while (start < oldText.length && start < newText.length && oldText[start] === newText[start]) {
+            start += 1;
+          }
+
+          let oldEnd = oldText.length;
+          let newEnd = newText.length;
+          while (oldEnd > start && newEnd > start && oldText[oldEnd - 1] === newText[newEnd - 1]) {
+            oldEnd -= 1;
+            newEnd -= 1;
+          }
+
+          const operation = new TextOperation();
+          if (start > 0) {
+            operation.retain(start);
+          }
+
+          if (oldEnd > start) {
+            operation.delete(oldText.slice(start, oldEnd));
+          }
+
+          if (newEnd > start) {
+            operation.insert(newText.slice(start, newEnd));
+          }
+
+          const tailLength = newText.length - newEnd;
+          if (tailLength > 0) {
+            operation.retain(tailLength);
+          }
+
+          return operation;
+        }
+
+        function applyOperationToEditor(operation) {
+          state.doc = operation.apply(state.doc);
+          const previousSelectionStart = textarea.selectionStart;
+          const previousSelectionEnd = textarea.selectionEnd;
+          const previousLength = textarea.value.length;
+          const delta = state.doc.length - previousLength;
+
+          state.suppress = true;
+          textarea.value = state.doc;
+
+          const nextStart = Math.max(0, previousSelectionStart + delta);
+          const nextEnd = Math.max(0, previousSelectionEnd + delta);
+          textarea.setSelectionRange(nextStart, nextEnd);
+          state.suppress = false;
+        }
+
+        function sendOperation(operation) {
+          if (!operation) {
+            return;
+          }
+          if (state.pending) {
+            state.buffer = state.buffer ? state.buffer.compose(operation) : operation;
+            pendingIndicator.textContent = 'Buffered local change';
+            return;
+          }
+          state.pending = operation;
+          pendingIndicator.textContent = 'Sent change; awaiting ack';
+          socket.emit('operation', {
+            revision: state.revision,
+            operation: operation.toJSON(),
+          });
+        }
+
+        textarea.addEventListener('input', () => {
+          if (state.suppress) {
+            return;
+          }
+          const newValue = textarea.value;
+          const operation = diffToOperation(state.doc, newValue);
+          if (!operation) {
+            return;
+          }
+          applyOperationToEditor(operation);
+          sendOperation(operation);
+        });
+
+        nameForm.addEventListener('submit', event => {
+          event.preventDefault();
+          const desired = displayNameInput.value.trim();
+          socket.emit('set-name', desired);
+        });
+
+        socket.on('connect', () => {
+          setConnectionState('Connected', '#34d399');
+          addLog('Connected to OT server');
+        });
+
+        socket.on('disconnect', reason => {
+          setConnectionState('Disconnected', '#ef4444');
+          pendingIndicator.textContent = 'Connection lost';
+          addLog(`Disconnected: ${reason || 'connection closed'}`, { color: '#f87171' });
+        });
+
+        socket.on('init', payload => {
+          state.revision = payload.revision;
+          state.doc = payload.doc;
+          state.pending = null;
+          state.buffer = null;
+          state.userId = payload.user.id;
+          textarea.value = payload.doc;
+          displayNameInput.value = payload.user.name || '';
+          renderUsers(payload.users);
+          pendingIndicator.textContent = 'Synchronized with server';
+          addLog('Loaded initial document state', { color: payload.user.color });
+        });
+
+        socket.on('users', users => {
+          renderUsers(users);
+        });
+
+        socket.on('ack', payload => {
+          state.revision = payload.revision;
+          state.pending = null;
+          pendingIndicator.textContent = 'Change confirmed';
+          if (state.buffer) {
+            const buffered = state.buffer;
+            state.buffer = null;
+            sendOperation(buffered);
+          } else {
+            pendingIndicator.textContent = 'Waiting for edits';
+          }
+        });
+
+        socket.on('operation', payload => {
+          const authorName = payload.authorName || 'Another collaborator';
+          let operation = TextOperation.fromJSON(payload.operation);
+
+          if (state.pending) {
+            const pair = TextOperation.transform(state.pending, operation);
+            state.pending = pair[0];
+            operation = pair[1];
+          }
+
+          if (state.buffer) {
+            const pair = TextOperation.transform(state.buffer, operation);
+            state.buffer = pair[0];
+            operation = pair[1];
+          }
+
+          applyOperationToEditor(operation);
+          state.revision = payload.revision;
+          pendingIndicator.textContent = 'Remote change applied';
+          addLog(`${authorName} made an edit`, {
+            color: payload.authorColor || 'rgba(96, 165, 250, 0.85)',
+            timestamp: payload.timestamp,
+          });
+        });
+
+        socket.on('log', payload => {
+          addLog(payload.message, {
+            color: payload.user?.color,
+            timestamp: payload.timestamp,
+          });
+        });
+
+        socket.on('name-updated', payload => {
+          if (payload.id === state.userId) {
+            displayNameInput.value = payload.name;
+          }
+          addLog(`${payload.previousName || 'A collaborator'} is now ${payload.name}`, {
+            color: payload.color,
+            timestamp: payload.timestamp,
+          });
+        });
+
+        socket.on('resync', payload => {
+          console.warn('Resync requested', payload.message);
+          state.doc = payload.doc;
+          state.revision = payload.revision;
+          state.pending = null;
+          state.buffer = null;
+          state.suppress = true;
+          textarea.value = payload.doc;
+          state.suppress = false;
+          pendingIndicator.textContent = 'Resynced with server';
+          addLog('Resynced document after conflict', { color: '#facc15' });
+        });
+
+        socket.on('error-message', payload => {
+          addLog(payload.message, { color: '#f97316' });
+        });
+      })();
+    </script>
+  </body>
+</html>
