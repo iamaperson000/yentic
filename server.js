@@ -9,15 +9,21 @@
  */
 
 const http = require('node:http');
-const path = require('node:path');
-
 const express = require('express');
 const next = require('next');
 const { Server: SocketIOServer } = require('socket.io');
 const { TextOperation, Server: OTServer } = require('ot');
 
 const PORT = Number(process.env.PORT) || 3000;
-const INITIAL_DOCUMENT = 'Welcome to the collaborative chatroom!\n\nShare a link with a teammate and start editing together in real time.';
+const INITIAL_MESSAGE = {
+  id: 'welcome',
+  userId: 'system',
+  name: 'System',
+  color: '#38bdf8',
+  message: 'Welcome to the collaborative chatroom! Type below to send a message.',
+  timestamp: Date.now(),
+};
+const INITIAL_DOCUMENT = `${JSON.stringify(INITIAL_MESSAGE)}\n`;
 
 const dev = process.env.NODE_ENV !== 'production';
 const nextApp = next({ dev });
@@ -84,6 +90,38 @@ nextApp
       });
     }
 
+    function summarizeOperation(operation) {
+      if (!operation || !Array.isArray(operation.ops)) {
+        return null;
+      }
+
+      const inserted = operation.ops
+        .filter(part => typeof part === 'string')
+        .join('')
+        .trim();
+
+      if (!inserted) {
+        return null;
+      }
+
+      const segments = inserted.split('\n').filter(Boolean);
+      if (segments.length === 0) {
+        return null;
+      }
+
+      const candidate = segments[segments.length - 1];
+      try {
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed.message === 'string') {
+          return parsed.message;
+        }
+      } catch (error) {
+        console.debug('[socket] failed to parse inserted message summary', error);
+      }
+
+      return candidate;
+    }
+
     io.on('connection', socket => {
       const user = {
         id: socket.id,
@@ -142,7 +180,12 @@ nextApp
             timestamp: timestamp(),
           });
 
-          emitLog(`${user.name} edited the document`, user);
+          const summary = summarizeOperation(serverOperation);
+          if (summary) {
+            emitLog(`${user.name} sent: “${summary.slice(0, 80)}${summary.length > 80 ? '…' : ''}”`, user);
+          } else {
+            emitLog(`${user.name} updated the conversation`, user);
+          }
         } catch (error) {
           console.error('[socket] failed to apply operation', error);
           socket.emit('resync', {
@@ -161,13 +204,7 @@ nextApp
       });
     });
 
-    app.get('/chat', (_req, res) => {
-      res.sendFile(path.join(__dirname, 'public', 'chat.html'));
-    });
-
-    app.use('/public', express.static(path.join(__dirname, 'public')));
-
-    app.all('*', (req, res) => {
+    app.use((req, res) => {
       return handle(req, res);
     });
 
