@@ -93,10 +93,10 @@ function MarketingLanding() {
               Explore the features
             </Link>
             <Link
-              href="/dev-test"
+              href="/chat"
               className="rounded-full border border-emerald-400/40 px-6 py-3 text-sm font-semibold text-emerald-200 transition hover:border-emerald-300/80 hover:text-emerald-100"
             >
-              Try the Pulseboard lab
+              Join the collaborative chat lab
             </Link>
           </div>
         </div>

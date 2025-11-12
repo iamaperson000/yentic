@@ -9,7 +9,7 @@ const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/features', label: 'Features' },
   { href: '/roadmap', label: 'Roadmap' },
-  { href: '/dev-test', label: 'Dev Test' },
+  { href: '/chat', label: 'Chat Lab' },
 ];
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
