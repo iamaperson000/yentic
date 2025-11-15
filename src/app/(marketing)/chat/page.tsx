@@ -52,7 +52,7 @@ export default function ChatPage() {
   const [statusMessage, setStatusMessage] = useState('Connecting to chatroom…');
 
   const socketRef = useRef<Socket | null>(null);
-  const pendingMessageIds = useRef(new Set<string>());
+  const [pendingMessageIds, setPendingMessageIds] = useState<Set<string>>(() => new Set());
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -101,7 +101,11 @@ export default function ChatPage() {
     });
 
     socket.on('message-delivered', (ack: DeliveryAck) => {
-      pendingMessageIds.current.delete(ack.id);
+      setPendingMessageIds(prev => {
+        const next = new Set(prev);
+        next.delete(ack.id);
+        return next;
+      });
     });
 
     return () => {
@@ -150,7 +154,11 @@ export default function ChatPage() {
       timestamp: Date.now(),
     };
 
-    pendingMessageIds.current.add(optimisticId);
+    setPendingMessageIds(prev => {
+      const next = new Set(prev);
+      next.add(optimisticId);
+      return next;
+    });
     setMessages(prev => [...prev, optimisticMessage]);
     socket.emit('send-message', { text });
     setComposerValue('');
@@ -197,7 +205,7 @@ export default function ChatPage() {
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
               {messages.map(message => {
-                const isSelf = message.userId === self?.id || pendingMessageIds.current.has(message.id);
+                const isSelf = message.userId === self?.id || pendingMessageIds.has(message.id);
                 return (
                   <article
                     key={message.id}

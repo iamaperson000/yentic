@@ -1,186 +1,380 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
- * Simple collaborative chat server.
+ * Production-ready Socket.IO realtime server configured for Railway deployment.
  *
- * How to run:
- *   1. npm install
- *   2. npm run dev            # development with hot reload
- *      or npm run build && npm run start for production mode
- *   3. Visit http://localhost:3000/chat to open the chatroom
+ * Features
+ * - Express HTTP server with health check and robust CORS configuration
+ * - Socket.IO namespace for chat traffic with room management abstraction
+ * - Automatic room lifecycle handling with duplicate join protection
+ * - Placeholder authorization hook for future extension
+ * - Extensive logging to aid observability in distributed environments
+ *
+ * Environment variables
+ * - PORT: port to bind the HTTP server (defaults to 3001)
+ * - CORS_ORIGINS: optional comma-separated allowlist of origins (defaults to "*")
+ * - SOCKET_AUTH_TOKEN: optional token that clients must provide to connect
  */
 
 const http = require('node:http');
+const process = require('node:process');
 const express = require('express');
-const next = require('next');
 const { Server: SocketIOServer } = require('socket.io');
 
-const PORT = Number(process.env.PORT) || 3000;
-const MAX_MESSAGE_HISTORY = 200;
+const DEFAULT_PORT = 3001;
+const PORT = Number.parseInt(process.env.PORT, 10) || DEFAULT_PORT;
+const RAW_ALLOWED_ORIGINS = process.env.CORS_ORIGINS;
 
-const dev = process.env.NODE_ENV !== 'production';
-const nextApp = next({ dev });
-const handle = nextApp.getRequestHandler();
+// Normalize the allowlist into a Set for quick membership tests.
+const ALLOWED_ORIGINS = new Set(
+  (RAW_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean),
+);
 
-// Helper to create a consistent timestamp.
-const now = () => Date.now();
+const allowAllOrigins = ALLOWED_ORIGINS.size === 0;
 
-// Simple palette so each visitor gets a friendly color.
-const palette = ['#22d3ee', '#a855f7', '#f97316', '#22c55e', '#14b8a6', '#facc15', '#f472b6', '#fbbf24'];
-let paletteIndex = 0;
+const app = express();
 
-const pickColor = () => {
-  const color = palette[paletteIndex % palette.length];
-  paletteIndex += 1;
-  return color;
-};
+function logLifecycle(message, metadata = {}) {
+  const timestamp = new Date().toISOString();
+  const formattedMetadata = Object.keys(metadata).length > 0 ? ` ${JSON.stringify(metadata)}` : '';
+  console.info(`[${timestamp}] ${message}${formattedMetadata}`);
+}
 
-// Memory stores so we can broadcast history/state to newcomers.
-const clients = new Map();
-const messages = [];
+// Minimal but robust CORS middleware so deployments do not require an extra dependency.
+app.use((req, res, next) => {
+  const requestOrigin = req.headers.origin;
+  if (allowAllOrigins) {
+    if (requestOrigin) {
+      res.header('Access-Control-Allow-Origin', requestOrigin);
+    } else {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+  } else if (requestOrigin && ALLOWED_ORIGINS.has(requestOrigin)) {
+    res.header('Access-Control-Allow-Origin', requestOrigin);
+  }
 
-nextApp
-  .prepare()
-  .then(() => {
-    const app = express();
-    const httpServer = http.createServer(app);
-    const io = new SocketIOServer(httpServer, {
-      cors: {
-        origin: true,
-        credentials: true,
-      },
-    });
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Socket-Token',
+  );
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
 
-    function getUsersSnapshot() {
-      return Array.from(clients.values()).map(client => ({
-        id: client.id,
-        name: client.name,
-        color: client.color,
-      }));
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  return next();
+});
+
+app.get('/healthz', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+const httpServer = http.createServer(app);
+
+function originValidator(origin, callback) {
+  if (!origin || allowAllOrigins || ALLOWED_ORIGINS.has(origin)) {
+    callback(null, true);
+    return;
+  }
+
+  logLifecycle('Rejected connection due to origin policy', { origin });
+  callback(new Error('CORS_ORIGIN_NOT_ALLOWED'));
+}
+
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: originValidator,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'X-Socket-Token'],
+  },
+  serveClient: false,
+});
+
+// Room manager encapsulates per-room state and participant tracking.
+class RoomManager {
+  constructor() {
+    this.rooms = new Map(); // roomId -> { createdAt, participants: Map<socketId, Participant> }
+    this.membership = new Map(); // socketId -> Set<roomId>
+  }
+
+  ensureRoom(roomId) {
+    if (!this.rooms.has(roomId)) {
+      this.rooms.set(roomId, {
+        createdAt: new Date().toISOString(),
+        participants: new Map(),
+      });
     }
 
-    function broadcastUsers() {
-      io.emit('users', getUsersSnapshot());
+    return this.rooms.get(roomId);
+  }
+
+  join(roomId, socketId, participant) {
+    const room = this.ensureRoom(roomId);
+    const participantSet = room.participants;
+
+    if (participantSet.has(socketId)) {
+      return { alreadyJoined: true, room, participant: participantSet.get(socketId) };
     }
 
-    function addMessage(entry) {
-      messages.push(entry);
-      if (messages.length > MAX_MESSAGE_HISTORY) {
-        messages.shift();
+    participantSet.set(socketId, participant);
+
+    if (!this.membership.has(socketId)) {
+      this.membership.set(socketId, new Set());
+    }
+    this.membership.get(socketId).add(roomId);
+
+    return { alreadyJoined: false, room, participant };
+  }
+
+  leave(roomId, socketId) {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      return { existed: false, remaining: 0 };
+    }
+
+    room.participants.delete(socketId);
+
+    const roomsForSocket = this.membership.get(socketId);
+    if (roomsForSocket) {
+      roomsForSocket.delete(roomId);
+      if (roomsForSocket.size === 0) {
+        this.membership.delete(socketId);
       }
     }
 
-    io.on('connection', socket => {
-      const user = {
-        id: socket.id,
-        name: `Guest ${socket.id.slice(-4)}`,
-        color: pickColor(),
-      };
+    if (room.participants.size === 0) {
+      this.rooms.delete(roomId);
+      return { existed: true, remaining: 0, deleted: true };
+    }
 
-      clients.set(socket.id, user);
+    return { existed: true, remaining: room.participants.size, deleted: false };
+  }
 
-      console.log(`[socket] client connected: ${user.id}`);
+  leaveAll(socketId) {
+    const roomsForSocket = this.membership.get(socketId);
+    if (!roomsForSocket) {
+      return [];
+    }
 
-      socket.emit('init', {
-        self: user,
-        users: getUsersSnapshot(),
-        messages,
-      });
+    const results = [];
+    for (const roomId of roomsForSocket) {
+      results.push({ roomId, ...this.leave(roomId, socketId) });
+    }
 
-      addMessage({
-        id: `system-${now()}`,
-        userId: 'system',
-        name: 'System',
-        color: '#38bdf8',
-        text: `${user.name} joined the chat`,
-        timestamp: now(),
-      });
-      io.emit('message', messages[messages.length - 1]);
-      broadcastUsers();
+    return results;
+  }
 
-      socket.on('set-name', requestedName => {
-        if (typeof requestedName !== 'string') {
-          return;
-        }
+  getParticipants(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      return [];
+    }
 
-        const trimmed = requestedName.trim().slice(0, 32);
-        if (!trimmed) {
-          return;
-        }
+    return Array.from(room.participants.values());
+  }
 
-        const previousName = user.name;
-        user.name = trimmed;
+  getRoomsForSocket(socketId) {
+    return Array.from(this.membership.get(socketId) || []);
+  }
+}
 
-        console.log(`[socket] client ${socket.id} set name to ${user.name}`);
+const roomManager = new RoomManager();
 
-        addMessage({
-          id: `system-${now()}`,
-          userId: 'system',
-          name: 'System',
-          color: '#38bdf8',
-          text: `${previousName} is now ${user.name}`,
-          timestamp: now(),
-        });
-        io.emit('name-updated', {
-          id: user.id,
-          name: user.name,
-          previousName,
-          color: user.color,
-        });
-        io.emit('message', messages[messages.length - 1]);
-        broadcastUsers();
-      });
+function isAuthorized(socket) {
+  const requiredToken = process.env.SOCKET_AUTH_TOKEN;
+  if (!requiredToken) {
+    return true;
+  }
 
-      socket.on('send-message', payload => {
-        if (!payload || typeof payload.text !== 'string') {
-          return;
-        }
+  const providedToken = socket.handshake?.auth?.token || socket.handshake?.headers?.['x-socket-token'];
+  return providedToken === requiredToken;
+}
 
-        const text = payload.text.trim();
-        if (!text) {
-          return;
-        }
+const CHAT_NAMESPACE = '/chat';
+const chatNamespace = io.of(CHAT_NAMESPACE);
 
-        const message = {
-          id: `${socket.id}-${now()}`,
-          userId: user.id,
-          name: user.name,
-          color: user.color,
-          text,
-          timestamp: now(),
-        };
-
-        addMessage(message);
-        console.log(`[socket] message from ${user.id}: ${text}`);
-        socket.broadcast.emit('message', message);
-        socket.emit('message-delivered', { id: message.id });
-        socket.emit('message', message); // echo to sender for consistency
-      });
-
-      socket.on('disconnect', reason => {
-        clients.delete(socket.id);
-        console.log(`[socket] client disconnected: ${user.id} (${reason})`);
-
-        addMessage({
-          id: `system-${now()}`,
-          userId: 'system',
-          name: 'System',
-          color: '#38bdf8',
-          text: `${user.name} left the chat`,
-          timestamp: now(),
-        });
-        io.emit('message', messages[messages.length - 1]);
-        broadcastUsers();
-      });
+chatNamespace.use((socket, next) => {
+  if (!isAuthorized(socket)) {
+    logLifecycle('Unauthorized connection attempt', {
+      socketId: socket.id,
+      namespace: socket.nsp?.name,
+      ip: socket.handshake?.address,
     });
+    next(new Error('UNAUTHORIZED'));
+    return;
+  }
 
-    app.use((req, res) => {
-      return handle(req, res);
-    });
+  next();
+});
 
-    httpServer.listen(PORT, () => {
-      console.log(`\n🚀 Chatroom server running at http://localhost:${PORT}/chat\n`);
-    });
-  })
-  .catch(error => {
-    console.error('Failed to start chat server', error);
-    process.exit(1);
+chatNamespace.on('connection', socket => {
+  logLifecycle('Socket connected', {
+    socketId: socket.id,
+    namespace: socket.nsp.name,
+    recovered: Boolean(socket.recovered),
+    transport: socket.conn.transport.name,
   });
+
+  socket.on('join-room', (payload = {}, ack) => {
+    const { sessionId, userId, displayName } = payload;
+
+    if (!sessionId || typeof sessionId !== 'string') {
+      const error = { code: 'ROOM_ID_REQUIRED', message: 'A sessionId is required to join a room.' };
+      socket.emit('room-error', error);
+      if (typeof ack === 'function') ack({ ok: false, error });
+      return;
+    }
+
+    const participant = {
+      socketId: socket.id,
+      userId: userId || socket.id,
+      displayName: displayName || `Guest-${socket.id.slice(-4)}`,
+      lastSeenAt: new Date().toISOString(),
+    };
+
+    const { alreadyJoined } = roomManager.join(sessionId, socket.id, participant);
+    socket.join(sessionId);
+
+    const presence = roomManager.getParticipants(sessionId);
+    chatNamespace.to(sessionId).emit('presence-update', { roomId: sessionId, participants: presence });
+
+    if (alreadyJoined) {
+      logLifecycle('Duplicate room join ignored', { socketId: socket.id, sessionId });
+    } else {
+      logLifecycle('Socket joined room', { socketId: socket.id, sessionId, occupancy: presence.length });
+    }
+
+    socket.emit('room-joined', { roomId: sessionId, participants: presence, alreadyJoined });
+    if (typeof ack === 'function') ack({ ok: true, roomId: sessionId, participants: presence, alreadyJoined });
+  });
+
+  socket.on('leave-room', (payload = {}, ack) => {
+    const { sessionId } = payload;
+    if (!sessionId || typeof sessionId !== 'string') {
+      const error = { code: 'ROOM_ID_REQUIRED', message: 'A sessionId is required to leave a room.' };
+      socket.emit('room-error', error);
+      if (typeof ack === 'function') ack({ ok: false, error });
+      return;
+    }
+
+    socket.leave(sessionId);
+    const result = roomManager.leave(sessionId, socket.id);
+    const presence = roomManager.getParticipants(sessionId);
+    chatNamespace.to(sessionId).emit('presence-update', { roomId: sessionId, participants: presence });
+
+    logLifecycle('Socket left room', { socketId: socket.id, sessionId, remaining: result.remaining });
+
+    socket.emit('room-left', { roomId: sessionId });
+    if (typeof ack === 'function') ack({ ok: true, roomId: sessionId });
+  });
+
+  socket.on('send-message', (payload = {}, ack) => {
+    const { sessionId, message } = payload;
+    if (!sessionId || typeof sessionId !== 'string') {
+      const error = { code: 'ROOM_ID_REQUIRED', message: 'A sessionId is required to send a message.' };
+      socket.emit('room-error', error);
+      if (typeof ack === 'function') ack({ ok: false, error });
+      return;
+    }
+
+    if (!message || typeof message.text !== 'string' || !message.text.trim()) {
+      const error = { code: 'MESSAGE_REQUIRED', message: 'A non-empty text message is required.' };
+      if (typeof ack === 'function') ack({ ok: false, error });
+      return;
+    }
+
+    const trimmedText = message.text.trim();
+    const outgoing = {
+      id: message.id || `${socket.id}-${Date.now()}`,
+      text: trimmedText,
+      roomId: sessionId,
+      userId: message.userId || socket.id,
+      displayName: message.displayName || message.userId || socket.id,
+      sentAt: new Date().toISOString(),
+    };
+
+    chatNamespace.to(sessionId).emit('message', outgoing);
+    logLifecycle('Message broadcast', { sessionId, socketId: socket.id, messageId: outgoing.id });
+
+    if (typeof ack === 'function') ack({ ok: true, message: outgoing });
+  });
+
+  socket.on('typing', (payload = {}) => {
+    const { sessionId, isTyping = true, userId, displayName } = payload;
+    if (!sessionId || typeof sessionId !== 'string') {
+      socket.emit('room-error', { code: 'ROOM_ID_REQUIRED', message: 'Cannot emit typing without sessionId.' });
+      return;
+    }
+
+    socket.to(sessionId).emit('typing', {
+      roomId: sessionId,
+      userId: userId || socket.id,
+      displayName: displayName || userId || socket.id,
+      isTyping: Boolean(isTyping),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  socket.on('presence-update', (payload = {}) => {
+    const { sessionId, status } = payload;
+    if (!sessionId || typeof sessionId !== 'string') {
+      socket.emit('room-error', { code: 'ROOM_ID_REQUIRED', message: 'Cannot update presence without sessionId.' });
+      return;
+    }
+
+    const participant = roomManager.ensureRoom(sessionId).participants.get(socket.id);
+    if (participant) {
+      participant.status = status || 'online';
+      participant.lastSeenAt = new Date().toISOString();
+    }
+
+    const presence = roomManager.getParticipants(sessionId);
+    chatNamespace.to(sessionId).emit('presence-update', { roomId: sessionId, participants: presence });
+    logLifecycle('Presence update broadcast', { sessionId, socketId: socket.id, status: participant?.status });
+  });
+
+  socket.on('client-reconnecting', (payload = {}) => {
+    const { sessionId } = payload;
+    logLifecycle('Client attempting to reconnect', { socketId: socket.id, sessionId });
+  });
+
+  socket.on('disconnecting', reason => {
+    const rooms = roomManager.getRoomsForSocket(socket.id);
+    for (const roomId of rooms) {
+      socket.to(roomId).emit('presence-update', {
+        roomId,
+        participants: roomManager.getParticipants(roomId).filter(p => p.socketId !== socket.id),
+      });
+    }
+    logLifecycle('Socket disconnecting', { socketId: socket.id, reason, rooms });
+  });
+
+  socket.on('disconnect', reason => {
+    const cleanupResults = roomManager.leaveAll(socket.id);
+    logLifecycle('Socket disconnected', { socketId: socket.id, reason, cleanupResults });
+  });
+
+  socket.on('error', error => {
+    logLifecycle('Socket error', { socketId: socket.id, error: error?.message || String(error) });
+  });
+});
+
+httpServer.listen(PORT, () => {
+  logLifecycle('Realtime server listening', {
+    port: PORT,
+    allowAllOrigins,
+    allowedOrigins: Array.from(ALLOWED_ORIGINS.values()),
+  });
+});
+
+module.exports = { httpServer, io };
