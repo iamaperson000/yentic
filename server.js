@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Simple collaborative chat server.
  *
@@ -15,6 +16,8 @@ const { Server: SocketIOServer } = require('socket.io');
 
 const PORT = Number(process.env.PORT) || 3000;
 const MAX_MESSAGE_HISTORY = 200;
+const MAX_MESSAGE_LENGTH = 800;
+const MAX_NAME_LENGTH = 32;
 
 const dev = process.env.NODE_ENV !== 'production';
 const nextApp = next({ dev });
@@ -36,6 +39,7 @@ const pickColor = () => {
 // Memory stores so we can broadcast history/state to newcomers.
 const clients = new Map();
 const messages = [];
+
 
 nextApp
   .prepare()
@@ -68,6 +72,33 @@ nextApp
       }
     }
 
+    function sanitizeMessageId(value) {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      return trimmed.slice(0, 64);
+    }
+
+    function sanitizeText(value, maxLength) {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      return trimmed.slice(0, maxLength);
+    }
+
+    function createSystemMessage(text) {
+      const entry = {
+        id: `system-${now()}`,
+        userId: 'system',
+        name: 'System',
+        color: '#38bdf8',
+        text,
+        timestamp: now(),
+      };
+      addMessage(entry);
+      return entry;
+    }
+
     io.on('connection', socket => {
       const user = {
         id: socket.id,
@@ -85,62 +116,39 @@ nextApp
         messages,
       });
 
-      addMessage({
-        id: `system-${now()}`,
-        userId: 'system',
-        name: 'System',
-        color: '#38bdf8',
-        text: `${user.name} joined the chat`,
-        timestamp: now(),
-      });
-      io.emit('message', messages[messages.length - 1]);
+      io.emit('message', createSystemMessage(`${user.name} joined the chat`));
       broadcastUsers();
 
       socket.on('set-name', requestedName => {
-        if (typeof requestedName !== 'string') {
-          return;
-        }
-
-        const trimmed = requestedName.trim().slice(0, 32);
-        if (!trimmed) {
-          return;
-        }
+        const trimmed = sanitizeText(requestedName, MAX_NAME_LENGTH);
+        if (!trimmed) return;
 
         const previousName = user.name;
         user.name = trimmed;
+        clients.set(socket.id, user);
 
         console.log(`[socket] client ${socket.id} set name to ${user.name}`);
 
-        addMessage({
-          id: `system-${now()}`,
-          userId: 'system',
-          name: 'System',
-          color: '#38bdf8',
-          text: `${previousName} is now ${user.name}`,
-          timestamp: now(),
-        });
+        const systemMessage = createSystemMessage(`${previousName} is now ${user.name}`);
         io.emit('name-updated', {
           id: user.id,
           name: user.name,
           previousName,
           color: user.color,
         });
-        io.emit('message', messages[messages.length - 1]);
+        io.emit('message', systemMessage);
         broadcastUsers();
       });
 
       socket.on('send-message', payload => {
-        if (!payload || typeof payload.text !== 'string') {
-          return;
-        }
+        const text = sanitizeText(payload?.text, MAX_MESSAGE_LENGTH);
+        if (!text) return;
 
-        const text = payload.text.trim();
-        if (!text) {
-          return;
-        }
+        const providedId = sanitizeMessageId(payload?.clientMessageId);
+        const messageId = providedId || `${socket.id}-${now()}`;
 
         const message = {
-          id: `${socket.id}-${now()}`,
+          id: messageId,
           userId: user.id,
           name: user.name,
           color: user.color,
@@ -150,24 +158,15 @@ nextApp
 
         addMessage(message);
         console.log(`[socket] message from ${user.id}: ${text}`);
-        socket.broadcast.emit('message', message);
+        io.emit('message', message);
         socket.emit('message-delivered', { id: message.id });
-        socket.emit('message', message); // echo to sender for consistency
       });
 
       socket.on('disconnect', reason => {
         clients.delete(socket.id);
         console.log(`[socket] client disconnected: ${user.id} (${reason})`);
 
-        addMessage({
-          id: `system-${now()}`,
-          userId: 'system',
-          name: 'System',
-          color: '#38bdf8',
-          text: `${user.name} left the chat`,
-          timestamp: now(),
-        });
-        io.emit('message', messages[messages.length - 1]);
+        io.emit('message', createSystemMessage(`${user.name} left the chat`));
         broadcastUsers();
       });
     });
