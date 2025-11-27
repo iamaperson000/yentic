@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Pusher from 'pusher-js';
 
 // Simple realtime chat page using Pusher Channels.
@@ -9,26 +9,25 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState('');
+  const [isReady, setIsReady] = useState(false);
 
-  // Memoize the Pusher client so it is not recreated on every render.
-  const pusherClient = useMemo(() => {
+  // Subscribe to the chat channel and listen for new messages.
+  useEffect(() => {
     const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
     const cluster =
       process.env.NEXT_PUBLIC_PUSHER_CLUSTER || process.env.PUSHER_CLUSTER;
 
-    if (!key || !cluster) {
+    // Bail out early during static rendering or when env vars are missing.
+    if (!key || !cluster || typeof window === 'undefined') {
       console.warn('Missing Pusher environment variables');
+      return undefined;
     }
 
-    return new Pusher(key, {
+    const client = new Pusher(key, {
       cluster,
       forceTLS: true,
     });
-  }, []);
-
-  // Subscribe to the chat channel and listen for new messages.
-  useEffect(() => {
-    const channel = pusherClient.subscribe('chat');
+    const channel = client.subscribe('chat');
 
     const handleIncomingMessage = (data) => {
       setMessages((prev) => [
@@ -42,12 +41,14 @@ export default function ChatPage() {
 
     channel.bind('message', handleIncomingMessage);
 
+    setIsReady(true);
+
     return () => {
       channel.unbind('message', handleIncomingMessage);
-      pusherClient.unsubscribe('chat');
-      pusherClient.disconnect();
+      client.unsubscribe('chat');
+      client.disconnect();
     };
-  }, [pusherClient]);
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -88,7 +89,9 @@ export default function ChatPage() {
         <h1 style={styles.heading}>Realtime Chat (Pusher Channels)</h1>
 
         <div style={styles.messages}>
-          {messages.length === 0 ? (
+          {!isReady ? (
+            <p style={styles.empty}>Connecting to Pusher…</p>
+          ) : messages.length === 0 ? (
             <p style={styles.empty}>No messages yet. Be the first to say hello!</p>
           ) : (
             messages.map((msg, index) => (
