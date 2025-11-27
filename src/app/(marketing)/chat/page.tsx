@@ -52,11 +52,13 @@ export default function ChatPage() {
   const [statusMessage, setStatusMessage] = useState('Connecting to chatroom…');
 
   const socketRef = useRef<Socket | null>(null);
-  const pendingMessageIds = useRef(new Set<string>());
+  const [pendingMessageIds, setPendingMessageIds] = useState<Set<string>>(new Set());
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const socket = io();
+    const socket = io({
+      transports: ['websocket', 'polling'],
+    });
     socketRef.current = socket;
 
     function handleConnect() {
@@ -69,8 +71,20 @@ export default function ChatPage() {
       setStatusMessage('Disconnected. Attempting to reconnect…');
     }
 
+    function handleConnectError() {
+      setConnectionState('disconnected');
+      setStatusMessage('Connection lost. We will retry automatically.');
+    }
+
+    function handleReconnectAttempt() {
+      setConnectionState('connecting');
+      setStatusMessage('Reconnecting to chatroom…');
+    }
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
+    socket.io.on('reconnect_attempt', handleReconnectAttempt);
 
     socket.on('init', (payload: InitPayload) => {
       setSelf(payload.self);
@@ -86,11 +100,18 @@ export default function ChatPage() {
 
     socket.on('message', (message: ChatMessage) => {
       setMessages(prev => {
-        const exists = prev.some(existing => existing.id === message.id);
-        if (exists) {
-          return prev;
+        const next = [...prev];
+        const index = next.findIndex(existing => existing.id === message.id);
+        if (index !== -1) {
+          next[index] = { ...next[index], ...message };
+          return next;
         }
-        return [...prev, message];
+        return [...next, message];
+      });
+      setPendingMessageIds(prev => {
+        const next = new Set(prev);
+        next.delete(message.id);
+        return next;
       });
     });
 
@@ -101,7 +122,11 @@ export default function ChatPage() {
     });
 
     socket.on('message-delivered', (ack: DeliveryAck) => {
-      pendingMessageIds.current.delete(ack.id);
+      setPendingMessageIds(prev => {
+        const next = new Set(prev);
+        next.delete(ack.id);
+        return next;
+      });
     });
 
     return () => {
@@ -140,7 +165,7 @@ export default function ChatPage() {
       return;
     }
 
-    const optimisticId = `${socket.id}-${Date.now()}`;
+    const optimisticId = `client-${socket.id}-${Date.now()}`;
     const optimisticMessage: ChatMessage = {
       id: optimisticId,
       userId: self?.id ?? socket.id ?? 'local-user',
@@ -150,9 +175,13 @@ export default function ChatPage() {
       timestamp: Date.now(),
     };
 
-    pendingMessageIds.current.add(optimisticId);
+    setPendingMessageIds(prev => {
+      const next = new Set(prev);
+      next.add(optimisticId);
+      return next;
+    });
     setMessages(prev => [...prev, optimisticMessage]);
-    socket.emit('send-message', { text });
+    socket.emit('send-message', { text, clientMessageId: optimisticId });
     setComposerValue('');
   };
 
@@ -197,7 +226,7 @@ export default function ChatPage() {
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
               {messages.map(message => {
-                const isSelf = message.userId === self?.id || pendingMessageIds.current.has(message.id);
+                const isSelf = message.userId === self?.id || pendingMessageIds.has(message.id);
                 return (
                   <article
                     key={message.id}
