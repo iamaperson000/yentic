@@ -44,6 +44,13 @@ export async function GET() {
   if (!session?.user?.email)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      { error: "Database connection is not configured" },
+      { status: 503 },
+    );
+  }
+
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
   });
@@ -118,6 +125,13 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email)
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      { error: "Database connection is not configured" },
+      { status: 503 },
+    );
+  }
 
   const user = await prisma.user.upsert({
     where: { email: session.user.email },
