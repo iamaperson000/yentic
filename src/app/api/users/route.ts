@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
 
 import type { Prisma } from "@prisma/client"
+import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 
 export async function GET(request: Request) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const { searchParams } = new URL(request.url)
   const take = Number(searchParams.get("take") ?? 50)
   const skip = Number(searchParams.get("skip") ?? 0)
@@ -15,20 +23,19 @@ export async function GET(request: Request) {
     )
   }
 
-  const rawUsers = await prisma.user.findMany({
+  const users = await prisma.user.findMany({
     skip: Number.isFinite(skip) ? skip : 0,
     take: Number.isFinite(take) && take > 0 ? Math.min(take, 100) : 50,
     orderBy: { createdAt: "desc" } as unknown as Prisma.UserOrderByWithRelationInput,
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      image: true,
+      bio: true,
+      createdAt: true,
+    },
   })
-
-  const users = rawUsers as unknown as Array<{
-    id: string
-    name: string | null
-    username: string | null
-    image: string | null
-    bio: string | null
-    createdAt: Date
-  }>
 
   return NextResponse.json({ users })
 }
