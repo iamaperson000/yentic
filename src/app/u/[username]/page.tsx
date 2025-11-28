@@ -13,10 +13,9 @@ type UserPageParams = { username?: string };
 export default async function UserPage({
   params,
 }: {
-  params: UserPageParams | Promise<UserPageParams>;
+  params: Promise<UserPageParams>;
 }) {
-  const resolvedParams = await Promise.resolve(params);
-  const username = resolvedParams?.username;
+  const { username } = await params;
 
   if (!username) {
     return (

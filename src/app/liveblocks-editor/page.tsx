@@ -10,8 +10,18 @@ export default function LiveblocksEditorPage() {
   useEffect(() => {
     if (!editorRef.current) return undefined;
 
-    const cleanup = initializeCollaborativeEditor(editorRef.current);
-    return () => cleanup?.();
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+
+    initializeCollaborativeEditor(editorRef.current).then((teardown) => {
+      if (disposed) return;
+      cleanup = teardown;
+    });
+
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
   }, []);
 
   return (
