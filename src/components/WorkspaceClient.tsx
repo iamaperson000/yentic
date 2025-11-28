@@ -1154,19 +1154,17 @@ export default function WorkspaceClient({
   }, [recentlyCreatedPath]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#05060d] text-white">
-      <CollaborativeEditor
-        projectId={projectMeta.id}
-        files={files}
-        onFilesChange={handleCollaborativeFilesChange}
-        encodedState={encodedYjsState}
-        onSnapshotChange={handleSnapshotChange}
-        localPresence={localCollaboratorPresence}
-        onPresenceChange={setLiveCollaborators}
-        onRemoteMutation={markRemoteMutation}
-      >
-        {null}
-      </CollaborativeEditor>
+    <CollaborativeEditor
+      projectId={projectMeta.id}
+      files={files}
+      onFilesChange={handleCollaborativeFilesChange}
+      encodedState={encodedYjsState}
+      onSnapshotChange={handleSnapshotChange}
+      localPresence={localCollaboratorPresence}
+      onPresenceChange={setLiveCollaborators}
+      onRemoteMutation={markRemoteMutation}
+    >
+      <div className="flex min-h-screen flex-col bg-[#05060d] text-white">
       <ProjectShareModal
         isOpen={isShareModalOpen}
         onClose={closeShareModal}
@@ -1323,7 +1321,7 @@ export default function WorkspaceClient({
               </div>
             </div>
             <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d1324]">
-              <Editor value={code} language={lang} onChange={setActiveCode} readOnly={!canEdit} />
+              <Editor value={code} language={lang} onChange={setActiveCode} readOnly={!canEdit} path={activePath} />
             </div>
             <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d1324]">
               <Preview
@@ -1356,5 +1354,6 @@ export default function WorkspaceClient({
         </div>
       ) : null}
     </div>
+  </CollaborativeEditor>
   );
 }
