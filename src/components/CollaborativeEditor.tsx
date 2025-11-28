@@ -36,6 +36,9 @@ type CollaborationMessage =
       }>;
     };
 
+type PresenceMessage = Extract<CollaborationMessage, { type: 'presence' }>;
+type PresenceSnapshot = { clients?: PresenceMessage['clients'] };
+
 type ProjectOperation =
   | { type: 'set-file'; file: ProjectFile }
   | { type: 'remove-file'; path: string };
@@ -598,7 +601,7 @@ export default function CollaborativeEditor({
         if (!res.ok) {
           return;
         }
-        const data = (await res.json()) as { clients?: CollaborationMessage['clients'] };
+        const data = (await res.json()) as PresenceSnapshot;
         if (data?.clients) {
           emitPresence({ type: 'presence', clients: data.clients });
         }
