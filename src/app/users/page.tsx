@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ q?: string }>;
+  searchParams?: { q?: string };
 }) {
-  const query = (await searchParams)?.q?.trim() ?? "";
+  const query = searchParams?.q?.trim() ?? "";
 
   const where: Prisma.UserWhereInput = query
     ? {
