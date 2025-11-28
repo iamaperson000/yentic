@@ -3,10 +3,13 @@ import { getServerSession } from 'next-auth';
 
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { pusherServer } from '@/lib/pusher';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 export const runtime = 'nodejs';
+
+const STALE_THRESHOLD_MS = 60_000;
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -21,9 +24,7 @@ type PresenceState = {
 
 type RoomClient = {
   clientId: string;
-  writer: WritableStreamDefaultWriter<string>;
   presence: PresenceState | null;
-  keepAliveTimer: ReturnType<typeof setInterval>;
   lastSeen: number;
 };
 
@@ -39,11 +40,15 @@ type ServerMessage =
   | { type: 'update'; update: string; clientId: string }
   | { type: 'presence'; clients: ServerPresenceEntry[] };
 
-const rooms = new Map<string, Map<string, RoomClient>>();
-
 type AuthorizationResult =
   | { kind: 'authorized'; userId: string; role: 'owner' | 'editor' | 'viewer' }
   | { kind: 'unauthorized'; status: 401 | 403 | 404 };
+
+const rooms = new Map<string, Map<string, RoomClient>>();
+
+function channelName(projectId: string) {
+  return `project-${projectId}`;
+}
 
 async function authorize(projectId: string): Promise<AuthorizationResult> {
   const session = await getServerSession(authOptions);
@@ -89,6 +94,32 @@ async function authorize(projectId: string): Promise<AuthorizationResult> {
   return { kind: 'authorized', userId: user.id, role };
 }
 
+function getRoom(projectId: string): Map<string, RoomClient> {
+  let room = rooms.get(projectId);
+  if (!room) {
+    room = new Map();
+    rooms.set(projectId, room);
+  }
+  pruneRoom(projectId);
+  return room;
+}
+
+function pruneRoom(projectId: string) {
+  const room = rooms.get(projectId);
+  if (!room) {
+    return;
+  }
+  const cutoff = Date.now() - STALE_THRESHOLD_MS;
+  room.forEach((client, id) => {
+    if (client.lastSeen < cutoff) {
+      room.delete(id);
+    }
+  });
+  if (room.size === 0) {
+    rooms.delete(projectId);
+  }
+}
+
 function serializePresence(room: Map<string, RoomClient>): ServerPresenceEntry[] {
   return Array.from(room.values()).map(client => ({
     clientId: client.clientId,
@@ -99,51 +130,21 @@ function serializePresence(room: Map<string, RoomClient>): ServerPresenceEntry[]
   }));
 }
 
-function broadcast(roomId: string, message: ServerMessage, excludeClientId?: string) {
-  const room = rooms.get(roomId);
-  if (!room) {
-    return;
-  }
-  const payload = `data: ${JSON.stringify(message)}\n\n`;
-  room.forEach((client, id) => {
-    if (excludeClientId && id === excludeClientId) {
-      return;
-    }
-    client.writer.write(payload).catch(() => {
-      cleanupClient(roomId, id);
-    });
-  });
-}
-
-function broadcastPresence(roomId: string) {
-  const room = rooms.get(roomId);
-  if (!room) {
-    return;
-  }
-  broadcast(roomId, { type: 'presence', clients: serializePresence(room) });
-}
-
-function cleanupClient(roomId: string, clientId: string) {
-  const room = rooms.get(roomId);
-  if (!room) {
-    return;
-  }
-  const client = room.get(clientId);
-  if (!client) {
-    return;
-  }
-  clearInterval(client.keepAliveTimer);
+async function broadcast(projectId: string, message: ServerMessage) {
   try {
-    void client.writer.close();
-  } catch {
-    // ignore close errors
+    await pusherServer.trigger(channelName(projectId), message.type, message as never);
+  } catch (error) {
+    console.error('[collaboration] Failed to trigger Pusher event', error);
   }
-  room.delete(clientId);
-  if (room.size === 0) {
-    rooms.delete(roomId);
+}
+
+async function broadcastPresence(projectId: string) {
+  const room = rooms.get(projectId);
+  if (!room) {
     return;
   }
-  broadcastPresence(roomId);
+  pruneRoom(projectId);
+  await broadcast(projectId, { type: 'presence', clients: serializePresence(room) });
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -152,76 +153,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const { searchParams } = new URL(request.url);
   const clientId = searchParams.get('clientId');
 
-  if (!clientId) {
-    return NextResponse.json({ error: 'clientId is required' }, { status: 400 });
-  }
-
   const auth = await authorize(projectId);
   if (auth.kind === 'unauthorized') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status });
   }
 
-  const stream = new TransformStream();
-  const writer = stream.writable.getWriter();
-
-  let room = rooms.get(projectId);
-  if (!room) {
-    room = new Map();
-    rooms.set(projectId, room);
+  const room = getRoom(projectId);
+  if (clientId) {
+    const entry = room.get(clientId) ?? { clientId, presence: null, lastSeen: Date.now() };
+    entry.lastSeen = Date.now();
+    room.set(clientId, entry);
   }
 
-  const existing = room.get(clientId);
-  if (existing) {
-    clearInterval(existing.keepAliveTimer);
-    try {
-      void existing.writer.close();
-    } catch {
-      // ignore
-    }
-    room.delete(clientId);
-  }
-
-  const keepAliveTimer = setInterval(() => {
-    const currentRoom = rooms.get(projectId);
-    const currentClient = currentRoom?.get(clientId);
-    if (!currentRoom || !currentClient) {
-      clearInterval(keepAliveTimer);
-      return;
-    }
-    if (Date.now() - currentClient.lastSeen > 45000) {
-      cleanupClient(projectId, clientId);
-      return;
-    }
-    writer.write(':keep-alive\n\n').catch(() => {
-      cleanupClient(projectId, clientId);
-    });
-  }, 30000);
-
-  const client: RoomClient = {
-    clientId,
-    writer,
-    presence: null,
-    keepAliveTimer,
-    lastSeen: Date.now(),
-  };
-
-  room.set(clientId, client);
-
-  const initialPresence = { type: 'presence' as const, clients: serializePresence(room) };
-  void writer.write(`data: ${JSON.stringify(initialPresence)}\n\n`);
-  broadcastPresence(projectId);
-
-  request.signal.addEventListener('abort', () => {
-    cleanupClient(projectId, clientId);
-  });
-
-  return new Response(stream.readable, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-    },
-  });
+  return NextResponse.json({ clients: serializePresence(room) });
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -255,15 +199,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status });
   }
 
-  const room = rooms.get(projectId);
-  if (!room || !room.has(clientId)) {
-    return NextResponse.json({ ok: true });
-  }
-
-  const client = room.get(clientId);
-  if (client) {
-    client.lastSeen = Date.now();
-  }
+  const room = getRoom(projectId);
+  const client: RoomClient = room.get(clientId) ?? { clientId, presence: null, lastSeen: Date.now() };
+  client.lastSeen = Date.now();
+  room.set(clientId, client);
 
   if (type === 'update') {
     if (auth.role === 'viewer') {
@@ -272,43 +211,39 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (typeof update !== 'string' || update.length === 0) {
       return NextResponse.json({ error: 'Missing update payload' }, { status: 400 });
     }
-    broadcast(projectId, { type: 'update', update, clientId }, clientId);
+    await broadcast(projectId, { type: 'update', update, clientId });
     return NextResponse.json({ ok: true });
   }
 
   if (type === 'presence') {
-    const client = room.get(clientId);
-    if (client) {
-      if (presence === null) {
-        cleanupClient(projectId, clientId);
-        return NextResponse.json({ ok: true });
-      }
-      if (
-        presence &&
-        typeof presence === 'object' &&
-        typeof (presence as { id?: unknown }).id === 'string' &&
-        (presence as { id: string }).id.trim().length > 0 &&
-        typeof (presence as { color?: unknown }).color === 'string'
-      ) {
-        client.presence = {
-          id: (presence as { id: string }).id,
-          name:
-            typeof (presence as { name?: unknown }).name === 'string'
-              ? (presence as { name: string }).name
-              : null,
-          color: (presence as { color: string }).color,
-          avatar:
-            typeof (presence as { avatar?: unknown }).avatar === 'string'
-              ? ((presence as { avatar: string }).avatar.length > 0
-                  ? (presence as { avatar: string }).avatar
-                  : null)
-              : null,
-        };
-      } else {
-        client.presence = null;
-      }
+    if (presence === null) {
+      room.delete(clientId);
+      await broadcastPresence(projectId);
+      return NextResponse.json({ ok: true });
     }
-    broadcastPresence(projectId);
+    if (
+      presence &&
+      typeof presence === 'object' &&
+      typeof (presence as { id?: unknown }).id === 'string' &&
+      (presence as { id: string }).id.trim().length > 0 &&
+      typeof (presence as { color?: unknown }).color === 'string'
+    ) {
+      client.presence = {
+        id: (presence as { id: string }).id,
+        name: typeof (presence as { name?: unknown }).name === 'string' ? (presence as { name: string }).name : null,
+        color: (presence as { color: string }).color,
+        avatar:
+          typeof (presence as { avatar?: unknown }).avatar === 'string'
+            ? (presence as { avatar: string }).avatar.length > 0
+              ? (presence as { avatar: string }).avatar
+              : null
+            : null,
+      };
+    } else {
+      client.presence = null;
+    }
+    room.set(clientId, client);
+    await broadcastPresence(projectId);
     return NextResponse.json({ ok: true });
   }
 
