@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import Pusher from 'pusher-js';
 import { Sandpack } from '@codesandbox/sandpack-react';
 
 import { inferLanguage, type ProjectFile, type ProjectFileMap } from '@/lib/project';
@@ -302,7 +303,7 @@ export default function CollaborativeEditor({
       const derived: CollaboratorPresence[] = message.clients
         .filter(entry => typeof entry.userId === 'string' && entry.userId.length > 0)
         .map(entry => ({
-          clientId: `sse:${entry.clientId}`,
+          clientId: `pusher:${entry.clientId}`,
           userId: entry.userId ?? entry.clientId,
           name: entry.name ?? null,
           color: entry.color ?? colorForClient(entry.clientId),
@@ -378,13 +379,15 @@ export default function CollaborativeEditor({
     }
 
     const endpoint = `/api/projects/${projectId}/collaboration`;
-    let eventSource: EventSource | null = null;
+    const channelName = `project-${projectId}`;
+    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
+    const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
     let disposed = false;
-    let reconnectTimer: number | null = null;
-    let reconnectAttempts = 0;
     let presenceInterval: number | null = null;
     const pendingRequests: Array<{ body: string; keepalive: boolean; attempt: number; allowDuringDispose?: boolean }> = [];
     let sendingRequest = false;
+    connectedRef.current = false;
+    knownPeersRef.current = new Set();
 
     const processPendingRequests = () => {
       if (sendingRequest || pendingRequests.length === 0) {
@@ -589,69 +592,39 @@ export default function CollaborativeEditor({
       onRemoteMutationRef.current?.();
     };
 
-    const openEventStream = () => {
-      if (eventSource) {
-        eventSource.close();
-      }
-
-      connectedRef.current = false;
-      knownPeersRef.current = new Set();
-
+    const hydratePresence = async () => {
       try {
-        eventSource = new EventSource(`${endpoint}?clientId=${encodeURIComponent(clientIdRef.current)}`);
+        const res = await fetch(endpoint, { cache: 'no-store' });
+        if (!res.ok) {
+          return;
+        }
+        const data = (await res.json()) as { clients?: CollaborationMessage['clients'] };
+        if (data?.clients) {
+          emitPresence({ type: 'presence', clients: data.clients });
+        }
       } catch (error) {
-        console.error('[CollaborativeEditor] Failed to initialize collaboration stream:', error);
-        return;
+        console.error('[CollaborativeEditor] Failed to load initial presence snapshot:', error);
+      }
+    };
+
+    const setupPusher = () => {
+      if (!pusherKey || !pusherCluster) {
+        console.error('[CollaborativeEditor] Missing Pusher configuration');
+        return null;
       }
 
-      eventSource.onopen = () => {
-        reconnectAttempts = 0;
-        if (reconnectTimer !== null) {
-          window.clearTimeout(reconnectTimer);
-          reconnectTimer = null;
-        }
-        connectedRef.current = true;
-        broadcastSnapshot(undefined, true);
-        const payload = buildPresencePayload();
-        if (payload) {
-          sendPresence(payload);
-        }
-        if (presenceInterval !== null) {
-          window.clearInterval(presenceInterval);
-        }
-        presenceInterval = window.setInterval(() => {
-          const latest = buildPresencePayload();
-          if (latest) {
-            sendPresence(latest);
-          }
-        }, 20000);
-      };
+      const client = new Pusher(pusherKey, { cluster: pusherCluster, forceTLS: true });
+      const channel = client.subscribe(channelName);
 
-      eventSource.onmessage = event => {
-        if (!event.data) {
-          return;
-        }
-        let parsed: CollaborationMessage;
-        try {
-          parsed = JSON.parse(event.data) as CollaborationMessage;
-        } catch (error) {
-          console.error('[CollaborativeEditor] Failed to parse SSE payload:', error);
+      const handlePresenceMessage = (parsed: CollaborationMessage) => {
+        if (parsed.type !== 'presence') {
           return;
         }
 
-        if (parsed.type === 'update') {
-          handleUpdateEnvelope(parsed);
-          return;
-        }
-
-        const uniqueIds = new Set<string>();
         const remoteIds = new Set<string>();
-        parsed.clients.forEach(client => {
-          if (typeof client.clientId === 'string') {
-            uniqueIds.add(client.clientId);
-            if (client.clientId !== clientIdRef.current) {
-              remoteIds.add(client.clientId);
-            }
+        parsed.clients.forEach(entry => {
+          if (typeof entry.clientId === 'string' && entry.clientId !== clientIdRef.current) {
+            remoteIds.add(entry.clientId);
           }
         });
 
@@ -669,46 +642,41 @@ export default function CollaborativeEditor({
         }
       };
 
-      eventSource.onerror = error => {
-        console.error('[CollaborativeEditor] Collaboration stream error:', error);
-        connectedRef.current = false;
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
+      channel.bind('update', handleUpdateEnvelope);
+      channel.bind('presence', handlePresenceMessage);
+      channel.bind('pusher:subscription_succeeded', () => {
+        connectedRef.current = true;
+        broadcastSnapshot(undefined, true);
+        const payload = buildPresencePayload();
+        if (payload) {
+          sendPresence(payload);
         }
         if (presenceInterval !== null) {
           window.clearInterval(presenceInterval);
-          presenceInterval = null;
         }
-        if (disposed) {
-          return;
-        }
-        if (reconnectTimer !== null) {
-          window.clearTimeout(reconnectTimer);
-        }
-        const delay = Math.min(1000 * 2 ** reconnectAttempts, 12000);
-        reconnectAttempts += 1;
-        reconnectTimer = window.setTimeout(() => {
-          reconnectTimer = null;
-          openEventStream();
-        }, delay);
-      };
+        presenceInterval = window.setInterval(() => {
+          const latest = buildPresencePayload();
+          if (latest) {
+            sendPresence(latest);
+          }
+        }, 20000);
+      });
+
+      client.connection.bind('disconnected', () => {
+        connectedRef.current = false;
+      });
+
+      return { client, channel };
     };
 
-    openEventStream();
+    hydratePresence();
+    const subscription = setupPusher();
 
     const dispose = () => {
       disposed = true;
       connectedRef.current = false;
       if (presenceInterval !== null) {
         window.clearInterval(presenceInterval);
-      }
-      if (reconnectTimer !== null) {
-        window.clearTimeout(reconnectTimer);
-      }
-      if (eventSource) {
-        eventSource.close();
-        eventSource = null;
       }
       if (broadcastTimer !== null) {
         window.clearTimeout(broadcastTimer);
@@ -718,6 +686,13 @@ export default function CollaborativeEditor({
       window.removeEventListener('pagehide', handlePageHide);
       knownPeersRef.current = new Set();
       sendPresence(null, { keepalive: true, preferBeacon: true, allowDuringDispose: true });
+      if (subscription) {
+        subscription.channel.unbind('update', handleUpdateEnvelope);
+        subscription.channel.unbind('presence');
+        subscription.channel.unbind('pusher:subscription_succeeded');
+        subscription.client.unsubscribe(channelName);
+        subscription.client.disconnect();
+      }
     };
 
     disposeRef.current = dispose;
