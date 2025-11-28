@@ -1,221 +1,171 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import Pusher from 'pusher-js';
+import { useEffect, useState } from "react";
+import Pusher from "pusher-js";
 
-// Simple realtime chat page using Pusher Channels.
 export default function ChatPage() {
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState('');
-  const [isReady, setIsReady] = useState(false);
+  const [input, setInput] = useState("");
+  const [status, setStatus] = useState("Connecting to Pusher…");
+  const [error, setError] = useState("");
 
-  // Subscribe to the chat channel and listen for new messages.
   useEffect(() => {
-    const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
-    const cluster =
-      process.env.NEXT_PUBLIC_PUSHER_CLUSTER || process.env.PUSHER_CLUSTER;
+    if (typeof window === "undefined") return undefined;
 
-    // Bail out early during static rendering or when env vars are missing.
-    if (!key || !cluster || typeof window === 'undefined') {
-      console.warn('Missing Pusher environment variables');
-      return undefined;
-    }
+    setStatus("Connecting to Pusher…");
 
-    const client = new Pusher(key, {
-      cluster,
-      forceTLS: true,
+    const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
+      cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
     });
-    const channel = client.subscribe('chat');
 
-    const handleIncomingMessage = (data) => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          message: data?.message ?? '',
-          sentAt: data?.sentAt ?? new Date().toISOString(),
-        },
-      ]);
+    const channel = pusher.subscribe("chat");
+
+    const handleMessage = (data) => {
+      setMessages((prev) => [...prev, data?.message ?? ""]);
     };
 
-    channel.bind('message', handleIncomingMessage);
-
-    setIsReady(true);
+    channel.bind("message", handleMessage);
+    setStatus("Connected");
 
     return () => {
-      channel.unbind('message', handleIncomingMessage);
-      client.unsubscribe('chat');
-      client.disconnect();
+      channel.unbind_all();
+      pusher.unsubscribe("chat");
+      pusher.disconnect();
     };
   }, []);
 
-  const handleSubmit = async (event) => {
+  const handleSend = async (event) => {
     event.preventDefault();
-    setError('');
-    const trimmed = input.trim();
-
-    if (!trimmed) {
-      setError('Please enter a message.');
-      return;
-    }
+    setError("");
+    const message = input.trim();
+    if (!message) return;
 
     try {
-      setIsSending(true);
-      const response = await fetch('/api/message', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: trimmed }),
+      await fetch("/api/message", {
+        method: "POST",
+        body: JSON.stringify({ message }),
       });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error || 'Failed to send message');
-      }
-
-      setInput('');
+      setInput("");
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
-    } finally {
-      setIsSending(false);
+      setError("Failed to send message.");
     }
   };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h1 style={styles.heading}>Realtime Chat (Pusher Channels)</h1>
+    <main style={styles.page}>
+      <section style={styles.card}>
+        <h1 style={styles.title}>Chat</h1>
+        <p style={styles.status}>{status}</p>
 
         <div style={styles.messages}>
-          {!isReady ? (
-            <p style={styles.empty}>Connecting to Pusher…</p>
-          ) : messages.length === 0 ? (
-            <p style={styles.empty}>No messages yet. Be the first to say hello!</p>
+          {messages.length === 0 ? (
+            <p style={styles.empty}>No messages yet.</p>
           ) : (
             messages.map((msg, index) => (
-              <div key={index} style={styles.messageRow}>
-                <span style={styles.messageText}>{msg.message}</span>
-                <span style={styles.timestamp}>
-                  {new Date(msg.sentAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
+              <div key={index} style={styles.message}>
+                {msg}
               </div>
             ))
           )}
         </div>
 
-        <form style={styles.form} onSubmit={handleSubmit}>
+        <form onSubmit={handleSend} style={styles.form}>
           <input
             style={styles.input}
-            type="text"
             value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="Type your message..."
-            disabled={isSending}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type a message"
             aria-label="Message"
           />
-          <button type="submit" style={styles.button} disabled={isSending}>
-            {isSending ? 'Sending...' : 'Send'}
+          <button type="submit" style={styles.button}>
+            Send
           </button>
         </form>
 
         {error ? <p style={styles.error}>{error}</p> : null}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
 
 const styles = {
   page: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0f172a',
-    padding: '2rem',
-    color: '#e2e8f0',
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#0f172a",
+    padding: "2rem",
   },
   card: {
-    width: '100%',
-    maxWidth: '640px',
-    backgroundColor: '#111827',
-    borderRadius: '16px',
-    padding: '24px',
-    boxShadow: '0 20px 35px rgba(0,0,0,0.4)',
-    border: '1px solid #1f2937',
+    width: "100%",
+    maxWidth: "640px",
+    background: "#111827",
+    color: "#e2e8f0",
+    padding: "24px",
+    borderRadius: "16px",
+    border: "1px solid #1f2937",
+    boxShadow: "0 20px 35px rgba(0,0,0,0.4)",
   },
-  heading: {
+  title: {
     margin: 0,
-    marginBottom: '16px',
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    textAlign: 'center',
+    marginBottom: "8px",
+    fontSize: "1.5rem",
+    textAlign: "center",
+  },
+  status: {
+    margin: 0,
+    marginBottom: "16px",
+    textAlign: "center",
+    color: "#94a3b8",
   },
   messages: {
-    minHeight: '260px',
-    maxHeight: '360px',
-    overflowY: 'auto',
-    padding: '12px',
-    backgroundColor: '#0b1222',
-    borderRadius: '12px',
-    border: '1px solid #1f2937',
-    marginBottom: '16px',
+    minHeight: "260px",
+    maxHeight: "360px",
+    overflowY: "auto",
+    background: "#0b1222",
+    padding: "12px",
+    borderRadius: "12px",
+    border: "1px solid #1f2937",
+    marginBottom: "16px",
   },
-  messageRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 10px',
-    borderRadius: '10px',
-    backgroundColor: '#111827',
-    border: '1px solid #1f2937',
-    marginBottom: '8px',
-    gap: '8px',
-  },
-  messageText: {
-    fontWeight: 500,
-    color: '#f8fafc',
-  },
-  timestamp: {
-    fontSize: '0.8rem',
-    color: '#94a3b8',
-    whiteSpace: 'nowrap',
+  message: {
+    padding: "10px 12px",
+    borderRadius: "10px",
+    background: "#111827",
+    border: "1px solid #1f2937",
+    marginBottom: "8px",
   },
   empty: {
-    color: '#94a3b8',
-    textAlign: 'center',
-    margin: '0.5rem 0',
+    color: "#94a3b8",
+    textAlign: "center",
   },
   form: {
-    display: 'flex',
-    gap: '12px',
-    alignItems: 'center',
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
   },
   input: {
     flex: 1,
-    padding: '12px',
-    borderRadius: '10px',
-    border: '1px solid #1f2937',
-    backgroundColor: '#0b1222',
-    color: '#f8fafc',
-    outline: 'none',
+    padding: "12px",
+    borderRadius: "10px",
+    border: "1px solid #1f2937",
+    background: "#0b1222",
+    color: "#e2e8f0",
+    outline: "none",
   },
   button: {
-    padding: '12px 16px',
-    borderRadius: '10px',
-    border: 'none',
-    backgroundColor: '#10b981',
-    color: '#0b1120',
+    padding: "12px 16px",
+    borderRadius: "10px",
+    border: "none",
+    background: "#10b981",
+    color: "#0b1120",
     fontWeight: 700,
-    cursor: 'pointer',
+    cursor: "pointer",
   },
   error: {
-    marginTop: '12px',
-    color: '#f87171',
-    textAlign: 'center',
+    marginTop: "12px",
+    color: "#f87171",
+    textAlign: "center",
   },
 };
