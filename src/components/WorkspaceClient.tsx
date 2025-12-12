@@ -33,6 +33,8 @@ import {
   writeWorkspaceMeta,
 } from '@/lib/project';
 
+const COLLABORATION_ENABLED = false;
+
 const extensionMap: Record<SupportedLanguage, string> = {
   html: 'html',
   css: 'css',
@@ -644,6 +646,9 @@ export default function WorkspaceClient({
   }, [files, viewerRole]);
 
   const flushCollaborativeState = useCallback(() => {
+    if (!COLLABORATION_ENABLED) {
+      return Promise.resolve(false);
+    }
     if (viewerRole === 'viewer') {
       return Promise.resolve(false);
     }
@@ -663,6 +668,7 @@ export default function WorkspaceClient({
   }, [persistProject, projectMeta.id, viewerRole]);
 
   useEffect(() => {
+    if (!COLLABORATION_ENABLED) return;
     if (!projectMeta.id) return;
     if (viewerRole === 'viewer') return;
     const interval = window.setInterval(() => {
@@ -672,6 +678,9 @@ export default function WorkspaceClient({
   }, [flushCollaborativeState, projectMeta.id, viewerRole]);
 
   useEffect(() => {
+    if (!COLLABORATION_ENABLED) {
+      return;
+    }
     if (typeof window === 'undefined') {
       return;
     }
@@ -813,7 +822,7 @@ export default function WorkspaceClient({
   }, [pushToast, shareUrl]);
 
   const openShareModal = useCallback(() => {
-    if (!projectMeta.id) {
+    if (!COLLABORATION_ENABLED || !projectMeta.id) {
       return;
     }
     setShareModalOpen(true);
@@ -1054,7 +1063,7 @@ export default function WorkspaceClient({
 
   const formattedTime = formatTime(lastSavedAt);
   const orderedLiveCollaborators = useMemo(() => {
-    if (!liveCollaborators.length) {
+    if (!COLLABORATION_ENABLED || !liveCollaborators.length) {
       return [] as CollaboratorPresence[];
     }
     return [...liveCollaborators].sort((a, b) => {
@@ -1097,7 +1106,7 @@ export default function WorkspaceClient({
     `${actionButtonBaseClass} border border-white/20 bg-white/5 text-white/80 hover:border-white/40 hover:bg-white/10 hover:text-white`;
   const dangerActionClass =
     `${actionButtonBaseClass} border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:border-rose-300 hover:bg-rose-500/20 hover:text-rose-50`;
-  const shareButtonDisabled = !projectMeta.id;
+  const shareButtonDisabled = !COLLABORATION_ENABLED || !projectMeta.id;
   const canEdit = viewerRole !== 'viewer';
   const canManageShareLink = viewerRole === 'owner' && !shareButtonDisabled;
   const shareButtonClass =
@@ -1153,40 +1162,32 @@ export default function WorkspaceClient({
     return () => window.clearTimeout(timeout);
   }, [recentlyCreatedPath]);
 
-  return (
-    <CollaborativeEditor
-      projectId={projectMeta.id}
-      files={files}
-      onFilesChange={handleCollaborativeFilesChange}
-      encodedState={encodedYjsState}
-      onSnapshotChange={handleSnapshotChange}
-      localPresence={localCollaboratorPresence}
-      onPresenceChange={setLiveCollaborators}
-      onRemoteMutation={markRemoteMutation}
-    >
-      <div className="flex min-h-screen flex-col bg-[#05060d] text-white">
-      <ProjectShareModal
-        isOpen={isShareModalOpen}
-        onClose={closeShareModal}
-        owner={projectOwner}
-        collaborators={collaborators}
-        viewerRole={viewerRole}
-        inviteValue={inviteValue}
-        onInviteValueChange={setInviteValue}
-        onInviteSubmit={handleInviteSubmit}
-        inviteError={inviteError}
-        isInviteSubmitting={isInviteSubmitting}
-        isLoading={isLoadingCollaborators}
-        canInvite={canManageShareLink}
-        onRemoveCollaborator={handleRemoveCollaborator}
-        removeError={removeError}
-        shareUrl={shareUrl}
-        isShareUrlLoading={isShareUrlLoading}
-        shareUrlError={shareUrlError}
-        canManageShareLink={canManageShareLink}
-        onCopyShareUrl={handleCopyShareLink}
-        onResetShareUrl={rotateShareUrl}
-      />
+  const content = (
+    <div className="flex min-h-screen flex-col bg-[#05060d] text-white">
+      {COLLABORATION_ENABLED ? (
+        <ProjectShareModal
+          isOpen={isShareModalOpen}
+          onClose={closeShareModal}
+          owner={projectOwner}
+          collaborators={collaborators}
+          viewerRole={viewerRole}
+          inviteValue={inviteValue}
+          onInviteValueChange={setInviteValue}
+          onInviteSubmit={handleInviteSubmit}
+          inviteError={inviteError}
+          isInviteSubmitting={isInviteSubmitting}
+          isLoading={isLoadingCollaborators}
+          canInvite={canManageShareLink}
+          onRemoveCollaborator={handleRemoveCollaborator}
+          removeError={removeError}
+          shareUrl={shareUrl}
+          isShareUrlLoading={isShareUrlLoading}
+          shareUrlError={shareUrlError}
+          canManageShareLink={canManageShareLink}
+          onCopyShareUrl={handleCopyShareLink}
+          onResetShareUrl={rotateShareUrl}
+        />
+      ) : null}
       <header className="border-b border-white/10 bg-[#080b16]/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-3 px-4 py-3 lg:px-8">
           <Link
@@ -1246,7 +1247,7 @@ export default function WorkspaceClient({
               <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
               {savedLabel}
             </span>
-            {orderedLiveCollaborators.length ? (
+            {COLLABORATION_ENABLED && orderedLiveCollaborators.length ? (
               <PresenceAvatars collaborators={orderedLiveCollaborators} />
             ) : null}
             {cloudError ? <span className="text-[11px] text-rose-200">{cloudError}</span> : null}
@@ -1280,20 +1281,22 @@ export default function WorkspaceClient({
                   </span>
                 </button>
               ) : null}
-              <button
-                onClick={openShareModal}
-                className={shareButtonClass}
-                disabled={shareButtonDisabled}
-                title={
-                  shareButtonDisabled
-                    ? 'Save this project to enable sharing'
-                    : viewerRole === 'owner'
-                      ? 'Invite collaborators'
-                      : 'View collaborators'
-                }
-              >
-                Share
-              </button>
+              {COLLABORATION_ENABLED ? (
+                <button
+                  onClick={openShareModal}
+                  className={shareButtonClass}
+                  disabled={shareButtonDisabled}
+                  title={
+                    shareButtonDisabled
+                      ? 'Save this project to enable sharing'
+                      : viewerRole === 'owner'
+                        ? 'Invite collaborators'
+                        : 'View collaborators'
+                  }
+                >
+                  Share
+                </button>
+              ) : null}
               <button onClick={resetWorkspace} className={dangerActionClass} disabled={viewerRole !== 'owner'}>
                 Reset workspace
               </button>
@@ -1354,6 +1357,24 @@ export default function WorkspaceClient({
         </div>
       ) : null}
     </div>
-  </CollaborativeEditor>
   );
+
+  if (COLLABORATION_ENABLED) {
+    return (
+      <CollaborativeEditor
+        projectId={projectMeta.id}
+        files={files}
+        onFilesChange={handleCollaborativeFilesChange}
+        encodedState={encodedYjsState}
+        onSnapshotChange={handleSnapshotChange}
+        localPresence={localCollaboratorPresence}
+        onPresenceChange={setLiveCollaborators}
+        onRemoteMutation={markRemoteMutation}
+      >
+        {content}
+      </CollaborativeEditor>
+    );
+  }
+
+  return content;
 }
