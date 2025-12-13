@@ -227,19 +227,40 @@ export default function CollaborativeEditor({
   const filesMapRef = useRef<Y.Map<Y.Map<unknown>> | null>(null);
   const suppressLocalSyncRef = useRef(false);
   const initialisedRef = useRef(false);
+  const onFilesChangeRef = useRef(onFilesChange);
+  const onSnapshotChangeRef = useRef(onSnapshotChange);
+  const onPresenceChangeRef = useRef(onPresenceChange);
+  const onRemoteMutationRef = useRef(onRemoteMutation);
+  const lastEncodedStateRef = useRef<string | null | undefined>(encodedState);
+
+  useEffect(() => {
+    onFilesChangeRef.current = onFilesChange;
+  }, [onFilesChange]);
+
+  useEffect(() => {
+    onSnapshotChangeRef.current = onSnapshotChange;
+  }, [onSnapshotChange]);
+
+  useEffect(() => {
+    onPresenceChangeRef.current = onPresenceChange;
+  }, [onPresenceChange]);
+
+  useEffect(() => {
+    onRemoteMutationRef.current = onRemoteMutation;
+  }, [onRemoteMutation]);
 
   const applySnapshotToParent = useCallback(
     (snapshot: ProjectFileMap) => {
       suppressLocalSyncRef.current = true;
-      onFilesChange(snapshot);
+      onFilesChangeRef.current(snapshot);
       const doc = ydocRef.current;
       const encoded = doc ? encodeUpdate(Y.encodeStateAsUpdate(doc)) : null;
-      onSnapshotChange?.(encoded);
+      onSnapshotChangeRef.current?.(encoded);
       queueMicrotask(() => {
         suppressLocalSyncRef.current = false;
       });
     },
-    [onFilesChange, onSnapshotChange],
+    [],
   );
 
   useEffect(() => {
@@ -250,6 +271,7 @@ export default function CollaborativeEditor({
       ydocRef.current = null;
       filesMapRef.current = null;
       initialisedRef.current = false;
+      lastEncodedStateRef.current = null;
       return;
     }
 
@@ -285,7 +307,7 @@ export default function CollaborativeEditor({
 
     const handleAwarenessUpdate = () => {
       const presence = presenceFromAwareness(provider.awareness, localPresence);
-      onPresenceChange?.(presence);
+      onPresenceChangeRef.current?.(presence);
     };
 
     provider.awareness.setLocalStateField('user', localPresence ?? null);
@@ -293,14 +315,14 @@ export default function CollaborativeEditor({
     handleAwarenessUpdate();
 
     const handleDocUpdate = () => {
-      onSnapshotChange?.(encodeUpdate(Y.encodeStateAsUpdate(doc)));
+      onSnapshotChangeRef.current?.(encodeUpdate(Y.encodeStateAsUpdate(doc)));
     };
 
     const handleFilesChange = (_events: unknown, transaction: Y.Transaction) => {
       const snapshot = mapToProjectFileMap(filesMap);
       applySnapshotToParent(snapshot);
       if (!transaction.local) {
-        onRemoteMutation?.();
+        onRemoteMutationRef.current?.();
       }
     };
 
@@ -310,6 +332,7 @@ export default function CollaborativeEditor({
     // Sync initial snapshot to parent
     applySnapshotToParent(mapToProjectFileMap(filesMap));
     initialisedRef.current = true;
+    lastEncodedStateRef.current = encodedState;
 
     return () => {
       filesMap.unobserveDeep(handleFilesChange);
@@ -321,8 +344,9 @@ export default function CollaborativeEditor({
       ydocRef.current = null;
       filesMapRef.current = null;
       initialisedRef.current = false;
+      lastEncodedStateRef.current = null;
     };
-  }, [applySnapshotToParent, encodedState, files, localPresence, onPresenceChange, onRemoteMutation, onSnapshotChange, projectId]);
+  }, [applySnapshotToParent, projectId]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -330,6 +354,45 @@ export default function CollaborativeEditor({
     if (!provider) return;
     provider.awareness.setLocalStateField('user', localPresence ?? null);
   }, [localPresence, projectId]);
+
+  useEffect(() => {
+    if (!projectId || typeof window === 'undefined') {
+      return;
+    }
+
+    const doc = ydocRef.current;
+    const filesMap = filesMapRef.current;
+    if (!doc || !filesMap) {
+      return;
+    }
+
+    const incomingUpdate = decodeUpdate(encodedState);
+    const isNewState = encodedState !== lastEncodedStateRef.current;
+    lastEncodedStateRef.current = encodedState;
+
+    if (!isNewState) {
+      return;
+    }
+
+    if (incomingUpdate) {
+      try {
+        Y.applyUpdate(doc, incomingUpdate);
+        return;
+      } catch (error) {
+        console.error('[CollaborativeEditor] Failed to apply saved state', error);
+        return;
+      }
+    }
+
+    if (encodedState) {
+      const legacy = decodeSnapshotToMap(encodedState);
+      if (legacy) {
+        doc.transact(() => {
+          applyFilesToMap(filesMap, legacy);
+        }, LOCAL_ORIGIN);
+      }
+    }
+  }, [encodedState, projectId]);
 
   useEffect(() => {
     if (!projectId || suppressLocalSyncRef.current) {
