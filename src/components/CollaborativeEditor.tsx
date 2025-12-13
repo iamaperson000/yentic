@@ -302,7 +302,15 @@ export default function CollaborativeEditor({
       doc.transact(() => applyFilesToMap(filesMap, sanitized), LOCAL_ORIGIN);
     }
 
-    const provider = new WebrtcProvider(`project-${projectId}`, doc);
+    const provider = new WebrtcProvider(`project-${projectId}`, doc, {
+      signaling: [
+        'wss://signaling.yjs.dev',
+        'wss://y-webrtc-signaling-us.herokuapp.com',
+        'wss://y-webrtc-signaling-eu.herokuapp.com',
+      ],
+      maxConns: 20,
+      filterBcConns: true,
+    });
     providerRef.current = provider;
 
     const handleAwarenessUpdate = () => {
