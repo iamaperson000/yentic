@@ -138,6 +138,7 @@ export default function WorkspaceClient({
   const collaborativeSnapshotRef = useRef<string | null>(initialProject?.yjsState ?? null);
   const collaborativeDirtyRef = useRef(false);
   const collaborativeSaveInFlightRef = useRef(false);
+  const collaborationKey = projectMeta.id ?? workspaceId;
   const [isShareModalOpen, setShareModalOpen] = useState(false);
   const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
   const [inviteValue, setInviteValue] = useState('');
@@ -1092,11 +1093,11 @@ export default function WorkspaceClient({
         : 'inline-flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-emerald-100';
 
   const actionButtonBaseClass =
-    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-60';
+    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.75 text-[13px] font-semibold transition duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-60 hover:-translate-y-[1px] shadow-md shadow-black/10';
   const primaryActionClass =
-    `${actionButtonBaseClass} bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 hover:bg-emerald-400`;
+    `${actionButtonBaseClass} bg-gradient-to-r from-emerald-500 to-cyan-400 text-slate-950 shadow-emerald-500/40 hover:from-emerald-400 hover:to-cyan-300`;
   const subtleActionClass =
-    `${actionButtonBaseClass} border border-white/20 bg-white/5 text-white/80 hover:border-white/40 hover:bg-white/10 hover:text-white`;
+    `${actionButtonBaseClass} border border-white/15 bg-white/5 text-white/85 hover:border-white/35 hover:bg-white/12 hover:text-white`;
   const dangerActionClass =
     `${actionButtonBaseClass} border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:border-rose-300 hover:bg-rose-500/20 hover:text-rose-50`;
   const shareButtonDisabled = !projectMeta.id;
@@ -1350,7 +1351,7 @@ export default function WorkspaceClient({
 
   return (
     <CollaborativeEditor
-      projectId={projectMeta.id}
+      projectId={collaborationKey}
       files={files}
       onFilesChange={handleCollaborativeFilesChange}
       encodedState={encodedYjsState}
