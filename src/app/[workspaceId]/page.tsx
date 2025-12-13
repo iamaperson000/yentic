@@ -23,6 +23,7 @@ type CloudProjectPayload = {
   files: ProjectFileMap;
   updatedAt: string;
   yjsState: string | null;
+  shareToken: string | null;
 };
 
 function encodeState(state: Uint8Array | Buffer | null | undefined): string | null {
@@ -51,6 +52,7 @@ export default async function WorkspaceRoute({ params, searchParams }: PageProps
       updatedAt: true,
       yjsState: true,
       userId: true,
+      shareToken: true,
       collaborators: {
         select: { userId: true, role: true },
       },
@@ -94,6 +96,7 @@ export default async function WorkspaceRoute({ params, searchParams }: PageProps
       files: (project.files ?? {}) as ProjectFileMap,
       updatedAt: project.updatedAt.toISOString(),
       yjsState: encodeState(project.yjsState),
+      shareToken: project.shareToken ?? null,
     };
 
     initialSlug = resolveWorkspaceSlugFromLanguage(project.language);

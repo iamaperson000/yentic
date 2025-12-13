@@ -85,11 +85,13 @@ type CloudProject = {
   updatedAt: string;
   yjsState?: string | null;
   viewerRole?: ViewerRole;
+  shareToken?: string | null;
 };
 
 type ProjectMeta = {
   id: string | null;
   name: string;
+  shareToken: string | null;
 };
 
 export default function WorkspaceClient({
@@ -117,6 +119,7 @@ export default function WorkspaceClient({
     return {
       id: initialProject?.id ?? null,
       name: initialName && initialName.length > 0 ? initialName : defaultProjectName,
+      shareToken: initialProject?.shareToken ?? null,
     };
   });
   const [projectNameDraft, setProjectNameDraft] = useState<string>(projectMeta.name);
@@ -138,7 +141,7 @@ export default function WorkspaceClient({
   const collaborativeSnapshotRef = useRef<string | null>(initialProject?.yjsState ?? null);
   const collaborativeDirtyRef = useRef(false);
   const collaborativeSaveInFlightRef = useRef(false);
-  const collaborationKey = projectMeta.id ?? workspaceId;
+  const collaborationKey = projectMeta.shareToken ?? projectMeta.id ?? workspaceId;
   const [isShareModalOpen, setShareModalOpen] = useState(false);
   const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
   const [inviteValue, setInviteValue] = useState('');
@@ -263,7 +266,7 @@ export default function WorkspaceClient({
     if (storedMeta) {
       setSlug(prev => (prev === storedMeta.slug ? prev : storedMeta.slug));
       if (storedMeta.name && storedMeta.name.trim().length > 0) {
-        setProjectMeta(prev => ({ ...prev, name: storedMeta.name }));
+      setProjectMeta(prev => ({ ...prev, name: storedMeta.name }));
       }
     }
   }, [initialProject, workspaceId]);
@@ -346,7 +349,7 @@ export default function WorkspaceClient({
     updateFiles(starter);
     setActivePath(config.defaultActivePath);
     saveWorkspaceFiles(workspaceId, starter);
-    setProjectMeta({ id: null, name: defaultProjectName });
+    setProjectMeta({ id: null, name: defaultProjectName, shareToken: null });
     setProjectNameDraft('');
     setIsNameRequired(true);
     setIsRenamingProject(true);
@@ -506,7 +509,7 @@ export default function WorkspaceClient({
       const firstPath = Object.keys(project.files).sort()[0] || config.defaultActivePath;
       setActivePath(firstPath);
       const normalizedName = project.name.trim() || defaultProjectName;
-      setProjectMeta({ id: project.id, name: normalizedName });
+      setProjectMeta({ id: project.id, name: normalizedName, shareToken: project.shareToken ?? null });
       setIsNameRequired(false);
       setLastSavedAt(new Date(project.updatedAt ?? Date.now()));
       setCloudAuthRequired(false);
@@ -592,7 +595,7 @@ export default function WorkspaceClient({
 
         const project = (await res.json()) as CloudProject;
         const syncedName = project.name.trim() || normalizedName;
-        setProjectMeta({ id: project.id, name: syncedName });
+        setProjectMeta({ id: project.id, name: syncedName, shareToken: project.shareToken ?? projectMeta.shareToken ?? null });
         setLastSavedAt(new Date(project.updatedAt ?? Date.now()));
         setCloudAuthRequired(false);
         setCloudError(null);
@@ -778,8 +781,11 @@ export default function WorkspaceClient({
           setShareUrl(null);
           return;
         }
-        const data = (await res.json()) as { url: string };
+        const data = (await res.json()) as { url: string; token?: string };
         setShareUrl(data.url);
+        if (data.token) {
+          setProjectMeta(prev => ({ ...prev, shareToken: data.token ?? prev.shareToken }));
+        }
         setShareUrlError(null);
       } catch (error) {
         console.error('Failed to generate share link', error);
