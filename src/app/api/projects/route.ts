@@ -35,6 +35,31 @@ function normalizeBytes(bytes: BinaryState | null | undefined): BinaryState | nu
   return cloned;
 }
 
+async function resolveUniqueName(baseName: string, userId: string) {
+  const normalized = baseName.trim();
+  const existing = await prisma.project.findMany({
+    where: {
+      userId,
+      OR: [{ name: normalized }, { name: { startsWith: `${normalized} (` } }],
+    },
+    select: { name: true },
+  });
+
+  const taken = new Set(existing.map(entry => entry.name));
+  if (!taken.has(normalized)) {
+    return normalized;
+  }
+
+  let suffix = 2;
+  let candidate = `${normalized} (${suffix})`;
+  while (taken.has(candidate)) {
+    suffix += 1;
+    candidate = `${normalized} (${suffix})`;
+  }
+
+  return candidate;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                  GET ROUTE                                 */
 /* -------------------------------------------------------------------------- */
@@ -217,21 +242,11 @@ export async function POST(req: Request) {
   // --------------------------------------------------------------------------
   // CREATE NEW PROJECT
   // --------------------------------------------------------------------------
-  const project = await prisma.project.upsert({
-    where: {
-      userId_name: {
-        userId: user.id,
-        name: name.trim(),
-      },
-    },
-    update: {
-      language: normalizedLanguage,
-      files,
-      updatedAt: new Date(),
-      ...(decodedState !== undefined ? { yjsState: normalizeBytes(decodedState) } : {}),
-    },
-    create: {
-      name: name.trim(),
+  const uniqueName = await resolveUniqueName(name, user.id);
+
+  const project = await prisma.project.create({
+    data: {
+      name: uniqueName,
       language: normalizedLanguage,
       files,
       user: { connect: { id: user.id } },
