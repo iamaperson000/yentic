@@ -7,8 +7,8 @@ module.exports = {
   },
   output: {
     filename: '[name].bundle.js',
-    path: path.resolve(__dirname, 'dist'),
-    publicPath: './dist/'
+    path: path.resolve(__dirname, 'public', 'dist'),
+    publicPath: '/dist/'
   },
   module: {
     rules: [
@@ -24,13 +24,13 @@ module.exports = {
   },
   plugins: [
     new MonacoWebpackPlugin({
-      publicPath: './dist/'
+      publicPath: '/dist/'
     })
   ],
   devtool: 'source-map',
   devServer: {
     static: {
-      directory: path.join(__dirname)
+      directory: path.join(__dirname, 'public')
     },
     compress: true
   }
