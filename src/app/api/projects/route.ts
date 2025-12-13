@@ -1,5 +1,7 @@
+import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
@@ -250,6 +252,7 @@ export async function POST(req: Request) {
       language: normalizedLanguage,
       files,
       user: { connect: { id: user.id } },
+      shareToken: randomBytes(24).toString("hex"),
       ...(decodedState !== undefined ? { yjsState: normalizeBytes(decodedState) } : {}),
     },
   });
