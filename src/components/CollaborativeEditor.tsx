@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import { Buffer } from 'buffer';
@@ -232,6 +233,8 @@ export default function CollaborativeEditor({
   const onPresenceChangeRef = useRef(onPresenceChange);
   const onRemoteMutationRef = useRef(onRemoteMutation);
   const lastEncodedStateRef = useRef<string | null | undefined>(encodedState);
+  const [awareness, setAwareness] = useState<Awareness | null>(null);
+  const [isActive, setIsActive] = useState(false);
 
   useEffect(() => {
     onFilesChangeRef.current = onFilesChange;
@@ -314,6 +317,8 @@ export default function CollaborativeEditor({
     providerRef.current = provider;
 
     const handleAwarenessUpdate = () => {
+      setAwareness(provider.awareness);
+      setIsActive(true);
       const presence = presenceFromAwareness(provider.awareness, localPresence);
       onPresenceChangeRef.current?.(presence);
     };
@@ -353,6 +358,8 @@ export default function CollaborativeEditor({
       filesMapRef.current = null;
       initialisedRef.current = false;
       lastEncodedStateRef.current = null;
+      setAwareness(null);
+      setIsActive(false);
     };
   }, [applySnapshotToParent, projectId]);
 
@@ -424,8 +431,8 @@ export default function CollaborativeEditor({
       const text = entry?.get('text');
       return text instanceof Y.Text ? text : null;
     },
-    awareness: providerRef.current?.awareness ?? null,
-    isActive: Boolean(projectId && providerRef.current && initialisedRef.current),
+    awareness,
+    isActive,
   };
 
   return <CollaborationContext.Provider value={contextValue}>{children ?? null}</CollaborationContext.Provider>;

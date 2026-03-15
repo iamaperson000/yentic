@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/yentic_ci
+      AUTH_GOOGLE_ID: ci-google-client-id
+      AUTH_GOOGLE_SECRET: ci-google-client-secret
+      AUTH_SECRET: ci-auth-secret-ci-auth-secret-ci-auth-secret
+      PUSHER_APP_ID: "123456"
+      PUSHER_SECRET: ci-pusher-secret
+      PUSHER_CLUSTER: us2
+      NEXT_PUBLIC_PUSHER_KEY: ci-pusher-key
+      NEXT_PUBLIC_PUSHER_CLUSTER: us2
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

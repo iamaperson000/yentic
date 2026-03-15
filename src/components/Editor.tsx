@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import Monaco from '@monaco-editor/react';
 import { MonacoBinding } from 'y-monaco';
 
@@ -19,12 +19,6 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
   const yText = useMemo(() => (path && isActive ? getTextForPath(path) : null), [getTextForPath, isActive, path]);
   const collaborative = Boolean(yText && awareness);
   const bindingRef = useRef<MonacoBinding | null>(null);
-  const [localValue, setLocalValue] = useState(value);
-
-  useEffect(() => {
-    if (collaborative) return;
-    setLocalValue(value);
-  }, [collaborative, value]);
 
   useEffect(() => {
     return () => {
@@ -42,7 +36,7 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
       }
       bindingRef.current = new MonacoBinding(yText, model, new Set([editor]), awareness);
     } else {
-      editor.setValue(localValue);
+      editor.setValue(value);
     }
   };
 
@@ -51,7 +45,6 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
       return;
     }
     const nextValue = next ?? '';
-    setLocalValue(nextValue);
     onChange(nextValue);
   };
 
@@ -62,7 +55,7 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
         width="100%"
         theme="vs-dark"
         language={monacoLanguage === 'javascript' ? 'javascript' : monacoLanguage}
-        value={collaborative ? undefined : localValue}
+        value={collaborative ? undefined : value}
         defaultValue={collaborative && yText ? yText.toString() : value}
         options={{
           minimap: { enabled: false },
