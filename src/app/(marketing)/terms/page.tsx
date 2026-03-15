@@ -18,17 +18,17 @@ const sections = [
   {
     title: '3. Acceptable use',
     body:
-      'Use Yentic responsibly. Do not use the service to deploy harmful code, infringe on intellectual property, or violate the rights of others.',
+      'Use Yentic responsibly. Do not use the service to deploy harmful code, infringe on intellectual property, or violate the rights of others. Do not create illegal content or engage in malicious activities.',
   },
   {
     title: '4. Intellectual property',
     body:
-      'You retain ownership of the projects you build. By uploading content, you grant Yentic a limited license to host, process, and display that content for the purpose of providing the service.',
+      'You retain ownership of the projects you build. By uploading content, you grant Yentic a limited license to host, process, and display that content for the purpose of providing the service. You own the code you write.',
   },
   {
     title: '5. Termination',
     body:
-      'We may suspend or terminate your access if you violate these terms. You can close your account anytime by contacting support.',
+      'We may suspend or terminate your access if you violate these terms. You can close your account anytime by contacting support. Please contact us if you believe this has happened in error or if you want to dispute.',
   },
   {
     title: '6. Changes to these terms',

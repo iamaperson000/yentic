@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 
 import WorkspaceClient from '@/components/WorkspaceClient';
@@ -108,6 +108,8 @@ export default async function WorkspaceRoute({ params, searchParams }: PageProps
   } else {
     if (typeof query.template === 'string' && query.template.length > 0) {
       initialSlug = resolveWorkspaceSlugFromLanguage(query.template);
+    } else if (query.new !== '1') {
+      notFound();
     }
   }
 

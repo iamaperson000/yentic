@@ -7,9 +7,9 @@ import { ConsoleInputPanel } from '@/components/ConsoleInputPanel';
 import type { ExecutableLanguage } from '@/lib/runners';
 import { executeCode } from '@/lib/runners';
 
-const consoleInputLanguages: ReadonlySet<ExecutableLanguage> = new Set(['python']);
+const consoleInputLanguages: ReadonlySet<ExecutableLanguage> = new Set();
 
-const textareaInputLanguages: ReadonlySet<ExecutableLanguage> = new Set(['c', 'cpp', 'java']);
+const textareaInputLanguages: ReadonlySet<ExecutableLanguage> = new Set(['c']);
 
 type ExecutablePreviewProps = {
   code: string;

@@ -4,6 +4,8 @@
 
 Please report suspected security issues privately by emailing `hello@yentic.com`.
 
+
+
 Include:
 
 - a description of the issue
@@ -16,3 +18,4 @@ Please do not open a public GitHub issue for security reports.
 ## Supported Versions
 
 Security fixes are targeted at the latest code on `main`.
+

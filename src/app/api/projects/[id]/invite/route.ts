@@ -92,17 +92,56 @@ export async function POST(req: Request, context: RouteContext) {
       projectId: params.id,
       userId: targetUser.id,
     },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          image: true,
+        },
+      },
+    },
   });
 
   if (existing) {
-    return NextResponse.json({ error: 'User is already a collaborator' }, { status: 409 });
+    if (existing.role !== 'editor') {
+      const upgraded = await prisma.collaborator.update({
+        where: { id: existing.id },
+        data: { role: 'editor' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true,
+            },
+          },
+        },
+      });
+
+      return NextResponse.json(serializeCollaborator(upgraded));
+    }
+
+    return NextResponse.json(serializeCollaborator(existing));
   }
 
-  const collaborator = await prisma.collaborator.create({
-    data: {
+  await prisma.collaborator.createMany({
+    data: [
+      {
+        projectId: params.id,
+        userId: targetUser.id,
+        role: 'editor',
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  const collaborator = await prisma.collaborator.findFirst({
+    where: {
       projectId: params.id,
       userId: targetUser.id,
-      role: 'editor',
     },
     include: {
       user: {
@@ -115,6 +154,10 @@ export async function POST(req: Request, context: RouteContext) {
       },
     },
   });
+
+  if (!collaborator) {
+    return NextResponse.json({ error: 'Failed to invite collaborator' }, { status: 500 });
+  }
 
   return NextResponse.json(serializeCollaborator(collaborator));
 }

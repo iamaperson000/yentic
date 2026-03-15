@@ -292,7 +292,7 @@ function executeCpp(source: string): RunResult {
     'const __cout = (...args) => {',
     '  args.forEach(arg => {',
     '    if (arg === __ENDL) {',
-    "      __output.push('\n');",
+    "      __output.push('\\n');",
     '      return;',
     '    }',
     "    __output.push(String(arg ?? ''));",
@@ -301,7 +301,7 @@ function executeCpp(source: string): RunResult {
     'const __cerr = (...args) => {',
     '  args.forEach(arg => {',
     '    if (arg === __ENDL) {',
-    "      __stderr.push('\n');",
+    "      __stderr.push('\\n');",
     '      return;',
     '    }',
     "    __stderr.push(String(arg ?? ''));",
@@ -318,7 +318,12 @@ function executeCpp(source: string): RunResult {
     'return __result;'
   ].join('\n');
 
-  const runtime = new Function(runtimeSource);
+  let runtime: () => unknown;
+  try {
+    runtime = new Function(runtimeSource) as () => unknown;
+  } catch (error) {
+    return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
+  }
 
   try {
     const outcome = runtime() as unknown;
@@ -399,7 +404,12 @@ function executeJava(source: string): RunResult {
     "return __output.join('');"
   ].join('\n');
 
-  const runtime = new Function(runtimeSource);
+  let runtime: () => string;
+  try {
+    runtime = new Function(runtimeSource) as () => string;
+  } catch (error) {
+    return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
+  }
 
   try {
     const stdout = runtime();

@@ -139,7 +139,7 @@ export default function WorkspaceClient({
   const collaborativeSnapshotRef = useRef<string | null>(initialProject?.yjsState ?? null);
   const collaborativeDirtyRef = useRef(false);
   const collaborativeSaveInFlightRef = useRef(false);
-  const collaborationKey = projectMeta.shareToken ?? projectMeta.id ?? workspaceId;
+  const collaborationKey = projectMeta.id ?? workspaceId;
   const [isShareModalOpen, setShareModalOpen] = useState(false);
   const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
   const [inviteValue, setInviteValue] = useState('');
@@ -524,20 +524,29 @@ export default function WorkspaceClient({
   );
 
   const persistProject = useCallback(
-    async (context: 'auto' | 'manual' | 'rename') => {
+    async (
+      context: 'auto' | 'manual' | 'rename',
+      overrides?: {
+        files?: ProjectFileMap;
+        name?: string;
+        keepalive?: boolean;
+      }
+    ) => {
+      const filesToPersist = overrides?.files ?? files;
+
       if (viewerRole === 'viewer') {
         return { ok: false as const, reason: 'forbidden' as const };
       }
-      if (!files || !Object.keys(files).length) {
+      if (!filesToPersist || !Object.keys(filesToPersist).length) {
         return { ok: false as const, reason: 'empty' as const };
       }
 
-      const normalizedName = projectMeta.name.trim() || defaultProjectName;
+      const normalizedName = (overrides?.name ?? projectMeta.name).trim() || defaultProjectName;
       if (normalizedName !== projectMeta.name) {
         setProjectMeta(prev => ({ ...prev, name: normalizedName }));
       }
 
-      saveWorkspaceFiles(workspaceId, files);
+      saveWorkspaceFiles(workspaceId, filesToPersist);
 
       let yStateBase64: string | null = collaborativeSnapshotRef.current ?? null;
       if (!yStateBase64 && encodedYjsState) {
@@ -549,11 +558,12 @@ export default function WorkspaceClient({
         const res = await fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          keepalive: Boolean(overrides?.keepalive),
           body: JSON.stringify({
             id: projectMeta.id ?? undefined,
             name: normalizedName,
             language: slug,
-            files,
+            files: filesToPersist,
             yjsState: yStateBase64,
           }),
         });
@@ -651,7 +661,7 @@ export default function WorkspaceClient({
     return () => window.clearTimeout(timeout);
   }, [files, viewerRole]);
 
-  const flushCollaborativeState = useCallback(() => {
+  const flushCollaborativeState = useCallback((options?: { keepalive?: boolean }) => {
     if (viewerRole === 'viewer') {
       return Promise.resolve(false);
     }
@@ -665,7 +675,7 @@ export default function WorkspaceClient({
       return Promise.resolve(false);
     }
     collaborativeSaveInFlightRef.current = true;
-    return persistProject('auto').finally(() => {
+    return persistProject('auto', { keepalive: options?.keepalive }).finally(() => {
       collaborativeSaveInFlightRef.current = false;
     });
   }, [persistProject, projectMeta.id, viewerRole]);
@@ -690,11 +700,11 @@ export default function WorkspaceClient({
       return;
     }
     const handleBeforeUnload = () => {
-      void flushCollaborativeState();
+      void flushCollaborativeState({ keepalive: true });
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        void flushCollaborativeState();
+        void flushCollaborativeState({ keepalive: true });
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -958,6 +968,7 @@ export default function WorkspaceClient({
       setIsRenamingProject(false);
       return;
     }
+    const previousName = projectMeta.name;
     const trimmed = projectNameDraft.trim();
     if (!trimmed) {
       pushToast({ kind: 'error', message: 'Project name cannot be empty.' });
@@ -980,14 +991,28 @@ export default function WorkspaceClient({
       setIsNameRequired(false);
       return;
     }
+    autoSaveSkipRef.current = true;
     setProjectMeta(prev => ({ ...prev, name: trimmed }));
     setIsRenamingProject(false);
     setIsNameRequired(false);
-    pushToast({
-      kind: 'success',
-      message: isNameRequired ? `Project named ${trimmed}` : `Renamed project to ${trimmed}`,
+    void persistProjectRef.current('rename', { name: trimmed }).then(result => {
+      const isLocalOnlyRename =
+        !projectMeta.id && (result.reason === 'unauthorized' || result.reason === 'error');
+
+      if (result.ok || isLocalOnlyRename) {
+        pushToast({
+          kind: 'success',
+          message: isNameRequired ? `Project named ${trimmed}` : `Renamed project to ${trimmed}`,
+        });
+        return;
+      }
+
+      if (projectMeta.id) {
+        setProjectMeta(prev => ({ ...prev, name: previousName }));
+        setProjectNameDraft(previousName);
+      }
     });
-  }, [isNameRequired, projectNameDraft, projectMeta.name, pushToast, viewerRole]);
+  }, [isNameRequired, projectMeta.id, projectMeta.name, projectNameDraft, pushToast, viewerRole]);
 
   useEffect(() => {
     const projectId = projectMeta.id;
@@ -1145,10 +1170,15 @@ export default function WorkspaceClient({
     updateFiles(starter);
     setActivePath(config.defaultActivePath);
     saveWorkspaceFiles(workspaceId, starter);
-    setLastSavedAt(new Date());
+    if (!projectMeta.id) {
+      setLastSavedAt(null);
+    }
     setIsSaving(false);
     setCloudError(null);
-  }, [slug, config.defaultActivePath, updateFiles, viewerRole, pushToast, workspaceId]);
+    if (projectMeta.id) {
+      void persistProjectRef.current('manual', { files: starter });
+    }
+  }, [slug, config.defaultActivePath, projectMeta.id, updateFiles, viewerRole, pushToast, workspaceId]);
 
   useEffect(() => {
     return () => {

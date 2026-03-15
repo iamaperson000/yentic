@@ -12,6 +12,18 @@ const PUBLIC_PATHS = [
   "/u/", //  allow viewing user profile pages publicly
 ];
 
+function getSafeNextPath(value: string | null) {
+  if (!value || !value.startsWith("/")) {
+    return null;
+  }
+
+  if (value.startsWith("//") || value.startsWith("/setup-profile")) {
+    return null;
+  }
+
+  return value;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -47,13 +59,23 @@ export async function proxy(request: NextRequest) {
   // If the user is logged in but has no username yet and it's not a public route
   if (!username && !isPublicPath) {
     const url = request.nextUrl.clone();
+    const nextPath = getSafeNextPath(`${pathname}${request.nextUrl.search}`);
     url.pathname = "/setup-profile";
     url.search = "";
+    if (nextPath) {
+      url.searchParams.set("next", nextPath);
+    }
     return NextResponse.redirect(url);
   }
 
   // If user *does* have username but is trying to access setup again
   if (username && isSetupPath) {
+    const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next"));
+
+    if (nextPath) {
+      return NextResponse.redirect(new URL(nextPath, request.url));
+    }
+
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";

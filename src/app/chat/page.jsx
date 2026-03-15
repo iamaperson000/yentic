@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signIn, useSession } from "next-auth/react";
 import Pusher from "pusher-js";
 
 export default function ChatPage() {
+  const { data: session, status: sessionStatus } = useSession();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("Connecting to Pusher…");
@@ -19,7 +21,12 @@ export default function ChatPage() {
     const channel = pusher.subscribe("chat");
 
     const handleMessage = (data) => {
-      setMessages((prev) => [...prev, data?.message ?? ""]);
+      const text = data?.message ?? "";
+      const sender = typeof data?.sender === "string" ? data.sender : null;
+      setMessages((prev) => [
+        ...prev,
+        sender ? `${sender}: ${text}` : text,
+      ]);
     };
     const handleConnected = () => {
       setStatus("Connected");
@@ -43,21 +50,40 @@ export default function ChatPage() {
     if (!message) return;
 
     try {
-      await fetch("/api/message", {
+      const response = await fetch("/api/message", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ message }),
       });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: "Failed to send message." }));
+        setError(data.error ?? "Failed to send message.");
+        return;
+      }
+
       setInput("");
     } catch {
       setError("Failed to send message.");
     }
   };
 
+  const canSend = Boolean(session?.user);
+
   return (
     <main style={styles.page}>
       <section style={styles.card}>
         <h1 style={styles.title}>Chat</h1>
         <p style={styles.status}>{status}</p>
+        <p style={styles.helper}>
+          {canSend
+            ? "Signed in users can post messages to the chat demo."
+            : sessionStatus === "loading"
+              ? "Checking your session…"
+              : "Sign in to send messages."}
+        </p>
 
         <div style={styles.messages}>
           {messages.length === 0 ? (
@@ -78,10 +104,21 @@ export default function ChatPage() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type a message"
             aria-label="Message"
+            disabled={!canSend}
           />
-          <button type="submit" style={styles.button}>
-            Send
-          </button>
+          {canSend ? (
+            <button type="submit" style={styles.button}>
+              Send
+            </button>
+          ) : (
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => signIn("google", { callbackUrl: "/chat" })}
+            >
+              Sign in
+            </button>
+          )}
         </form>
 
         {error ? <p style={styles.error}>{error}</p> : null}
@@ -117,9 +154,16 @@ const styles = {
   },
   status: {
     margin: 0,
-    marginBottom: "16px",
+    marginBottom: "8px",
     textAlign: "center",
     color: "#94a3b8",
+  },
+  helper: {
+    margin: 0,
+    marginBottom: "16px",
+    textAlign: "center",
+    color: "#cbd5e1",
+    fontSize: "0.95rem",
   },
   messages: {
     minHeight: "260px",

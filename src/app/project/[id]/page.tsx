@@ -46,15 +46,10 @@ export default async function ProjectInvitePage({ params, searchParams }: PagePr
   }
 
   if (project.userId !== user.id) {
-    const existing = await prisma.collaborator.findFirst({
-      where: { projectId: project.id, userId: user.id },
+    await prisma.collaborator.createMany({
+      data: [{ projectId: project.id, userId: user.id, role: 'viewer' }],
+      skipDuplicates: true,
     });
-
-    if (!existing) {
-      await prisma.collaborator.create({
-        data: { projectId: project.id, userId: user.id, role: 'viewer' },
-      });
-    }
   }
 
   redirect(`/${project.id}`);

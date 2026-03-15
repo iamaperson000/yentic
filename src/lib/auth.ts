@@ -2,8 +2,62 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import GoogleProvider from "next-auth/providers/google"
 import type { NextAuthOptions } from "next-auth"
 
-import type { Prisma } from "@prisma/client"
 import prisma from "./prisma"
+
+async function loadTokenUser(token: { id?: string; sub?: string; email?: string | null }) {
+  const userId =
+    (typeof token.sub === "string" && token.sub) ||
+    (typeof token.id === "string" && token.id) ||
+    null
+
+  if (userId) {
+    return (await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        bio: true,
+        image: true,
+        name: true,
+      },
+    })) as
+      | {
+          id: string
+          email: string
+          username: string | null
+          bio: string | null
+          image: string | null
+          name: string | null
+        }
+      | null
+  }
+
+  if (typeof token.email === "string" && token.email) {
+    return (await prisma.user.findUnique({
+      where: { email: token.email },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        bio: true,
+        image: true,
+        name: true,
+      },
+    })) as
+      | {
+          id: string
+          email: string
+          username: string | null
+          bio: string | null
+          image: string | null
+          name: string | null
+        }
+      | null
+  }
+
+  return null
+}
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -29,35 +83,43 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (trigger === "update" && session) {
-        if (Object.prototype.hasOwnProperty.call(session, "username")) {
-          token.username = (session as Record<string, unknown>).username as string | null
-        }
-        if (Object.prototype.hasOwnProperty.call(session, "bio")) {
-          token.bio = (session as Record<string, unknown>).bio as string | null
-        }
-        if (Object.prototype.hasOwnProperty.call(session, "name")) {
-          token.name = (session as Record<string, unknown>).name as string | undefined
-        }
-        if (Object.prototype.hasOwnProperty.call(session, "image")) {
-          token.picture = (session as Record<string, unknown>).image as string | undefined
+        const dbUser = await loadTokenUser({
+          id: token.id as string | undefined,
+          sub: token.sub,
+          email: token.email,
+        })
+
+        if (dbUser) {
+          token.id = dbUser.id
+          token.sub = dbUser.id
+          token.email = dbUser.email
+          token.username = dbUser.username ?? null
+          token.bio = dbUser.bio ?? null
+          token.picture = dbUser.image ?? token.picture
+          token.name = dbUser.name ?? token.name
         }
       }
 
       if (!token.username && token.email) {
-        const dbUser = (await prisma.user.findFirst({
-          where: { email: token.email } as Prisma.UserWhereInput,
+        const dbUser = (await loadTokenUser({
+          id: token.id as string | undefined,
+          sub: token.sub,
+          email: token.email,
         })) as
-          | ({
+          | {
               id: string
+              email: string
               username: string | null
               bio: string | null
               image: string | null
               name: string | null
-            } | null)
+            }
           | null
 
         if (dbUser) {
           token.id = dbUser.id
+          token.sub = dbUser.id
+          token.email = dbUser.email
           token.username = dbUser.username ?? null
           token.bio = dbUser.bio ?? null
           token.picture = dbUser.image ?? token.picture
