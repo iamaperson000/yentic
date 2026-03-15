@@ -11,9 +11,20 @@ type Status = "idle" | "checking" | "available" | "unavailable" | "error"
 interface SetupProfileFormProps {
   defaultBio?: string
   suggestedName?: string
+  nextPath?: string | null
 }
 
-export default function SetupProfileForm({ defaultBio = "", suggestedName = "" }: SetupProfileFormProps) {
+function normalizeNextPath(value?: string | null) {
+  if (!value || !value.startsWith("/")) return null
+  if (value.startsWith("//") || value.startsWith("/setup-profile")) return null
+  return value
+}
+
+export default function SetupProfileForm({
+  defaultBio = "",
+  suggestedName = "",
+  nextPath = null,
+}: SetupProfileFormProps) {
   const router = useRouter()
   const { update } = useSession()
   const [username, setUsername] = useState(deriveInitialUsername(suggestedName))
@@ -21,6 +32,7 @@ export default function SetupProfileForm({ defaultBio = "", suggestedName = "" }
   const [status, setStatus] = useState<Status>("idle")
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const safeNextPath = useMemo(() => normalizeNextPath(nextPath), [nextPath])
 
   const isValidPattern = useMemo(() => USERNAME_REGEX.test(username), [username])
   const shouldCheckAvailability = username.length > 0 && isValidPattern
@@ -109,7 +121,7 @@ export default function SetupProfileForm({ defaultBio = "", suggestedName = "" }
         console.error("Failed to refresh session", error)
       }
     }
-    router.push("/dashboard")
+    router.push(safeNextPath ?? "/dashboard")
     router.refresh()
   }
 

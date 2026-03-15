@@ -222,7 +222,24 @@ export async function POST(req: Request) {
     };
 
     if (isOwner) {
-      data.name = name.trim();
+      const trimmedName = name.trim();
+      const duplicate = await prisma.project.findFirst({
+        where: {
+          userId: user.id,
+          name: trimmedName,
+          NOT: { id },
+        },
+        select: { id: true },
+      });
+
+      if (duplicate) {
+        return NextResponse.json(
+          { error: "A project with that name already exists" },
+          { status: 409 },
+        );
+      }
+
+      data.name = trimmedName;
       data.language = normalizedLanguage;
     }
 

@@ -52,6 +52,8 @@ model Collaborator {
   userId    String
   role      String   @default("editor")
   createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
 }
 model VerificationToken {
   identifier String

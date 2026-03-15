@@ -19,6 +19,7 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
   const yText = useMemo(() => (path && isActive ? getTextForPath(path) : null), [getTextForPath, isActive, path]);
   const collaborative = Boolean(yText && awareness);
   const bindingRef = useRef<MonacoBinding | null>(null);
+  const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
 
   useEffect(() => {
     return () => {
@@ -27,17 +28,31 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
     };
   }, []);
 
-  const handleMount = (editor: import('monaco-editor').editor.IStandaloneCodeEditor) => {
-    if (collaborative && yText && awareness) {
-      bindingRef.current?.destroy?.();
-      const model = editor.getModel();
-      if (!model) {
-        return;
-      }
-      bindingRef.current = new MonacoBinding(yText, model, new Set([editor]), awareness);
-    } else {
-      editor.setValue(value);
+  useEffect(() => {
+    const editor = editorRef.current;
+
+    bindingRef.current?.destroy?.();
+    bindingRef.current = null;
+
+    if (!editor) {
+      return;
     }
+
+    const model = editor.getModel();
+    if (!model) {
+      return;
+    }
+
+    if (collaborative && yText && awareness) {
+      bindingRef.current = new MonacoBinding(yText, model, new Set([editor]), awareness);
+      return;
+    }
+
+    editor.setValue(value);
+  }, [awareness, collaborative, value, yText]);
+
+  const handleMount = (editor: import('monaco-editor').editor.IStandaloneCodeEditor) => {
+    editorRef.current = editor;
   };
 
   const handleChange = (next?: string) => {

@@ -55,7 +55,7 @@ export default async function UserPage({
         <div className="relative flex flex-col items-center gap-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={user.image ?? "/default-avatar.png"}
+            src={user.image ?? "/default-avatar.svg"}
             alt={user.username ?? "User"}
             className="h-28 w-28 rounded-full border border-white/20 bg-black/20 object-cover shadow-lg shadow-emerald-500/20"
           />

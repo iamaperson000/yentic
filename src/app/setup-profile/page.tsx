@@ -4,15 +4,33 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import SetupProfileForm from "./setup-profile-form"
 
-export default async function SetupProfilePage() {
+function getSafeNextPath(value: string | undefined) {
+  if (!value || !value.startsWith("/")) {
+    return null
+  }
+
+  if (value.startsWith("//") || value.startsWith("/setup-profile")) {
+    return null
+  }
+
+  return value
+}
+
+export default async function SetupProfilePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ next?: string }>
+}) {
   const session = await getServerSession(authOptions)
+  const params = (await searchParams) ?? {}
+  const nextPath = getSafeNextPath(params.next)
 
   if (!session) {
     redirect("/")
   }
 
   if (session.user?.username) {
-    redirect("/dashboard")
+    redirect(nextPath ?? "/dashboard")
   }
 
   return (
@@ -27,6 +45,7 @@ export default async function SetupProfilePage() {
         <SetupProfileForm
           defaultBio={session.user?.bio ?? ""}
           suggestedName={session.user?.name ?? session.user?.email ?? ""}
+          nextPath={nextPath}
         />
       </div>
     </div>

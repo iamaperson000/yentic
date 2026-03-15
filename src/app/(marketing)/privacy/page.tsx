@@ -8,7 +8,7 @@ const sections = [
   {
     title: '1. Information we collect',
     body:
-      'We collect the details you provide when creating an account (such as your name and email), usage data from interactions with the IDE, and diagnostic information that helps us improve performance.',
+      'We collect the details you provide when creating an account (such as your name and email).',
   },
   {
     title: '2. How we use your data',

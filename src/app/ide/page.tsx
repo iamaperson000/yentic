@@ -324,7 +324,7 @@ export default async function WorkspacePicker() {
                           <div className="flex items-center gap-3">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={project.ownerImage ?? '/default-avatar.png'}
+                              src={project.ownerImage ?? '/default-avatar.svg'}
                               alt={project.ownerName}
                               className="h-9 w-9 rounded-full border border-white/15 bg-black/40 object-cover"
                             />

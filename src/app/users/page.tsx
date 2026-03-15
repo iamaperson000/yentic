@@ -11,15 +11,18 @@ export default async function UsersPage({
 }) {
   const query = searchParams?.q?.trim() ?? "";
 
-  const where: Prisma.UserWhereInput = query
-    ? {
-        OR: [
-          { username: { contains: query, mode: "insensitive" } },
-          { name: { contains: query, mode: "insensitive" } },
-          { bio: { contains: query, mode: "insensitive" } },
-        ],
-      }
-    : { username: { not: null } };
+  const where: Prisma.UserWhereInput = {
+    username: { not: null },
+    ...(query
+      ? {
+          OR: [
+            { username: { contains: query, mode: "insensitive" } },
+            { name: { contains: query, mode: "insensitive" } },
+            { bio: { contains: query, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
 
   const users = await prisma.user.findMany({
     where,
@@ -85,7 +88,7 @@ export default async function UsersPage({
               <Link href={`/u/${u.username ?? ""}`} className="relative flex items-center gap-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={u.image ?? "/default-avatar.png"}
+                  src={u.image ?? "/default-avatar.svg"}
                   alt={u.username ?? "User"}
                   className="h-12 w-12 rounded-full border border-white/20 bg-black/20 object-cover shadow-inner shadow-black/40"
                 />

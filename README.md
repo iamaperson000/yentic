@@ -95,10 +95,16 @@ See [`.env.example`](./.env.example) for the expected shape.
 - `npm test`: runs the test suite
 - `npm run db:push`: applies the Prisma schema to your configured database
 
+## AI Disclosure 
+
+- AI was used in the creation of this project
+- Notable Occurances include for: Filler text (marketing, etc), larger text things (Security, etc), and codewise (assisting with the generation of code)
+
+
 ## Realtime Notes
 
 - The main collaborative editor uses Yjs with WebRTC signaling.
-- The `/chat` route is separate from editor collaboration and depends on Pusher.
+- The `/chat` route is separate from editor collaboration, depends on Pusher, and requires sign-in to post messages.
 - If Pusher is not configured, avoid the `/chat` route or wire in your own credentials first.
 
 ## Security

@@ -10,7 +10,7 @@ import {
   useErrorMessage
 } from '@codesandbox/sandpack-react';
 import { clsx } from 'clsx';
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { SupportedLanguage } from '@/lib/project';
 import { ConsoleInputPanel } from '@/components/ConsoleInputPanel';
@@ -30,9 +30,9 @@ type PreviewProps = {
 
 const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'java']);
 
-const consoleInputLanguages = new Set<ExecutableLanguage>(['python']);
+const consoleInputLanguages = new Set<ExecutableLanguage>();
 
-const textareaInputLanguages = new Set<ExecutableLanguage>(['c', 'cpp', 'java']);
+const textareaInputLanguages = new Set<ExecutableLanguage>(['c']);
 
 type RuntimeStatus = 'idle' | 'running' | 'ready' | 'error';
 
@@ -342,31 +342,13 @@ function RuntimePreview({
   );
 }
 
-type ConsoleEntryType = 'log' | 'warn' | 'error' | 'info' | 'command' | 'result';
+type ConsoleEntryType = 'log' | 'warn' | 'error' | 'info';
 
 type ConsoleEntry = {
   id: string;
   type: ConsoleEntryType;
   text: string;
 };
-
-const AsyncFunctionConstructor: (new (...args: string[]) => (...args: unknown[]) => Promise<unknown>) =
-  Object.getPrototypeOf(async function () {
-    /* noop */
-  }).constructor;
-
-function formatValue(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (value === null) return 'null';
-  if (value === undefined) return 'undefined';
-  if (value instanceof Error) return value.message;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return Object.prototype.toString.call(value);
-  }
-}
 
 function formatConsoleData(data: Array<string | Record<string, string>> | undefined): string {
   if (!data || !data.length) return '';
@@ -389,9 +371,6 @@ function createEntryId(prefix: string) {
 function LiveConsolePanel() {
   const { logs, reset } = useSandpackConsole({ resetOnPreviewRestart: true, showSyntaxError: true });
   const [entries, setEntries] = useState<ConsoleEntry[]>([]);
-  const [input, setInput] = useState<string>('');
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const processedIdsRef = useRef<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -429,72 +408,6 @@ function LiveConsolePanel() {
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [entries]);
 
-  const evaluateSnippet = async (snippet: string) => {
-    const consoleProxy: Pick<Console, 'log' | 'info' | 'warn' | 'error'> = {
-      log: (...args: unknown[]) => appendEntry({ id: createEntryId('log'), type: 'log', text: args.map(formatValue).join(' ') }),
-      info: (...args: unknown[]) => appendEntry({ id: createEntryId('info'), type: 'info', text: args.map(formatValue).join(' ') }),
-      warn: (...args: unknown[]) => appendEntry({ id: createEntryId('warn'), type: 'warn', text: args.map(formatValue).join(' ') }),
-      error: (...args: unknown[]) => appendEntry({ id: createEntryId('error'), type: 'error', text: args.map(formatValue).join(' ') })
-    };
-
-    try {
-      const asyncEvaluator = new AsyncFunctionConstructor(
-        'console',
-        'window',
-        `'use strict';\nreturn await (async () => {\n${snippet}\n})();`
-      );
-      const result = await asyncEvaluator(consoleProxy as Console, window);
-      if (result !== undefined) {
-        appendEntry({ id: createEntryId('result'), type: 'result', text: formatValue(result) });
-      }
-    } catch (error) {
-      appendEntry({
-        id: createEntryId('runtime-error'),
-        type: 'error',
-        text: error instanceof Error ? error.message : String(error)
-      });
-    }
-  };
-
-  const runCommand = async () => {
-    const snippet = input.trim();
-    if (!snippet) return;
-    const original = input;
-    appendEntry({ id: createEntryId('command'), type: 'command', text: original });
-    setHistory(prev => [...prev, original]);
-    setHistoryIndex(null);
-    setInput('');
-    await evaluateSnippet(original);
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      void runCommand();
-      return;
-    }
-    if (event.key === 'ArrowUp' && !event.shiftKey) {
-      event.preventDefault();
-      if (!history.length) return;
-      const nextIndex = historyIndex === null ? history.length - 1 : Math.max(0, historyIndex - 1);
-      setHistoryIndex(nextIndex);
-      setInput(history[nextIndex]);
-      return;
-    }
-    if (event.key === 'ArrowDown' && !event.shiftKey) {
-      event.preventDefault();
-      if (historyIndex === null) return;
-      const nextIndex = historyIndex + 1;
-      if (nextIndex >= history.length) {
-        setHistoryIndex(null);
-        setInput('');
-      } else {
-        setHistoryIndex(nextIndex);
-        setInput(history[nextIndex]);
-      }
-    }
-  };
-
   const handleClear = () => {
     reset();
     processedIdsRef.current.clear();
@@ -517,7 +430,7 @@ function LiveConsolePanel() {
       </div>
       <div ref={listRef} className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed">
         {entries.length === 0 ? (
-          <span className="text-white/40">Console output will appear here. Use the input below to run JavaScript.</span>
+          <span className="text-white/40">Console output from the preview will appear here.</span>
         ) : (
           <ul className="space-y-2">
             {entries.map(entry => {
@@ -528,49 +441,19 @@ function LiveConsolePanel() {
                     ? 'text-amber-200'
                     : entry.type === 'info'
                       ? 'text-white/60'
-                      : entry.type === 'command'
-                        ? 'text-sky-200'
-                        : entry.type === 'result'
-                          ? 'text-emerald-200'
-                          : 'text-white/80';
+                      : 'text-white/80';
               return (
                 <li key={entry.id} className={clsx('whitespace-pre-wrap break-words', baseClass)}>
-                  {entry.type === 'command' ? `> ${entry.text}` : entry.text}
+                  {entry.text}
                 </li>
               );
             })}
           </ul>
         )}
       </div>
-      <form
-        onSubmit={event => {
-          event.preventDefault();
-          void runCommand();
-        }}
-        className="border-t border-white/10 bg-black/40 px-4 py-3"
-      >
-        <div className="flex items-end gap-3">
-          <div className="flex-1">
-            <label className="sr-only" htmlFor="live-console-input">
-              Run JavaScript in the console
-            </label>
-            <textarea
-              id="live-console-input"
-              value={input}
-              onChange={event => setInput(event.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="console.log('Hello from Yentic!')"
-              className="h-24 w-full resize-none rounded-2xl border border-white/20 bg-black/50 px-3 py-2 font-mono text-[13px] text-white/80 placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
-            />
-          </div>
-          <button
-            type="submit"
-            className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold uppercase tracking-[0.3em] text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
-          >
-            Run
-          </button>
-        </div>
-      </form>
+      <div className="border-t border-white/10 bg-black/40 px-4 py-3 text-xs text-white/40">
+        Interactive evaluation is disabled here. Open your browser devtools if you need to inspect the preview manually.
+      </div>
     </div>
   );
 }
