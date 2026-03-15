@@ -20,10 +20,17 @@
 # production
 /build
 /dist
+/public/dist
 
 # misc
 .DS_Store
 *.pem
+/prisma/dev.db
+*.db
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 
 # debug
 npm-debug.log*
@@ -31,8 +38,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+!.env.example
+!.env.sample
 
 # vercel
 .vercel

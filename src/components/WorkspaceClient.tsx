@@ -33,8 +33,6 @@ import {
   writeWorkspaceMeta,
 } from '@/lib/project';
 
-const COLLABORATION_ENABLED = true;
-
 const extensionMap: Record<SupportedLanguage, string> = {
   html: 'html',
   css: 'css',

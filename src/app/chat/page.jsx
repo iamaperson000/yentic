@@ -12,8 +12,6 @@ export default function ChatPage() {
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
-    setStatus("Connecting to Pusher…");
-
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
     });
@@ -23,12 +21,16 @@ export default function ChatPage() {
     const handleMessage = (data) => {
       setMessages((prev) => [...prev, data?.message ?? ""]);
     };
+    const handleConnected = () => {
+      setStatus("Connected");
+    };
 
     channel.bind("message", handleMessage);
-    setStatus("Connected");
+    pusher.connection.bind("connected", handleConnected);
 
     return () => {
       channel.unbind_all();
+      pusher.connection.unbind("connected", handleConnected);
       pusher.unsubscribe("chat");
       pusher.disconnect();
     };
@@ -46,7 +48,7 @@ export default function ChatPage() {
         body: JSON.stringify({ message }),
       });
       setInput("");
-    } catch (err) {
+    } catch {
       setError("Failed to send message.");
     }
   };
