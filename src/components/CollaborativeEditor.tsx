@@ -232,6 +232,9 @@ export default function CollaborativeEditor({
   const onSnapshotChangeRef = useRef(onSnapshotChange);
   const onPresenceChangeRef = useRef(onPresenceChange);
   const onRemoteMutationRef = useRef(onRemoteMutation);
+  const filesRef = useRef(files);
+  const encodedStateRef = useRef(encodedState);
+  const localPresenceRef = useRef(localPresence);
   const lastEncodedStateRef = useRef<string | null | undefined>(encodedState);
   const [awareness, setAwareness] = useState<Awareness | null>(null);
   const [isActive, setIsActive] = useState(false);
@@ -251,6 +254,18 @@ export default function CollaborativeEditor({
   useEffect(() => {
     onRemoteMutationRef.current = onRemoteMutation;
   }, [onRemoteMutation]);
+
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  useEffect(() => {
+    encodedStateRef.current = encodedState;
+  }, [encodedState]);
+
+  useEffect(() => {
+    localPresenceRef.current = localPresence;
+  }, [localPresence]);
 
   const applySnapshotToParent = useCallback(
     (snapshot: ProjectFileMap) => {
@@ -281,7 +296,10 @@ export default function CollaborativeEditor({
     const doc = new Y.Doc();
     ydocRef.current = doc;
 
-    const update = decodeUpdate(encodedState);
+    const initialEncodedState = encodedStateRef.current;
+    const initialFiles = filesRef.current;
+    const initialLocalPresence = localPresenceRef.current;
+    const update = decodeUpdate(initialEncodedState);
     if (update) {
       try {
         Y.applyUpdate(doc, update);
@@ -289,7 +307,7 @@ export default function CollaborativeEditor({
         console.error('[CollaborativeEditor] Failed to apply saved state', error);
       }
     } else {
-      const legacy = encodedState ? decodeSnapshotToMap(encodedState) : null;
+      const legacy = initialEncodedState ? decodeSnapshotToMap(initialEncodedState) : null;
       if (legacy) {
         doc.transact(() => {
           applyFilesToMap(doc.getMap('files'), legacy);
@@ -301,7 +319,7 @@ export default function CollaborativeEditor({
     filesMapRef.current = filesMap;
 
     if (filesMap.size === 0) {
-      const sanitized = sanitizeProjectMap(files);
+      const sanitized = sanitizeProjectMap(initialFiles);
       doc.transact(() => applyFilesToMap(filesMap, sanitized), LOCAL_ORIGIN);
     }
 
@@ -319,11 +337,11 @@ export default function CollaborativeEditor({
     const handleAwarenessUpdate = () => {
       setAwareness(provider.awareness);
       setIsActive(true);
-      const presence = presenceFromAwareness(provider.awareness, localPresence);
+      const presence = presenceFromAwareness(provider.awareness, localPresenceRef.current);
       onPresenceChangeRef.current?.(presence);
     };
 
-    provider.awareness.setLocalStateField('user', localPresence ?? null);
+    provider.awareness.setLocalStateField('user', initialLocalPresence ?? null);
     provider.awareness.on('update', handleAwarenessUpdate);
     handleAwarenessUpdate();
 
@@ -345,7 +363,7 @@ export default function CollaborativeEditor({
     // Sync initial snapshot to parent
     applySnapshotToParent(mapToProjectFileMap(filesMap));
     initialisedRef.current = true;
-    lastEncodedStateRef.current = encodedState;
+    lastEncodedStateRef.current = initialEncodedState;
 
     return () => {
       filesMap.unobserveDeep(handleFilesChange);
