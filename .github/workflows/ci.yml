@@ -25,7 +25,7 @@ jobs:
       NEXT_PUBLIC_PUSHER_CLUSTER: us2
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4
