@@ -593,7 +593,11 @@ export default function WorkspaceClient({
 
         const project = (await res.json()) as CloudProject;
         const syncedName = project.name.trim() || normalizedName;
-        setProjectMeta({ id: project.id, name: syncedName, shareToken: project.shareToken ?? projectMeta.shareToken ?? null });
+        setProjectMeta(prev => ({
+          id: project.id,
+          name: syncedName,
+          shareToken: project.shareToken ?? prev.shareToken ?? null,
+        }));
         setLastSavedAt(new Date(project.updatedAt ?? Date.now()));
         setCloudAuthRequired(false);
         setCloudError(null);
