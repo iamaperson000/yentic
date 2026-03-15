@@ -26,6 +26,11 @@ type CloudProjectPayload = {
   shareToken: string | null;
 };
 
+type ProjectCollaborator = {
+  userId: string;
+  role: string;
+};
+
 function encodeState(state: Uint8Array | Buffer | null | undefined): string | null {
   if (!state || !state.length) {
     return null;
@@ -77,7 +82,7 @@ export default async function WorkspaceRoute({ params, searchParams }: PageProps
     }
 
     const isOwner = project.userId === user.id;
-    const membership = project.collaborators.find(entry => entry.userId === user.id);
+    const membership = project.collaborators.find((entry: ProjectCollaborator) => entry.userId === user.id);
 
     if (!isOwner && !membership) {
       redirect('/ide');
