@@ -12,7 +12,7 @@ const PUBLIC_PATHS = [
   "/u/", //  allow viewing user profile pages publicly
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Skip static assets & Next internals
