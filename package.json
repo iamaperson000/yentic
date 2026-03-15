@@ -51,7 +51,7 @@
     "eslint-config-next": "16.0.1",
     "css-loader": "^6.8.1",
     "monaco-editor-webpack-plugin": "^7.1.0",
-    "style-loader": "^3.3.3",
+    "style-loader": "^4.0.0",
     "tailwindcss": "^4",
     "tsx": "^4.19.2",
     "typescript": "^5",
