@@ -47,7 +47,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.0.1",
     "css-loader": "^6.8.1",
     "monaco-editor-webpack-plugin": "^7.1.0",
