@@ -1,9 +1,11 @@
-import { randomBytes } from 'crypto';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 
 import { authOptions } from '@/lib/auth';
-import prisma from '@/lib/prisma';
+import {
+  createProjectShareLink,
+  ProjectCollaborationError,
+} from '@/lib/project-collaboration';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -24,28 +26,6 @@ export async function POST(req: Request, context: RouteContext) {
     );
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-    select: { id: true },
-  });
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const project = await prisma.project.findUnique({
-    where: { id: params.id },
-    select: { id: true, userId: true, shareToken: true },
-  });
-
-  if (!project) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
-  if (project.userId !== user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
   let rotate = false;
   try {
     const body = await req.json();
@@ -56,17 +36,15 @@ export async function POST(req: Request, context: RouteContext) {
     rotate = false;
   }
 
-  let shareToken = project.shareToken;
-
-  if (!shareToken || rotate) {
-    shareToken = randomBytes(24).toString('hex');
-    await prisma.project.update({
-      where: { id: params.id },
-      data: { shareToken },
+  try {
+    const payload = await createProjectShareLink(params.id, session.user.email, {
+      rotate,
     });
+    return NextResponse.json(payload);
+  } catch (error) {
+    if (error instanceof ProjectCollaborationError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
   }
-
-  const url = `/project/${project.id}?invite=${shareToken}`;
-
-  return NextResponse.json({ token: shareToken, url });
 }

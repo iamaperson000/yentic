@@ -1335,6 +1335,7 @@ export default function WorkspaceClient({
               <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">Project</span>
               {isRenamingProject ? (
                 <input
+                  data-testid="project-name-input"
                   ref={projectNameInputRef}
                   value={projectNameDraft}
                   onChange={event => setProjectNameDraft(event.target.value)}
@@ -1354,12 +1355,12 @@ export default function WorkspaceClient({
                   className="w-[180px] rounded-md border border-white/20 bg-black/60 px-2.5 py-1 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40"
                 />
               ) : (
-                <span className="truncate text-sm font-semibold text-white/80">
+                <span data-testid="project-title" className="truncate text-sm font-semibold text-white/80">
                   {projectMeta.name?.trim() || defaultProjectName}
                 </span>
               )}
             </div>
-            <span className={statusBadgeClass}>
+            <span data-testid="save-status" className={statusBadgeClass}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
               {savedLabel}
             </span>
@@ -1398,6 +1399,7 @@ export default function WorkspaceClient({
                 </button>
               ) : null}
               <button
+                data-testid="share-button"
                 onClick={openShareModal}
                 className={shareButtonClass}
                 disabled={shareButtonDisabled}
