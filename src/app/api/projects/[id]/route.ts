@@ -23,6 +23,13 @@ export async function GET(_req: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      { error: 'Database connection is not configured' },
+      { status: 503 },
+    );
+  }
+
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
   });
@@ -42,6 +49,8 @@ export async function GET(_req: Request, context: RouteContext) {
       updatedAt: true,
       userId: true,
       yjsState: true,
+      shareToken: true,
+      collaborationKey: true,
     },
   });
 
@@ -67,6 +76,7 @@ export async function GET(_req: Request, context: RouteContext) {
 
   return NextResponse.json({
     ...rest,
+    shareToken: isOwner ? project.shareToken ?? null : null,
     yjsState: encodeState(yjsState),
     viewerRole: isOwner ? 'owner' : membership?.role ?? 'viewer',
   });

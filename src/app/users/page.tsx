@@ -11,6 +11,19 @@ export default async function UsersPage({
 }) {
   const query = searchParams?.q?.trim() ?? "";
 
+  if (!process.env.DATABASE_URL) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-16">
+        <div className="rounded-3xl border border-amber-400/30 bg-amber-500/10 p-8 text-center">
+          <p className="text-lg font-medium text-white">Community profiles are unavailable right now.</p>
+          <p className="mt-2 text-sm text-white/70">
+            Connect a database to browse public user profiles and community search.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const where: Prisma.UserWhereInput = {
     username: { not: null },
     ...(query

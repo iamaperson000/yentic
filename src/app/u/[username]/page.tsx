@@ -15,6 +15,16 @@ export default async function UserPage({
 }: {
   params: UserPageParams | Promise<UserPageParams>;
 }) {
+  if (!process.env.DATABASE_URL) {
+    return (
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-16">
+        <div className="rounded-3xl border border-amber-400/30 bg-amber-500/10 p-8 text-center text-sm text-white/70">
+          Public profiles are unavailable until a database is configured.
+        </div>
+      </div>
+    );
+  }
+
   const resolvedParams = await Promise.resolve(params);
   const username = resolvedParams?.username;
 

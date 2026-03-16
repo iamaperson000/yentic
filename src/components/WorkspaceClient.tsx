@@ -83,6 +83,7 @@ type CloudProject = {
   updatedAt: string;
   yjsState?: string | null;
   viewerRole?: ViewerRole;
+  collaborationKey?: string | null;
   shareToken?: string | null;
 };
 
@@ -139,7 +140,10 @@ export default function WorkspaceClient({
   const collaborativeSnapshotRef = useRef<string | null>(initialProject?.yjsState ?? null);
   const collaborativeDirtyRef = useRef(false);
   const collaborativeSaveInFlightRef = useRef(false);
-  const collaborationKey = projectMeta.id ?? workspaceId;
+  const [collaborationRoomKey, setCollaborationRoomKey] = useState<string | null>(
+    initialProject?.collaborationKey ?? null
+  );
+  const collaborationKey = projectMeta.id ? collaborationRoomKey : workspaceId;
   const [isShareModalOpen, setShareModalOpen] = useState(false);
   const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
   const [inviteValue, setInviteValue] = useState('');
@@ -281,6 +285,7 @@ export default function WorkspaceClient({
         saveWorkspaceFiles(workspaceId, initialProject.files);
       }
       setEncodedYjsState(initialProject.yjsState ?? null);
+      setCollaborationRoomKey(initialProject.collaborationKey ?? null);
       setViewerRole(initialViewerRole);
       return;
     }
@@ -303,6 +308,7 @@ export default function WorkspaceClient({
       saveWorkspaceFiles(workspaceId, starter);
     }
     setEncodedYjsState(null);
+    setCollaborationRoomKey(null);
     setViewerRole('owner');
     setCollaborators([]);
     setProjectOwner(null);
@@ -348,6 +354,7 @@ export default function WorkspaceClient({
     setActivePath(config.defaultActivePath);
     saveWorkspaceFiles(workspaceId, starter);
     setProjectMeta({ id: null, name: defaultProjectName, shareToken: null });
+    setCollaborationRoomKey(null);
     setProjectNameDraft('');
     setIsNameRequired(true);
     setIsRenamingProject(true);
@@ -508,6 +515,7 @@ export default function WorkspaceClient({
       setActivePath(firstPath);
       const normalizedName = project.name.trim() || defaultProjectName;
       setProjectMeta({ id: project.id, name: normalizedName, shareToken: project.shareToken ?? null });
+      setCollaborationRoomKey(project.collaborationKey ?? null);
       setIsNameRequired(false);
       setLastSavedAt(new Date(project.updatedAt ?? Date.now()));
       setCloudAuthRequired(false);
@@ -568,14 +576,25 @@ export default function WorkspaceClient({
           }),
         });
 
-        if (res.status === 401) {
+        if (res.status === 401 || res.status === 403) {
           setCloudAuthRequired(true);
-          setCloudError('Sign in to sync projects.');
+          setCloudError(
+            res.status === 403 ? 'Finish setting up your profile to sync projects.' : 'Sign in to sync projects.'
+          );
           if (!cloudWarningShownRef.current) {
             cloudWarningShownRef.current = true;
-            pushToast({ kind: 'error', message: '❌ Sign in to sync projects to the cloud.' });
+            pushToast({
+              kind: 'error',
+              message:
+                res.status === 403
+                  ? '❌ Finish setting up your profile to sync projects.'
+                  : '❌ Sign in to sync projects to the cloud.',
+            });
           }
-          return { ok: false as const, reason: 'unauthorized' as const };
+          return {
+            ok: false as const,
+            reason: res.status === 403 ? ('forbidden' as const) : ('unauthorized' as const),
+          };
         }
 
         if (!res.ok) {
@@ -608,6 +627,7 @@ export default function WorkspaceClient({
           name: syncedName,
           shareToken: project.shareToken ?? prev.shareToken ?? null,
         }));
+        setCollaborationRoomKey(project.collaborationKey ?? null);
         setLastSavedAt(new Date(project.updatedAt ?? Date.now()));
         setCloudAuthRequired(false);
         setCloudError(null);
@@ -714,6 +734,54 @@ export default function WorkspaceClient({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [flushCollaborativeState, projectMeta.id, viewerRole]);
+
+  const syncCollaborationMetadata = useCallback(async () => {
+    if (!projectMeta.id) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectMeta.id}/collaboration`, {
+        cache: 'no-store',
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = (await res.json()) as {
+        collaborationKey?: string | null;
+        shareToken?: string | null;
+      };
+
+      if (
+        typeof data.collaborationKey === 'string' &&
+        data.collaborationKey.length > 0 &&
+        data.collaborationKey !== collaborationRoomKey
+      ) {
+        setCollaborationRoomKey(data.collaborationKey);
+      }
+
+      if (viewerRole === 'owner' && data.shareToken !== undefined) {
+        setProjectMeta(prev => ({ ...prev, shareToken: data.shareToken ?? null }));
+      }
+    } catch (error) {
+      console.error('Failed to sync collaboration metadata', error);
+    }
+  }, [collaborationRoomKey, projectMeta.id, viewerRole]);
+
+  useEffect(() => {
+    if (!projectMeta.id) {
+      return;
+    }
+
+    void syncCollaborationMetadata();
+    const interval = window.setInterval(() => {
+      void syncCollaborationMetadata();
+    }, 15000);
+
+    return () => window.clearInterval(interval);
+  }, [projectMeta.id, syncCollaborationMetadata]);
 
   const loadCollaborators = useCallback(async () => {
     if (!projectMeta.id) {
@@ -892,8 +960,11 @@ export default function WorkspaceClient({
       }
       const data = (await res.json()) as { collaborator: CollaboratorInfo };
       setCollaborators(prev => {
-        if (prev.some(entry => entry.id === data.collaborator.id)) {
-          return prev;
+        const index = prev.findIndex(entry => entry.id === data.collaborator.id);
+        if (index !== -1) {
+          const next = [...prev];
+          next[index] = data.collaborator;
+          return next;
         }
         return [...prev, data.collaborator];
       });
@@ -935,7 +1006,22 @@ export default function WorkspaceClient({
           setRemoveError(message);
           return;
         }
+        const data = (await res.json()) as {
+          ok: true;
+          collaborationKey?: string | null;
+          shareToken?: string | null;
+          shareUrl?: string | null;
+        };
         setCollaborators(prev => prev.filter(entry => entry.id !== userId));
+        if (typeof data.collaborationKey === 'string' && data.collaborationKey.length > 0) {
+          setCollaborationRoomKey(data.collaborationKey);
+        }
+        if (typeof data.shareToken === 'string' && data.shareToken.length > 0) {
+          setProjectMeta(prev => ({ ...prev, shareToken: data.shareToken ?? prev.shareToken }));
+        }
+        if (typeof data.shareUrl === 'string' && data.shareUrl.length > 0) {
+          setShareUrl(data.shareUrl);
+        }
       } catch (error) {
         console.error('Failed to remove collaborator', error);
         setRemoveError('Failed to remove collaborator');

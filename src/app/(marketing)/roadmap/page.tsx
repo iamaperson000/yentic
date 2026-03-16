@@ -52,7 +52,7 @@ export default function RoadmapPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-300/80">Roadmap</p>
         <h1 className="text-4xl font-semibold">Where Yentic is headed.</h1>
         <p className="max-w-2xl text-base text-white/70">
-          We ship in small, deliberate increments. Autosave and multiplayer are the next major milestones, followed by a
+          We ship in small, deliberate increments. Perfect autosave and multiplayer are the next major milestones, followed by a
           cloud execution layer for more languages.
         </p>
       </header>

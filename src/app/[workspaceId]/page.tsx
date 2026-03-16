@@ -23,6 +23,7 @@ type CloudProjectPayload = {
   files: ProjectFileMap;
   updatedAt: string;
   yjsState: string | null;
+  collaborationKey: string | null;
   shareToken: string | null;
 };
 
@@ -47,22 +48,25 @@ export default async function WorkspaceRoute({ params, searchParams }: PageProps
   let initialViewerRole: ViewerRole = 'owner';
   let initialSlug: WorkspaceSlug = 'web';
 
-  const project = await prisma.project.findUnique({
-    where: { id: workspaceId },
-    select: {
-      id: true,
-      name: true,
-      language: true,
-      files: true,
-      updatedAt: true,
-      yjsState: true,
-      userId: true,
-      shareToken: true,
-      collaborators: {
-        select: { userId: true, role: true },
-      },
-    },
-  });
+  const project = process.env.DATABASE_URL
+    ? await prisma.project.findUnique({
+        where: { id: workspaceId },
+        select: {
+          id: true,
+          name: true,
+          language: true,
+          files: true,
+          updatedAt: true,
+          yjsState: true,
+          userId: true,
+          shareToken: true,
+          collaborationKey: true,
+          collaborators: {
+            select: { userId: true, role: true },
+          },
+        },
+      })
+    : null;
 
   if (project) {
     const email = session?.user?.email ?? null;
@@ -101,7 +105,8 @@ export default async function WorkspaceRoute({ params, searchParams }: PageProps
       files: (project.files ?? {}) as ProjectFileMap,
       updatedAt: project.updatedAt.toISOString(),
       yjsState: encodeState(project.yjsState),
-      shareToken: project.shareToken ?? null,
+      collaborationKey: project.collaborationKey,
+      shareToken: isOwner ? project.shareToken ?? null : null,
     };
 
     initialSlug = resolveWorkspaceSlugFromLanguage(project.language);

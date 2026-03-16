@@ -13,6 +13,10 @@ export default async function ProjectInvitePage({ params, searchParams }: PagePr
   const query = (await searchParams) ?? {};
   const inviteToken = query.invite;
 
+  if (!process.env.DATABASE_URL) {
+    notFound();
+  }
+
   if (!inviteToken) {
     notFound();
   }
