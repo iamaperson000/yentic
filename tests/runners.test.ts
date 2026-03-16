@@ -43,3 +43,58 @@ test('Java runner accepts stdin through Scanner', async () => {
   assert.equal(result.stderr, '');
   assert.equal(result.stdout, '14\n');
 });
+
+test('executeCode rejects unsupported languages', async () => {
+  await assert.rejects(
+    () => executeCode('rust' as never, 'fn main() {}'),
+    /Unsupported language: rust/
+  );
+});
+
+test('Python runner requires a browser runtime in Node tests', async () => {
+  await assert.rejects(
+    () => executeCode('python', 'print("hello")'),
+    /Python runtime is only available in the browser\./
+  );
+});
+
+test('C runner reports non-zero exit codes in stdout', async () => {
+  const source = `int main(void) { return 3; }`;
+  const result = await executeCode('c', source);
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout, 'Program exited with code 3\n');
+});
+
+test('C++ runner writes cerr output to stderr', async () => {
+  const source = `#include <iostream>\nint main() { std::cerr << "oops" << std::endl; return 0; }`;
+  const result = await executeCode('cpp', source);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, 'oops\n');
+});
+
+test('Java runner supports printf-style formatting', async () => {
+  const source = `public class Main {\n  public static void main(String[] args) {\n    System.out.printf("%d %s", 7, "ok");\n  }\n}`;
+  const result = await executeCode('java', source);
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout, '7 ok');
+});
+
+test('Java runner supports nextLine after token reads', async () => {
+  const source = `import java.util.*;\npublic class Main {\n  public static void main(String[] args) {\n    Scanner scanner = new Scanner(System.in);\n    int n = scanner.nextInt();\n    scanner.nextLine();\n    String text = scanner.nextLine();\n    System.out.println(n + ":" + text);\n  }\n}`;
+  const result = await executeCode('java', source, '7\nhello there\n');
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout, '7:hello there\n');
+});
+
+test('Java runner reports invalid numeric stdin clearly', async () => {
+  const source = `import java.util.*;\npublic class Main {\n  public static void main(String[] args) {\n    Scanner scanner = new Scanner(System.in);\n    int n = scanner.nextInt();\n    System.out.println(n);\n  }\n}`;
+  const result = await executeCode('java', source, 'abc\n');
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, 'Expected integer input but received "abc".');
+});
+
+test('Java runner reports missing main methods', async () => {
+  const result = await executeCode('java', 'public class Main {}');
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, 'Could not find a main method to execute.');
+});

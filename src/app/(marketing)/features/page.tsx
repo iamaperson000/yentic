@@ -18,7 +18,7 @@ const featureGroups = [
     ]
   },
   {
-    title: 'Collaboration ready',
+    title: 'Collaboration ready (in development)',
     description: 'Designed for multiplayer from the start, even before the realtime cursor work lands.',
     bullets: [
       'Presence indicators, follow mode, and cursor streaming on the roadmap.',
