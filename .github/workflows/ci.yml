@@ -13,6 +13,20 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: yentic_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d yentic_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/yentic_ci
       AUTH_GOOGLE_ID: ci-google-client-id
@@ -36,6 +50,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Sync Prisma schema
+        run: npx prisma db push --skip-generate
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
       - name: Lint
         run: npm run lint
 
@@ -47,3 +67,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: E2E
+        run: npm run test:e2e

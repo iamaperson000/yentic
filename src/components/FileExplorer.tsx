@@ -108,6 +108,7 @@ export function FileExplorer({
           <button
             type="button"
             onClick={onCreateFile}
+            data-testid="create-file-button"
             className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 text-[11px] font-medium text-white/70 transition hover:border-white/25 hover:bg-white/10 hover:text-white"
           >
             <span aria-hidden className="text-base leading-none">＋</span>
@@ -133,6 +134,7 @@ export function FileExplorer({
                     type="button"
                     onClick={() => onSelect(f.path)}
                     onDoubleClick={() => beginRename(f.path)}
+                    data-testid={`file-entry-${f.path}`}
                     className={clsx(
                       'flex min-w-0 flex-1 items-center gap-2 text-left',
                       isRenaming ? 'pointer-events-none opacity-0' : 'opacity-100'
@@ -172,6 +174,7 @@ export function FileExplorer({
                 </div>
                 {isRenaming ? (
                   <input
+                    data-testid="file-rename-input"
                     ref={renameInputRef}
                     value={renameDraft}
                     onChange={event => setRenameDraft(event.target.value)}

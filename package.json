@@ -12,7 +12,8 @@
     "app:start": "NODE_ENV=production node server.js",
     "db:push": "prisma db push",
     "lint": "eslint",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test:e2e": "playwright test",
     "postinstall": "prisma generate"
   },
   "engines": {
@@ -43,13 +44,14 @@
     "yjs": "^13.5.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "css-loader": "^6.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
-    "css-loader": "^6.8.1",
     "monaco-editor-webpack-plugin": "^7.1.0",
     "style-loader": "^3.3.3",
     "tailwindcss": "^4",

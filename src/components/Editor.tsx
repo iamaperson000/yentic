@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef } from 'react';
 import Monaco from '@monaco-editor/react';
-import { MonacoBinding } from 'y-monaco';
 
 import { useCollaboration } from '@/components/CollaborativeEditor';
 
@@ -18,7 +17,7 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
   const { awareness, getTextForPath, isActive } = useCollaboration();
   const yText = useMemo(() => (path && isActive ? getTextForPath(path) : null), [getTextForPath, isActive, path]);
   const collaborative = Boolean(yText && awareness);
-  const bindingRef = useRef<MonacoBinding | null>(null);
+  const bindingRef = useRef<{ destroy?: () => void } | null>(null);
   const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
 
   useEffect(() => {
@@ -30,25 +29,46 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
 
   useEffect(() => {
     const editor = editorRef.current;
+    let cancelled = false;
 
     bindingRef.current?.destroy?.();
     bindingRef.current = null;
 
     if (!editor) {
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     const model = editor.getModel();
     if (!model) {
-      return;
+      return () => {
+        cancelled = true;
+      };
+    }
+    const activeEditor = editor;
+    const activeModel = model;
+
+    async function syncEditor() {
+      if (collaborative && yText && awareness) {
+        const { MonacoBinding } = await import('y-monaco');
+        if (cancelled) {
+          return;
+        }
+        bindingRef.current = new MonacoBinding(yText, activeModel, new Set([activeEditor]), awareness);
+        return;
+      }
+
+      activeEditor.setValue(value);
     }
 
-    if (collaborative && yText && awareness) {
-      bindingRef.current = new MonacoBinding(yText, model, new Set([editor]), awareness);
-      return;
-    }
+    void syncEditor();
 
-    editor.setValue(value);
+    return () => {
+      cancelled = true;
+      bindingRef.current?.destroy?.();
+      bindingRef.current = null;
+    };
   }, [awareness, collaborative, value, yText]);
 
   const handleMount = (editor: import('monaco-editor').editor.IStandaloneCodeEditor) => {
