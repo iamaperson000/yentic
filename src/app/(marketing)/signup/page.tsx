@@ -32,7 +32,7 @@ const faqs = [
   },
   {
     question: 'When will multiplayer ship?',
-    answer: 'Multiplayer editing is in active development. New sign-ups get early access invites as we expand the beta.'
+    answer: 'Multiplayer editing is in active development. Currently not working. New sign-ups get early access invites as we expand the beta.'
   }
 ]
 

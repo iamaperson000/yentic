@@ -16,6 +16,13 @@ export async function GET(_req: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      { error: 'Database connection is not configured' },
+      { status: 503 },
+    );
+  }
+
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
   });

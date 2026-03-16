@@ -6,9 +6,11 @@ import { getToken } from "next-auth/jwt";
 const PUBLIC_PATHS = [
   "/setup-profile",
   "/api/auth",
+  "/api/message",
   "/api/user/check-username",
   "/api/user/update-profile",
   "/api/user/me",
+  "/chat",
   "/u/", //  allow viewing user profile pages publicly
 ];
 
@@ -52,12 +54,20 @@ export async function proxy(request: NextRequest) {
 
   const username = (token.username as string | null) ?? null;
   const isSetupPath = pathname === "/setup-profile";
+  const isApiPath = pathname.startsWith("/api/");
 
   //  Check if current path is public (allowed even without username)
   const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 
   // If the user is logged in but has no username yet and it's not a public route
   if (!username && !isPublicPath) {
+    if (isApiPath) {
+      return NextResponse.json(
+        { error: "Finish setting up your profile to continue." },
+        { status: 403 },
+      );
+    }
+
     const url = request.nextUrl.clone();
     const nextPath = getSafeNextPath(`${pathname}${request.nextUrl.search}`);
     url.pathname = "/setup-profile";

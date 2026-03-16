@@ -9,7 +9,7 @@ import { executeCode } from '@/lib/runners';
 
 const consoleInputLanguages: ReadonlySet<ExecutableLanguage> = new Set();
 
-const textareaInputLanguages: ReadonlySet<ExecutableLanguage> = new Set(['c']);
+const textareaInputLanguages: ReadonlySet<ExecutableLanguage> = new Set(['c', 'cpp', 'java']);
 
 type ExecutablePreviewProps = {
   code: string;

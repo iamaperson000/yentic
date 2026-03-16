@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 
 const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/
@@ -50,10 +50,7 @@ export async function POST(request: Request) {
 
   const updateData = { username, bio } as unknown as Prisma.UserUpdateInput
 
-  const updatedUser = (await prisma.user.update({
-    where: { id: session.user.id },
-    data: updateData,
-  })) as unknown as {
+  let updatedUser: {
     id: string
     email: string | null
     name: string | null
@@ -61,6 +58,27 @@ export async function POST(request: Request) {
     image: string | null
     bio: string | null
     updatedAt: Date
+  }
+
+  try {
+    updatedUser = (await prisma.user.update({
+      where: { id: session.user.id },
+      data: updateData,
+    })) as unknown as {
+      id: string
+      email: string | null
+      name: string | null
+      username: string | null
+      image: string | null
+      bio: string | null
+      updatedAt: Date
+    }
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ error: "Username is already taken" }, { status: 409 })
+    }
+
+    throw error
   }
 
   return NextResponse.json(updatedUser)

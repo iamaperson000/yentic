@@ -14,6 +14,7 @@ Include:
 - your preferred contact details for follow-up
 
 Please do not open a public GitHub issue for security reports.
+Please do not abuse any issues you may find, as noted in the Terms Of Use.
 
 ## Supported Versions
 

@@ -192,9 +192,13 @@ function ensureProcessStdout(): () => void {
   return () => {};
 }
 
-function executeC(source: string, stdin: string = ''): RunResult {
+function executeWithJscpp(
+  source: string,
+  stdin: string = '',
+  options: { normalizeVoid?: boolean } = {}
+): RunResult {
   const restoreProcess = ensureProcessStdout();
-  const normalizedSource = normalizeCSourceForInterpreter(source);
+  const normalizedSource = options.normalizeVoid ? normalizeCSourceForInterpreter(source) : source;
   let stdout = '';
 
   try {
@@ -221,6 +225,10 @@ function executeC(source: string, stdin: string = ''): RunResult {
   } finally {
     restoreProcess();
   }
+}
+
+function executeC(source: string, stdin: string = ''): RunResult {
+  return executeWithJscpp(source, stdin, { normalizeVoid: true });
 }
 
 function splitCppStream(body: string): string[] {
@@ -266,7 +274,12 @@ function transpileCppToJavaScript(source: string): string {
   return code;
 }
 
-function executeCpp(source: string): RunResult {
+function executeCpp(source: string, stdin: string = ''): RunResult {
+  const interpreterResult = executeWithJscpp(source, stdin);
+  if (!interpreterResult.stderr || stdin.trim().length > 0 || /\bcin\b/.test(source)) {
+    return interpreterResult;
+  }
+
   let transformed: string;
   try {
     transformed = transpileCppToJavaScript(source);
@@ -342,6 +355,90 @@ function executeCpp(source: string): RunResult {
   }
 }
 
+const JAVA_SCANNER_RUNTIME = [
+  'const createJavaScanner = stdin => {',
+  "  const source = String(stdin == null ? '' : stdin);",
+  '  let cursor = 0;',
+  '  const hasRemaining = () => cursor < source.length;',
+  '  const skipTokenWhitespace = () => {',
+  '    while (hasRemaining() && /\\s/.test(source[cursor])) {',
+  '      cursor += 1;',
+  '    }',
+  '  };',
+  '  const readToken = () => {',
+  '    skipTokenWhitespace();',
+  '    if (!hasRemaining()) {',
+  "      throw new Error('No more input available.');",
+  '    }',
+  '    const start = cursor;',
+  '    while (hasRemaining() && !/\\s/.test(source[cursor])) {',
+  '      cursor += 1;',
+  '    }',
+  '    return source.slice(start, cursor);',
+  '  };',
+  '  const readNumber = (parser, expectedType) => {',
+  '    const token = readToken();',
+  '    const value = parser(token);',
+  '    if (Number.isNaN(value)) {',
+  '      throw new Error(`Expected ${expectedType} input but received "${token}".`);',
+  '    }',
+  '    return value;',
+  '  };',
+  '  return {',
+  '    next() {',
+  '      return readToken();',
+  '    },',
+  '    nextInt() {',
+  "      return readNumber(value => Number.parseInt(value, 10), 'integer');",
+  '    },',
+  '    nextLong() {',
+  "      return readNumber(value => Number.parseInt(value, 10), 'integer');",
+  '    },',
+  '    nextDouble() {',
+  "      return readNumber(value => Number.parseFloat(value), 'numeric');",
+  '    },',
+  '    nextFloat() {',
+  "      return readNumber(value => Number.parseFloat(value), 'numeric');",
+  '    },',
+  '    nextBoolean() {',
+  '      const token = readToken().toLowerCase();',
+  "      if (token === 'true') return true;",
+  "      if (token === 'false') return false;",
+  '      throw new Error(`Expected boolean input but received "${token}".`);',
+  '    },',
+  '    nextLine() {',
+  '      if (!hasRemaining()) {',
+  "        return '';",
+  '      }',
+  "      if (source[cursor] === '\\r') {",
+  '        cursor += 1;',
+  "        if (source[cursor] === '\\n') {",
+  '          cursor += 1;',
+  '        }',
+  "        return '';",
+  '      }',
+  "      if (source[cursor] === '\\n') {",
+  '        cursor += 1;',
+  "        return '';",
+  '      }',
+  '      const start = cursor;',
+  "      while (hasRemaining() && source[cursor] !== '\\n' && source[cursor] !== '\\r') {",
+  '        cursor += 1;',
+  '      }',
+  '      const line = source.slice(start, cursor);',
+  "      if (source[cursor] === '\\r') {",
+  '        cursor += 1;',
+  '      }',
+  "      if (source[cursor] === '\\n') {",
+  '        cursor += 1;',
+  '      }',
+  '      return line;',
+  '    },',
+  '    close() {},',
+  '  };',
+  '};',
+].join('\n');
+
 function extractJavaMainBody(source: string): string {
   const mainPattern = /public\s+static\s+void\s+main\s*\(\s*String\s*\[\s*]\s*\w*\s*\)\s*\{/;
   const match = mainPattern.exec(source);
@@ -366,6 +463,8 @@ function extractJavaMainBody(source: string): string {
 function transpileJavaToJavaScript(source: string): string {
   const body = extractJavaMainBody(source);
   let code = body;
+  code = code.replace(/Scanner\s+([A-Za-z_][\w]*)\s*=\s*new\s+Scanner\s*\(\s*System\.in\s*\)\s*;/g, 'const $1 = __scanner;');
+  code = code.replace(/\b([A-Za-z_][\w]*)\.close\s*\(\s*\)\s*;/g, '$1.close();');
   code = code.replace(/System\.out\.println\s*\(([^)]*)\)\s*;/g, '__println($1);');
   code = code.replace(/System\.out\.print\s*\(([^)]*)\)\s*;/g, '__print($1);');
   code = code.replace(/System\.out\.printf\s*\(([^)]*)\)\s*;/g, '__printf($1);');
@@ -375,7 +474,7 @@ function transpileJavaToJavaScript(source: string): string {
   return code;
 }
 
-function executeJava(source: string): RunResult {
+function executeJava(source: string, stdin: string = ''): RunResult {
   let jsBody: string;
   try {
     jsBody = transpileJavaToJavaScript(source);
@@ -386,6 +485,7 @@ function executeJava(source: string): RunResult {
   const runtimeSource = [
     `'use strict';`,
     'const __output = [];',
+    JAVA_SCANNER_RUNTIME,
     `const formatC = ${formatCPrintf.toString()};`,
     "const __print = value => { __output.push(String(value ?? '')); };",
     "const __println = value => { __output.push(String(value ?? '') + '\\n'); };",
@@ -396,6 +496,7 @@ function executeJava(source: string): RunResult {
     'const print = __print;',
     'const println = __println;',
     'const printf = __printf;',
+    `const __scanner = createJavaScanner(${JSON.stringify(stdin)});`,
     'const Math = globalThis.Math;',
     'const Arrays = globalThis.Array;',
     'const System = { out: { print: __print, println: __println, printf: __printf } };',
@@ -497,10 +598,10 @@ export async function executeCode(
     return executeC(source, stdin);
   }
   if (language === 'cpp') {
-    return executeCpp(source);
+    return executeCpp(source, stdin);
   }
   if (language === 'java') {
-    return executeJava(source);
+    return executeJava(source, stdin);
   }
   throw new Error(`Unsupported language: ${language}`);
 }

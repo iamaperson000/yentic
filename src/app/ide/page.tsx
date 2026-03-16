@@ -106,7 +106,8 @@ function formatTimeAgo(value: Date): string {
 
 export default async function WorkspacePicker() {
   const session = await getServerSession(authOptions);
-  const [ownedProjects, sharedProjects] = session?.user?.email
+  const databaseConfigured = Boolean(process.env.DATABASE_URL);
+  const [ownedProjects, sharedProjects] = session?.user?.email && databaseConfigured
     ? await Promise.all([
         prisma.project.findMany({
           where: { user: { email: session.user.email } },
@@ -277,9 +278,18 @@ export default async function WorkspacePicker() {
 
           {session?.user ? (
             <div className="mt-6 space-y-8">
+              {!databaseConfigured ? (
+                <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-6 text-sm text-amber-50/90">
+                  Cloud project sync is not configured for this environment yet. You can still launch local workspaces.
+                </div>
+              ) : null}
               <div className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.35em] text-white/70">My Projects</h3>
-                {ownedProjectCards.length ? (
+                {!databaseConfigured ? (
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-sm text-white/60">
+                    Connect a database to enable cloud saves and reload full projects here.
+                  </div>
+                ) : ownedProjectCards.length ? (
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {ownedProjectCards.map(project => (
                       <Link
@@ -312,7 +322,11 @@ export default async function WorkspacePicker() {
 
               <div className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.35em] text-white/70">Shared with Me</h3>
-                {sharedProjectCards.length ? (
+                {!databaseConfigured ? (
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-sm text-white/60">
+                    Shared cloud projects appear here once persistence is configured.
+                  </div>
+                ) : sharedProjectCards.length ? (
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {sharedProjectCards.map(project => (
                       <Link
@@ -366,7 +380,7 @@ export default async function WorkspacePicker() {
 
         <footer className="flex flex-col items-center gap-4 pb-6 text-center text-xs text-white/50 sm:flex-row sm:justify-between sm:text-left">
           <p>
-            Need another language? Let us know at{' '}
+            More coming soon, but need another language? Let us know at{' '}
             <a className="text-emerald-200 underline decoration-emerald-400/60 underline-offset-4" href="mailto:hello@yentic.com">
               hello@yentic.com
             </a>

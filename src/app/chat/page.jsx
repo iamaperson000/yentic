@@ -4,15 +4,24 @@ import { useEffect, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import Pusher from "pusher-js";
 
+const pusherConfigured = Boolean(
+  process.env.NEXT_PUBLIC_PUSHER_KEY && process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+);
+
 export default function ChatPage() {
   const { data: session, status: sessionStatus } = useSession();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState("Connecting to Pusher…");
+  const [status, setStatus] = useState(
+    pusherConfigured ? "Connecting to Pusher…" : "Chat is not configured for this environment."
+  );
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
+    if (!pusherConfigured) {
+      return undefined;
+    }
 
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
@@ -31,13 +40,24 @@ export default function ChatPage() {
     const handleConnected = () => {
       setStatus("Connected");
     };
+    const handleDisconnected = () => {
+      setStatus("Disconnected");
+    };
+    const handleConnectionError = () => {
+      setStatus("Unable to connect");
+      setError("Realtime chat is unavailable right now.");
+    };
 
     channel.bind("message", handleMessage);
     pusher.connection.bind("connected", handleConnected);
+    pusher.connection.bind("disconnected", handleDisconnected);
+    pusher.connection.bind("error", handleConnectionError);
 
     return () => {
       channel.unbind_all();
       pusher.connection.unbind("connected", handleConnected);
+      pusher.connection.unbind("disconnected", handleDisconnected);
+      pusher.connection.unbind("error", handleConnectionError);
       pusher.unsubscribe("chat");
       pusher.disconnect();
     };

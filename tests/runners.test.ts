@@ -29,3 +29,17 @@ test('C runner accepts stdin for scanf usage', async () => {
   assert.equal(result.stderr, '');
   assert.equal(result.stdout, '14\n');
 });
+
+test('C++ runner accepts stdin for cin usage', async () => {
+  const source = `#include <iostream>\nusing namespace std;\nint main() { int n; cin >> n; cout << n * 2 << endl; return 0; }`;
+  const result = await executeCode('cpp', source, '7\n');
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout, '14\n');
+});
+
+test('Java runner accepts stdin through Scanner', async () => {
+  const source = `import java.util.*;\npublic class Main {\n  public static void main(String[] args) {\n    Scanner scanner = new Scanner(System.in);\n    int n = scanner.nextInt();\n    System.out.println(n * 2);\n    scanner.close();\n  }\n}`;
+  const result = await executeCode('java', source, '7\n');
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout, '14\n');
+});

@@ -39,7 +39,7 @@ export default async function SetupProfilePage({
         <header className="space-y-2 text-center">
           <h1 className="text-3xl font-semibold">Create your Yentic handle</h1>
           <p className="text-sm text-white/60">
-            Pick a unique username to finish setting up your profile. You can add a short bio now or come back to it later.
+            Pick a unique username to finish setting up your profile. You can add a short bio now or come back to it later. 
           </p>
         </header>
         <SetupProfileForm

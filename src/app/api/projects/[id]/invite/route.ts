@@ -46,6 +46,13 @@ export async function POST(req: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      { error: 'Database connection is not configured' },
+      { status: 503 },
+    );
+  }
+
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
   });
@@ -63,18 +70,24 @@ export async function POST(req: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const body = (await req.json()) as { username?: string };
+  const body = (await req.json().catch(() => null)) as { username?: string } | null;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
   const identifier = body.username?.trim();
 
   if (!identifier) {
-    return NextResponse.json({ error: 'Username is required' }, { status: 400 });
+    return NextResponse.json({ error: 'Username or email is required' }, { status: 400 });
   }
+
+  const normalizedIdentifier = identifier.toLowerCase();
 
   const targetUser = await prisma.user.findFirst({
     where: {
       OR: [
-        { username: identifier },
-        { email: identifier },
+        { username: { equals: normalizedIdentifier, mode: 'insensitive' } },
+        { email: { equals: identifier, mode: 'insensitive' } },
       ],
     },
   });

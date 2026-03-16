@@ -7,6 +7,13 @@ import { pusherServer } from '@/lib/pusher';
 const RATE_LIMIT_WINDOW_MS = 15_000;
 const RATE_LIMIT_MAX_MESSAGES = 5;
 const MAX_MESSAGE_LENGTH = 800;
+const REQUIRED_PUSHER_ENV = [
+  'PUSHER_APP_ID',
+  'PUSHER_SECRET',
+  'PUSHER_CLUSTER',
+  'NEXT_PUBLIC_PUSHER_KEY',
+  'NEXT_PUBLIC_PUSHER_CLUSTER',
+];
 const rateLimitStore =
   globalThis.__yenticChatRateLimit ??
   (globalThis.__yenticChatRateLimit = new Map());
@@ -28,6 +35,14 @@ function isRateLimited(key) {
 // Serverless API route to publish chat messages to Pusher Channels.
 export async function POST(request) {
   try {
+    const missingEnv = REQUIRED_PUSHER_ENV.filter((key) => !process.env[key]);
+    if (missingEnv.length > 0) {
+      return NextResponse.json(
+        { error: 'Chat is not configured on this deployment.' },
+        { status: 503 },
+      );
+    }
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
@@ -38,7 +53,12 @@ export async function POST(request) {
       return NextResponse.json({ error: 'You are sending messages too quickly' }, { status: 429 });
     }
 
-    const { message } = await request.json();
+    const payload = await request.json().catch(() => null);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
+    const { message } = payload;
     const trimmedMessage = typeof message === 'string' ? message.trim() : '';
 
     if (!trimmedMessage) {

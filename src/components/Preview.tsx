@@ -32,7 +32,7 @@ const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'jav
 
 const consoleInputLanguages = new Set<ExecutableLanguage>();
 
-const textareaInputLanguages = new Set<ExecutableLanguage>(['c']);
+const textareaInputLanguages = new Set<ExecutableLanguage>(['c', 'cpp', 'java']);
 
 type RuntimeStatus = 'idle' | 'running' | 'ready' | 'error';
 
@@ -302,7 +302,7 @@ function RuntimePreview({
                     : void 0
                 }
                 className="min-h-[80px] flex-1 bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30"
-                placeholder="Provide input for scanf or other stdin reads…"
+                placeholder="Provide input for stdin reads…"
               />
               <div className="border-t border-white/5 bg-black/20 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white/30">
                 Passed to program via stdin before execution
