@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { clsx } from 'clsx';
 
@@ -108,7 +108,6 @@ export default function WorkspaceClient({
   initialProject,
   initialViewerRole,
 }: WorkspaceClientProps) {
-  const router = useRouter();
   const [slug, setSlug] = useState<WorkspaceSlug>(initialSlug);
   const config = workspaceConfigs[slug] ?? workspaceConfigs.web;
   const { data: session } = useSession();
@@ -255,9 +254,9 @@ export default function WorkspaceClient({
       }
 
       event.preventDefault();
-      router.push('/ide');
+      window.location.assign('/ide');
     },
-    [router],
+    [],
   );
 
   useEffect(() => {
