@@ -90,6 +90,30 @@ function sanitizeProjectMap(map: ProjectFileMap): ProjectFileMap {
   return result;
 }
 
+function projectMapsEqual(left: ProjectFileMap, right: ProjectFileMap): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every(path => {
+    const leftFile = left[path];
+    const rightFile = right[path];
+
+    if (!leftFile || !rightFile) {
+      return false;
+    }
+
+    return (
+      leftFile.path === rightFile.path &&
+      leftFile.language === rightFile.language &&
+      leftFile.code === rightFile.code
+    );
+  });
+}
+
 function decodeSnapshotToMap(encoded: string): ProjectFileMap | null {
   try {
     const binary = typeof window === 'undefined' ? Buffer.from(encoded, 'base64').toString('utf-8') : atob(encoded);
@@ -269,6 +293,9 @@ export default function CollaborativeEditor({
 
   const applySnapshotToParent = useCallback(
     (snapshot: ProjectFileMap) => {
+      if (projectMapsEqual(snapshot, filesRef.current)) {
+        return;
+      }
       suppressLocalSyncRef.current = true;
       onFilesChangeRef.current(snapshot);
       const doc = ydocRef.current;
@@ -438,6 +465,12 @@ export default function CollaborativeEditor({
     }
 
     const sanitized = sanitizeProjectMap(files);
+    const currentSnapshot = mapToProjectFileMap(filesMap);
+
+    if (projectMapsEqual(sanitized, currentSnapshot)) {
+      return;
+    }
+
     doc.transact(() => applyFilesToMap(filesMap, sanitized), LOCAL_ORIGIN);
   }, [files, projectId]);
 

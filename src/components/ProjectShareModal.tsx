@@ -84,16 +84,16 @@ export function ProjectShareModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-2xl border border-white/15 bg-[#0b0f1a] p-6 text-white shadow-2xl">
+      <div className="relative w-full max-w-lg border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] p-5 text-[var(--ide-text)] shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold">Share project</h2>
-            <p className="text-sm text-white/60">Invite teammates to edit this project in real time.</p>
+            <p className="text-sm text-[var(--ide-text-muted)]">Invite teammates to edit this project in real time.</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-white/10 bg-white/10 p-1.5 text-white/70 transition hover:border-white/30 hover:bg-white/20 hover:text-white"
+            className="border border-[var(--ide-border)] p-1.5 text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]"
             aria-label="Close share dialog"
           >
             <svg viewBox="0 0 20 20" aria-hidden className="h-4 w-4">
@@ -107,11 +107,11 @@ export function ProjectShareModal({
         </div>
 
         <div className="mt-4 space-y-3">
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-white">Shareable link</p>
-                <p className="text-xs text-white/50">
+                <p className="text-sm font-semibold text-[var(--ide-text)]">Shareable link</p>
+                <p className="text-xs text-[var(--ide-text-muted)]">
                   {canManageShareLink
                     ? 'Anyone with this link joins as a viewer.'
                     : 'Only project owners can generate and manage share links.'}
@@ -122,52 +122,52 @@ export function ProjectShareModal({
                   type="button"
                   onClick={onResetShareUrl}
                   disabled={isShareUrlLoading}
-                  className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/70 transition hover:border-white/30 hover:bg-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  className="border border-[var(--ide-border)] px-3 py-1 text-[11px] font-medium text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Refresh link
                 </button>
               ) : null}
             </div>
             {isShareUrlLoading ? (
-              <p className="mt-3 text-sm text-white/60">Generating link…</p>
+              <p className="mt-3 text-sm text-[var(--ide-text-muted)]">Generating link…</p>
             ) : canManageShareLink ? (
               shareUrl ? (
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <input
                     value={fullShareUrl}
                     readOnly
-                    className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white/80 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40"
+                    className="flex-1 border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2 text-sm text-[var(--ide-text)] outline-none focus:border-[var(--ide-accent)]"
                   />
                   <button
                     type="button"
                     onClick={onCopyShareUrl}
                     disabled={!shareUrl || isShareUrlLoading}
-                    className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="border border-[var(--ide-border-strong)] bg-[var(--ide-bg-active)] px-4 py-2 text-sm font-medium text-[var(--ide-text)] transition hover:border-[var(--ide-accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Copy link
                   </button>
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-white/60">Click refresh to generate a share link.</p>
+                <p className="mt-3 text-sm text-[var(--ide-text-muted)]">Click refresh to generate a share link.</p>
               )
             ) : (
-              <p className="mt-3 text-sm text-white/50">Ask the project owner to share the link with you.</p>
+              <p className="mt-3 text-sm text-[var(--ide-text-muted)]">Ask the project owner to share the link with you.</p>
             )}
-            {shareUrlError ? <p className="mt-2 text-sm text-rose-300">{shareUrlError}</p> : null}
+            {shareUrlError ? <p className="mt-2 text-sm text-[#f2b8ae]">{shareUrlError}</p> : null}
           </div>
 
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-white/40">Your role</p>
-            <p className="text-sm font-medium text-white/80">{roleLabel(viewerRole)}</p>
+            <p className="text-xs uppercase tracking-[0.12em] text-[var(--ide-text-faint)]">Your role</p>
+            <p className="text-sm font-medium text-[var(--ide-text)]">{roleLabel(viewerRole)}</p>
           </div>
 
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-white">Invite collaborators</p>
-                <p className="text-xs text-white/50">Use a username or email.</p>
+                <p className="text-sm font-semibold text-[var(--ide-text)]">Invite collaborators</p>
+                <p className="text-xs text-[var(--ide-text-muted)]">Use a username or email.</p>
               </div>
-              <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.25em] text-white/60">
+              <span className="border border-[var(--ide-border)] px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--ide-text-faint)]">
                 Owners only
               </span>
             </div>
@@ -184,32 +184,32 @@ export function ProjectShareModal({
                 onChange={event => onInviteValueChange(event.target.value)}
                 placeholder="Search username or email"
                 disabled={!canInvite || isInviteSubmitting}
-                className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex-1 border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2 text-sm text-[var(--ide-text)] placeholder:text-[var(--ide-text-faint)] outline-none focus:border-[var(--ide-accent)] disabled:cursor-not-allowed disabled:opacity-60"
               />
               <button
                 type="submit"
                 disabled={!canInvite || isInviteSubmitting}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
+                className={`border px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ide-accent)] ${
                   canInvite && !isInviteSubmitting
-                    ? 'bg-emerald-500 text-black hover:bg-emerald-400'
-                    : 'cursor-not-allowed bg-white/10 text-white/40'
+                    ? 'border-[var(--ide-border-strong)] bg-[var(--ide-bg-active)] text-[var(--ide-text)] hover:border-[var(--ide-accent)] hover:text-white'
+                    : 'cursor-not-allowed border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] text-[var(--ide-text-faint)]'
                 }`}
               >
                 {isInviteSubmitting ? 'Inviting…' : 'Invite'}
               </button>
             </form>
-            {inviteError ? <p className="mt-2 text-sm text-rose-300">{inviteError}</p> : null}
+            {inviteError ? <p className="mt-2 text-sm text-[#f2b8ae]">{inviteError}</p> : null}
             {!canInvite ? (
-              <p className="mt-2 text-xs text-white/40">Only project owners can invite collaborators.</p>
+              <p className="mt-2 text-xs text-[var(--ide-text-faint)]">Only project owners can invite collaborators.</p>
             ) : null}
           </div>
         </div>
 
         <div className="mt-6">
-          <p className="text-xs uppercase tracking-[0.3em] text-white/40">Collaborators</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-[var(--ide-text-faint)]">Collaborators</p>
           <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-2">
             {isLoading ? (
-              <div className="flex items-center justify-center rounded-lg border border-white/10 bg-white/5 py-6 text-sm text-white/70">
+              <div className="flex items-center justify-center border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] py-6 text-sm text-[var(--ide-text-muted)]">
                 Loading collaborators…
               </div>
             ) : members.length ? (
@@ -218,22 +218,22 @@ export function ProjectShareModal({
                 return (
                   <div
                     key={member.id}
-                    className="flex items-center justify-between rounded-lg border border-white/10 bg-black/30 px-3 py-2"
+                    className="flex items-center justify-between border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-sm font-semibold uppercase text-white/80">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--ide-bg-hover)] text-sm font-semibold uppercase text-[var(--ide-text)]">
                         {member.name?.charAt(0) ?? member.username?.charAt(0) ?? 'U'}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-white">{member.name ?? member.username ?? 'Unknown user'}</p>
-                        <p className="text-xs text-white/50">{roleLabel(member.role)}</p>
+                        <p className="text-sm font-medium text-[var(--ide-text)]">{member.name ?? member.username ?? 'Unknown user'}</p>
+                        <p className="text-xs text-[var(--ide-text-muted)]">{roleLabel(member.role)}</p>
                       </div>
                     </div>
                     {canRemove ? (
                       <button
                         type="button"
                         onClick={() => onRemoveCollaborator(member.id)}
-                        className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white/70 transition hover:border-rose-400/60 hover:bg-rose-500/20 hover:text-rose-100"
+                        className="border border-[var(--ide-border)] px-3 py-1 text-xs font-medium text-[var(--ide-text-muted)] transition hover:border-[var(--ide-danger)]/50 hover:bg-[var(--ide-danger)]/10 hover:text-[#f2b8ae]"
                       >
                         Remove
                       </button>
@@ -242,12 +242,12 @@ export function ProjectShareModal({
                 );
               })
             ) : (
-              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm text-white/60">
+              <div className="border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-4 text-sm text-[var(--ide-text-muted)]">
                 No collaborators yet.
               </div>
             )}
           </div>
-          {removeError ? <p className="mt-3 text-sm text-rose-300">{removeError}</p> : null}
+          {removeError ? <p className="mt-3 text-sm text-[#f2b8ae]">{removeError}</p> : null}
         </div>
       </div>
     </div>

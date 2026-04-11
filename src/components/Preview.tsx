@@ -10,6 +10,7 @@ import {
   useErrorMessage
 } from '@codesandbox/sandpack-react';
 import { clsx } from 'clsx';
+import { RotateCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { SupportedLanguage } from '@/lib/project';
@@ -26,6 +27,7 @@ type PreviewProps = {
   disabledMessage?: string;
   activeFileCode?: string;
   activeFileLanguage?: SupportedLanguage;
+  onRefresh?: () => void;
 };
 
 const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'java']);
@@ -244,10 +246,10 @@ function RuntimePreview({
 
   const badgeClass =
     computedStatus === 'running'
-      ? 'border border-amber-300/60 bg-amber-400/15 text-amber-100'
+      ? 'border border-amber-300/40 bg-amber-500/10 text-amber-100'
       : computedStatus === 'error'
-        ? 'border border-rose-400/50 bg-rose-500/15 text-rose-100'
-        : 'border border-emerald-400/50 bg-emerald-500/15 text-emerald-100';
+        ? 'border border-[var(--ide-danger)]/50 bg-[var(--ide-danger)]/10 text-[#f2b8ae]'
+        : 'border border-[#2d7d46] bg-[#1f4d2e] text-[#d4f7dc]';
 
   const statusLabel =
     computedStatus === 'running'
@@ -260,22 +262,22 @@ function RuntimePreview({
 
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/50">{runtimeLabel}</span>
-        <span className={clsx('inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.25em]', badgeClass)}>
+      <div className="flex items-center justify-between border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2">
+        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">{runtimeLabel}</span>
+        <span className={clsx('inline-flex items-center gap-2 border px-2 py-1 text-[10px] uppercase tracking-[0.12em]', badgeClass)}>
           <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
           {statusLabel}
         </span>
       </div>
-      <div className="relative flex flex-1 flex-col bg-black/50">
-        <div className="relative flex flex-1 flex-col gap-4 overflow-hidden p-4 text-sm text-white/80">
+      <div className="relative flex flex-1 flex-col bg-[var(--ide-bg-panel)]">
+        <div className="relative flex flex-1 flex-col gap-3 overflow-hidden p-3 text-sm text-[var(--ide-text)]">
           {!autorunEnabled && hasPendingChanges ? (
-            <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+            <div className="border border-amber-300/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
               Code changed since your last run. Press Run to update the output.
             </div>
           ) : null}
           {computedErrorMessage ? (
-            <div className="rounded-2xl border border-rose-400/40 bg-rose-500/15 px-4 py-3 text-rose-100">
+            <div className="border border-[var(--ide-danger)]/40 bg-[var(--ide-danger)]/10 px-3 py-2 text-[#f2b8ae]">
               {computedErrorMessage}
             </div>
           ) : null}
@@ -290,8 +292,8 @@ function RuntimePreview({
               }
             />
           ) : supportsStandardInput ? (
-            <div className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-              <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
+            <div className="flex flex-col overflow-hidden border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)]">
+              <div className="border-b border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">
                 Standard Input
               </div>
               <textarea
@@ -301,42 +303,42 @@ function RuntimePreview({
                     ? setTextInputs(previous => ({ ...previous, [normalizedLanguage]: event.target.value }))
                     : void 0
                 }
-                className="min-h-[80px] flex-1 bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/30"
+                className="min-h-[80px] flex-1 bg-transparent px-3 py-3 font-mono text-[13px] leading-relaxed text-[var(--ide-text)] outline-none placeholder:text-[var(--ide-text-faint)]"
                 placeholder="Provide input for stdin reads…"
               />
-              <div className="border-t border-white/5 bg-black/20 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-white/30">
+              <div className="border-t border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-[var(--ide-text-faint)]">
                 Passed to program via stdin before execution
               </div>
             </div>
           ) : null}
-          <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-            <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">
+          <div className="flex flex-1 flex-col overflow-hidden border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)]">
+            <div className="border-b border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">
               Output
             </div>
             <div
               ref={scrollRef}
               data-testid="runtime-output"
-              className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed text-white/80"
+              className="flex-1 overflow-auto p-3 font-mono text-[13px] leading-relaxed text-[var(--ide-text)]"
             >
               {displayStdout ? (
                 <pre className="whitespace-pre-wrap break-words">{displayStdout}</pre>
               ) : (
-                <span className="text-white/40">{computedStatus === 'running' ? 'Executing…' : 'No output yet.'}</span>
+                <span className="text-[var(--ide-text-faint)]">{computedStatus === 'running' ? 'Executing…' : 'No output yet.'}</span>
               )}
             </div>
           </div>
           {displayStderr ? (
-            <div className="flex flex-col overflow-hidden rounded-2xl border border-rose-400/40 bg-rose-500/15">
-              <div className="border-b border-rose-400/40 bg-transparent px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-rose-100/85">
+            <div className="flex flex-col overflow-hidden border border-[var(--ide-danger)]/40 bg-[var(--ide-danger)]/10">
+              <div className="border-b border-[var(--ide-danger)]/40 bg-transparent px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[#f2b8ae]">
                 Errors
               </div>
-              <div className="max-h-48 overflow-auto p-4 font-mono text-[13px] leading-relaxed text-rose-100/90">
+              <div className="max-h-48 overflow-auto p-3 font-mono text-[13px] leading-relaxed text-[#f2b8ae]">
                 <pre className="whitespace-pre-wrap break-words">{displayStderr}</pre>
               </div>
             </div>
           ) : null}
           {computedStatus === 'idle' && !displayStderr && !displayStdout ? (
-            <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white/60">
+            <div className="border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2 text-sm text-[var(--ide-text-muted)]">
               {idleHint}
             </div>
           ) : null}
@@ -419,14 +421,14 @@ function LiveConsolePanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-black/50 text-white/80">
-      <div className="flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/50">Console</span>
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-[var(--ide-bg-panel)] text-[var(--ide-text)]">
+      <div className="flex items-center justify-between border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2">
+        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">Console</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleClear}
-            className="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70 transition hover:border-white/40 hover:text-white"
+            className="inline-flex h-7 items-center border border-[var(--ide-border)] px-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]"
           >
             Clear
           </button>
@@ -434,7 +436,7 @@ function LiveConsolePanel() {
       </div>
       <div ref={listRef} className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed">
         {entries.length === 0 ? (
-          <span className="text-white/40">Console output from the preview will appear here.</span>
+          <span className="text-[var(--ide-text-faint)]">Console output from the preview will appear here.</span>
         ) : (
           <ul className="space-y-2">
             {entries.map(entry => {
@@ -455,7 +457,7 @@ function LiveConsolePanel() {
           </ul>
         )}
       </div>
-      <div className="border-t border-white/10 bg-black/40 px-4 py-3 text-xs text-white/40">
+      <div className="border-t border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-4 py-3 text-xs text-[var(--ide-text-faint)]">
         Interactive evaluation is disabled here. Open your browser devtools if you need to inspect the preview manually.
       </div>
     </div>
@@ -579,11 +581,11 @@ function SandpackPreviewPane({ isVisible }: { isVisible: boolean }) {
           aria-live="assertive"
         >
           <div className="max-h-full w-full max-w-full overflow-auto">
-            <div className="mx-auto flex max-w-full flex-col gap-3 rounded-2xl border border-rose-400/40 bg-rose-400/15 px-6 py-4 text-left shadow-[0_20px_60px_rgba(244,63,94,0.25)]">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-rose-200/80">
+            <div className="mx-auto flex max-w-full flex-col gap-3 border border-[var(--ide-danger)]/40 bg-[var(--ide-danger)]/10 px-5 py-4 text-left">
+              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[#f2b8ae]">
                 Preview Error
               </span>
-              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-rose-50/90">
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-[#f2b8ae]">
                 {combinedError}
               </pre>
             </div>
@@ -634,7 +636,8 @@ export function Preview({
   mode,
   disabledMessage,
   activeFileCode,
-  activeFileLanguage
+  activeFileLanguage,
+  onRefresh,
 }: PreviewProps) {
   const effectiveMode: PreviewMode = template ? 'sandpack' : mode ?? 'message';
   const label =
@@ -686,20 +689,20 @@ export function Preview({
   const showRunButton = showAutorunControls && !autorunEnabled;
 
   return (
-    <div className="flex h-full min-h-0 flex-col w-full">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/40 px-4 py-3">
+    <div className="flex h-full min-h-0 w-full flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2">
         <div className="flex items-center gap-3">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/50">{label}</span>
+          <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">{label}</span>
           {effectiveMode === 'sandpack' ? (
-            <div className="flex items-center gap-1.5 text-white/60">
+            <div className="flex items-center gap-px border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-muted)]">
               <button
                 type="button"
                 onClick={() => setActiveSandpackView('preview')}
                 className={clsx(
-                  'relative rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] transition',
+                  'px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] transition',
                   activeSandpackView === 'preview'
-                    ? 'bg-emerald-400/90 text-black shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
-                    : 'border border-white/20 bg-transparent text-white/70 hover:border-white/40 hover:text-white'
+                    ? 'bg-[var(--ide-bg-active)] text-[var(--ide-text)]'
+                    : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]'
                 )}
               >
                 Preview
@@ -708,10 +711,10 @@ export function Preview({
                 type="button"
                 onClick={() => setActiveSandpackView('console')}
                 className={clsx(
-                  'relative rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] transition',
+                  'px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] transition',
                   activeSandpackView === 'console'
-                    ? 'bg-emerald-400/90 text-black shadow-[0_10px_30px_rgba(16,185,129,0.4)]'
-                    : 'border border-white/20 bg-transparent text-white/70 hover:border-white/40 hover:text-white'
+                    ? 'bg-[var(--ide-bg-active)] text-[var(--ide-text)]'
+                    : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]'
                 )}
               >
                 Console
@@ -720,45 +723,49 @@ export function Preview({
           ) : null}
         </div>
         {showAutorunControls ? (
-          <div className="flex items-center gap-3 text-xs text-white/60">
+          <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)]">
             {showRunButton ? (
               <button
                 type="button"
                 onClick={triggerRun}
                 data-testid="preview-run-button"
-                className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+                className="inline-flex h-7 items-center border border-[#2d7d46] bg-[#1f4d2e] px-3 text-[11px] font-medium uppercase tracking-[0.12em] text-[#d4f7dc] transition hover:border-[#399c58] hover:bg-[#256338]"
               >
                 Run
               </button>
             ) : null}
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">Autorun</span>
+            <div className="flex items-center gap-1">
+              {onRefresh ? (
+                <button
+                  type="button"
+                  onClick={onRefresh}
+                  data-testid="preview-refresh-button"
+                  className="inline-flex h-7 w-7 items-center justify-center border border-[var(--ide-border)] text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]"
+                  aria-label="Refresh preview"
+                  title="Refresh preview"
+                >
+                  <RotateCw className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={toggleAutorun}
                 aria-pressed={autorunEnabled}
                 aria-label="Toggle autorun"
                 className={clsx(
-                  'relative inline-flex h-6 w-11 items-center rounded-full border transition',
+                  'inline-flex h-7 items-center border px-2.5 text-[10px] font-medium uppercase tracking-[0.12em] transition',
                   autorunEnabled
-                    ? 'border-emerald-300/70 bg-emerald-400/30 shadow-[0_8px_20px_rgba(16,185,129,0.25)]'
-                    : 'border-white/20 bg-white/5 hover:border-white/30 hover:bg-white/10'
+                    ? 'border-[var(--ide-border-strong)] bg-[var(--ide-bg-active)] text-[var(--ide-text)]'
+                    : 'border-[var(--ide-border)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-muted)] hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]'
                 )}
               >
-                <span
-                  className={clsx(
-                    'inline-flex h-5 w-5 translate-x-1 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-slate-900 transition',
-                    autorunEnabled && 'translate-x-[1.35rem] bg-emerald-300 text-emerald-950 shadow-[0_8px_16px_rgba(16,185,129,0.35)]'
-                  )}
-                >
-                  {autorunEnabled ? 'ON' : 'OFF'}
-                </span>
+                Autorun {autorunEnabled ? 'On' : 'Off'}
               </button>
             </div>
           </div>
         ) : null}
       </div>
-      <div className="relative flex flex-1 min-h-0 bg-black/50 w-full">
+      <div className="relative flex w-full min-h-0 flex-1 bg-[var(--ide-bg-panel)]">
         {effectiveMode === 'sandpack' ? (
           <SandpackProvider
             files={files}
@@ -825,20 +832,20 @@ export function Preview({
           />
         ) : effectiveMode === 'code' ? (
           <div className="relative flex h-full flex-col overflow-hidden">
-            <div className="relative flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 text-xs text-white/60">
+            <div className="relative flex items-center justify-between border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2 text-[11px] text-[var(--ide-text-muted)]">
               <span className="truncate">{activePath.replace(/^[\/]/, '')}</span>
-              <span className="rounded-full border border-white/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-white/70">
+              <span className="border border-[var(--ide-border)] px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--ide-text-faint)]">
                 Viewing
               </span>
             </div>
-            <div className="relative flex-1 bg-black/50">
-              <pre className="h-full w-full overflow-auto whitespace-pre-wrap break-words bg-black/40 p-6 font-mono text-sm text-white/80">
+            <div className="relative flex-1 bg-[var(--ide-bg-panel)]">
+              <pre className="h-full w-full overflow-auto whitespace-pre-wrap break-words bg-[var(--ide-bg-editor)] p-4 font-mono text-[13px] text-[var(--ide-text)]">
                 <code>{activeFileCode ?? ''}</code>
               </pre>
             </div>
           </div>
         ) : (
-          <div className="flex h-full items-center justify-center px-8 text-center text-sm text-white/60">
+          <div className="flex h-full items-center justify-center px-8 text-center text-sm text-[var(--ide-text-muted)]">
             {disabledMessage ?? 'Preview is not available for this workspace yet.'}
           </div>
         )}
