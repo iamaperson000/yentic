@@ -56,7 +56,14 @@ test('local C workspace supports naming, file creation, execution, and local bac
       meta: expect.stringContaining('C Smoke Project'),
     });
 
-  await page.getByTestId('back-to-workspaces').click();
+  const backButtonBox = await page.getByTestId('back-to-workspaces').boundingBox();
+  if (!backButtonBox) {
+    throw new Error('Back to workspaces button was not rendered');
+  }
+  await page.mouse.click(
+    backButtonBox.x + backButtonBox.width / 2,
+    backButtonBox.y + backButtonBox.height / 2,
+  );
   await expect(page).toHaveURL(/\/ide$/);
 
   await page.close();

@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { clsx } from 'clsx';
 
 import { ChevronLeft, X } from 'lucide-react';
@@ -108,6 +108,7 @@ export default function WorkspaceClient({
   initialProject,
   initialViewerRole,
 }: WorkspaceClientProps) {
+  const router = useRouter();
   const [slug, setSlug] = useState<WorkspaceSlug>(initialSlug);
   const config = workspaceConfigs[slug] ?? workspaceConfigs.web;
   const { data: session } = useSession();
@@ -239,6 +240,25 @@ export default function WorkspaceClient({
   const markRemoteMutation = useCallback(() => {
     collaborativeDirtyRef.current = true;
   }, []);
+
+  const handleBackToWorkspaces = useCallback(
+    (event: ReactMouseEvent<HTMLAnchorElement>) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      router.push('/ide');
+    },
+    [router],
+  );
 
   useEffect(() => {
     if (!activePath || !files[activePath]) {
@@ -1384,6 +1404,7 @@ export default function WorkspaceClient({
             <Link
               href="/ide"
               data-testid="back-to-workspaces"
+              onClick={handleBackToWorkspaces}
               className={clsx(chromeButtonClass, 'gap-1.5 px-2')}
               aria-label="Back to workspaces"
             >
