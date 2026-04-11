@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import type { ReactNode } from 'react';
 
 import { site } from '@/config/site';
@@ -40,6 +44,18 @@ const footerColumns = [
 ];
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const { status } = useSession();
+  const hideMarketingChrome = pathname === '/' && status !== 'unauthenticated';
+
+  if (hideMarketingChrome) {
+    return (
+      <div className="min-h-screen bg-[var(--color-bg-primary)] text-white">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen bg-[var(--color-bg-primary)] text-white">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_-10%,_rgba(255,255,255,0.09),_transparent_58%)]" />
