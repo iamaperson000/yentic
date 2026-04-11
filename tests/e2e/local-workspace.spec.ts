@@ -12,6 +12,9 @@ test('local C workspace supports naming, file creation, execution, and local bac
   await projectNameInput.press('Enter');
 
   await expect(page.getByTestId('project-title')).toHaveText('C Smoke Project');
+  await expect
+    .poll(async () => (await page.locator('.monaco-editor').first().boundingBox())?.width ?? 0)
+    .toBeGreaterThan(200);
 
   await page.getByTestId('create-file-button').click();
 
@@ -52,6 +55,9 @@ test('local C workspace supports naming, file creation, execution, and local bac
       files: expect.stringContaining('helpers.c'),
       meta: expect.stringContaining('C Smoke Project'),
     });
+
+  await page.getByTestId('back-to-workspaces').click();
+  await expect(page).toHaveURL(/\/ide$/);
 
   await page.close();
 });

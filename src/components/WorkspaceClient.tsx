@@ -1383,10 +1383,12 @@ export default function WorkspaceClient({
           <div className="flex min-w-0 items-center gap-2">
             <Link
               href="/ide"
-              className={clsx(chromeButtonClass, 'w-7 justify-center px-0')}
+              data-testid="back-to-workspaces"
+              className={clsx(chromeButtonClass, 'gap-1.5 px-2')}
               aria-label="Back to workspaces"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
+              <span className="text-[11px]">Workspaces</span>
             </Link>
             <div className="flex min-w-0 items-center gap-2 text-[12px]">
               <span className="text-[var(--ide-text-faint)]">{config.title}</span>
