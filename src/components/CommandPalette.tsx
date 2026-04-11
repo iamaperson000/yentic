@@ -4,14 +4,14 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Command } from 'cmdk';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Code2, FileCode, Globe, Layout, Map, Terminal, UserCircle } from 'lucide-react';
+import { Code2, FileCode, Globe, Home, Map, Terminal, UserCircle } from 'lucide-react';
 
 const navigationItems = [
   { label: 'Open IDE', href: '/ide', icon: Code2 },
-  { label: 'Dashboard', href: '/dashboard', icon: Layout },
+  { label: 'Home', href: '/', icon: Home },
   { label: 'Features', href: '/features', icon: FileCode },
   { label: 'Roadmap', href: '/roadmap', icon: Map },
-  { label: 'Profile', href: '/dashboard', icon: UserCircle },
+  { label: 'Profile', href: '/', icon: UserCircle },
 ];
 
 const workspaceItems = [

@@ -65,8 +65,8 @@ export default function AuthStatus() {
           </svg>
         </button>
         <Dropdown open={open} onClose={() => setOpen(false)}>
-          <DropdownItem onSelect={() => router.push('/dashboard')}>
-            Dashboard
+          <DropdownItem onSelect={() => router.push('/')}>
+            Home
           </DropdownItem>
           <DropdownItem onSelect={() => router.push(profileHref)}>
             {session.user.username ? 'Profile' : 'Finish profile'}
@@ -81,7 +81,7 @@ export default function AuthStatus() {
 
   return (
     <button
-      onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+      onClick={() => signIn('google', { callbackUrl: '/' })}
       className="group flex items-center gap-4 rounded-full border border-white/15 bg-white/5 px-5 py-2 text-left text-sm text-white/90 transition hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/10 hover:text-white"
     >
       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-md">

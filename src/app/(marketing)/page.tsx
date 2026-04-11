@@ -4,9 +4,8 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 
-import AuthStatus from '@/components/AuthStatus';
+import SignedInHomeShell from '@/components/home/SignedInHomeShell';
 import { AnimateIn } from '@/components/ui/AnimateIn';
-import { workspaceList, type WorkspaceSlug } from '@/lib/project';
 
 const workflowSteps = [
   {
@@ -38,14 +37,6 @@ const planningCards = [
   { stage: 'Next', notes: 'Cleaner project controls and easier personal organization.' },
   { stage: 'Later', notes: 'Simple publish and share options for finished projects.' },
 ];
-
-const workspaceTint: Record<WorkspaceSlug, string> = {
-  web: 'from-emerald-300/25 to-transparent',
-  python: 'from-cyan-300/25 to-transparent',
-  c: 'from-orange-300/25 to-transparent',
-  cpp: 'from-amber-300/25 to-transparent',
-  java: 'from-sky-300/25 to-transparent',
-};
 
 const fadeUp = {
   initial: { opacity: 0, y: 16 },
@@ -211,91 +202,16 @@ function LandingHome() {
   );
 }
 
-function AuthenticatedHome({ userName }: { userName: string }) {
-  const firstName = userName.split(' ')[0] ?? 'there';
-
-  return (
-    <div className="flex flex-col gap-14">
-      <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] p-8 sm:p-10">
-        <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:48px_48px]" />
-        <div className="relative grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
-          <div>
-            <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-white/70">
-              Welcome back
-            </span>
-            <h1 className="mt-5 text-4xl font-semibold tracking-[-0.03em] text-white">
-              {firstName}, continue building.
-            </h1>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/65 sm:text-base">
-              Start a new project or reopen a saved one.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/ide"
-                className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-slate-200 hover:shadow-[0_0_20px_rgba(16,185,129,0.25)]"
-              >
-                New project
-              </Link>
-              <Link
-                href="/ide#saved-projects"
-                className="rounded-full border border-white/20 px-5 py-2.5 text-sm font-semibold text-white/90 transition hover:border-white/40"
-              >
-                Saved projects
-              </Link>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[var(--color-border-subtle)] bg-black/35 p-4">
-            <AuthStatus />
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-[-0.02em] text-white">Choose a workspace</h2>
-            <p className="mt-1 text-sm text-white/65">Open a runtime and start coding.</p>
-          </div>
-          <Link
-            href="/ide"
-            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white/75 transition hover:border-white/40"
-          >
-            Browse all
-          </Link>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {workspaceList.map((workspace) => (
-            <Link
-              key={workspace.slug}
-              href={`/ide/${workspace.slug}`}
-              className="group overflow-hidden rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] transition hover:border-white/25 hover:-translate-y-1 hover:shadow-[0_0_24px_rgba(16,185,129,0.1)]"
-            >
-              <div className={`h-28 border-b border-[var(--color-border-subtle)] bg-gradient-to-br ${workspaceTint[workspace.slug]}`} />
-              <div className="space-y-3 p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Workspace</p>
-                <h3 className="text-lg font-semibold text-white">{workspace.title}</h3>
-                <p className="text-sm leading-relaxed text-white/65">{workspace.description}</p>
-                <p className="text-sm font-semibold text-white/90">
-                  Create project <span aria-hidden>→</span>
-                </p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
 export default function Home() {
   const { data: session, status } = useSession();
 
-  if (status !== 'authenticated' || !session?.user) {
-    return <LandingHome />;
+  if (status === 'loading') {
+    return <div className="min-h-[40vh]" aria-hidden />;
   }
 
-  const displayName = session.user.name ?? session.user.email ?? 'there';
-  return <AuthenticatedHome userName={displayName} />;
+  if (status === 'authenticated' && session?.user) {
+    return <SignedInHomeShell />;
+  }
+
+  return <LandingHome />;
 }

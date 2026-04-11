@@ -87,7 +87,7 @@ export async function proxy(request: NextRequest) {
     }
 
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/";
     url.search = "";
     return NextResponse.redirect(url);
   }

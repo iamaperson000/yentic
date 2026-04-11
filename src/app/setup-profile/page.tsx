@@ -30,7 +30,7 @@ export default async function SetupProfilePage({
   }
 
   if (session.user?.username) {
-    redirect(nextPath ?? '/dashboard');
+    redirect(nextPath ?? '/');
   }
 
   return (

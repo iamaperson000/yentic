@@ -121,7 +121,7 @@ export default function SetupProfileForm({
         console.error('Failed to refresh session', error);
       }
     }
-    router.push(safeNextPath ?? '/dashboard');
+    router.push(safeNextPath ?? '/');
     router.refresh();
   }
 
