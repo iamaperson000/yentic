@@ -3,167 +3,180 @@
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 
-import { site } from '@/config/site';
 import AuthStatus from '@/components/AuthStatus';
 import { workspaceList, type WorkspaceSlug } from '@/lib/project';
 
-const marketingHighlights = [
+const workflowSteps = [
   {
-    title: 'Instant launch',
-    body: 'Spin up a fresh workspace in seconds with zero config and an interface tuned for builders.',
+    step: '01',
+    title: 'Open and start coding',
+    body: 'Pick a runtime and jump into a real project immediately.',
   },
   {
-    title: 'Live preview',
-    body: 'Sandpack-powered preview mirrors every keystroke so you can ship UI changes without guessing.',
+    step: '02',
+    title: 'Edit with full context',
+    body: 'Use Monaco, tabbed files, and quick keyboard navigation.',
   },
   {
-    title: 'Cloud persistence',
-    body: 'Projects sync to the cloud so you can swap devices without losing context.',
-  },
-];
-
-const marketingWorkflow = [
-  {
-    label: 'Create',
-    description:
-      'Start with the opinionated HTML/CSS/JS starter or import your own repo via GitHub.',
-  },
-  {
-    label: 'Collaborate',
-    description:
-      'Invite teammates into the same workspace and pair program in real time (multiplayer in progress).',
-  },
-  {
-    label: 'Ship',
-    description:
-      'Deploy through your provider of choice with export-ready bundles and build logs.',
+    step: '03',
+    title: 'Validate and keep moving',
+    body: 'Preview changes live and resume work from saved projects later.',
   },
 ];
 
-const snippetLines = [
-  (
-    <>
-      <span className="text-emerald-300">const</span> workspace = createWorkspace(&apos;yentic&apos;);
-    </>
-  ),
-  (
-    <>
-      workspace.launch({`{`} autosave: true, preview: &apos;sandpack&apos; {`}`});
-    </>
-  ),
-  <>{'// minimal UI, zero distractions'}</>,
-  <>workspace.share(&apos;team&apos;);</>,
+const detailRows = [
+  { label: 'Editor', value: 'Monaco, tabs, shortcuts, and quick file workflow.' },
+  { label: 'Preview', value: 'Live updates while code changes are still in progress.' },
+  { label: 'Runtime', value: 'Web, Python, C, C++, and Java workspaces in one launcher.' },
+  { label: 'History', value: 'Project state persists so you can reopen exactly where you left off.' },
 ];
 
-const accentCardGradients: Record<WorkspaceSlug, string> = {
-  web: 'from-emerald-300/30 via-emerald-400/10 to-transparent',
-  python: 'from-sky-300/30 via-sky-400/10 to-transparent',
-  c: 'from-violet-300/30 via-violet-400/10 to-transparent',
-  cpp: 'from-violet-300/30 via-violet-400/10 to-transparent',
-  java: 'from-amber-300/30 via-amber-400/10 to-transparent',
+const planningCards = [
+  { stage: 'Now', notes: 'Core editing, preview, and saved project flow are stable.' },
+  { stage: 'Next', notes: 'Cleaner project controls and easier personal organization.' },
+  { stage: 'Later', notes: 'Simple publish and share options for finished projects.' },
+];
+
+const workspaceTint: Record<WorkspaceSlug, string> = {
+  web: 'from-emerald-300/25 to-transparent',
+  python: 'from-cyan-300/25 to-transparent',
+  c: 'from-orange-300/25 to-transparent',
+  cpp: 'from-amber-300/25 to-transparent',
+  java: 'from-sky-300/25 to-transparent',
 };
 
-function MarketingLanding() {
+function LandingHome() {
   return (
-    <>
-      <section className="grid gap-10 md:grid-cols-[1.15fr_0.85fr] md:items-center">
-        <div className="flex flex-col gap-6">
-          <span className="text-xs font-semibold uppercase tracking-[0.4em] text-emerald-300/80">
-            Introducing Yentic
+    <div className="flex flex-col gap-24">
+      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#07090d]">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.55] [background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:48px_48px]" />
+
+        <div className="relative mx-auto flex w-full max-w-[920px] flex-col items-center px-6 pb-14 pt-24 text-center sm:pb-20 sm:pt-32">
+          <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-white/70">
+            Yentic IDE
           </span>
-          <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
-            A lightweight, fast, and aesthetic web IDE that feels instantly familiar.
+
+          <h1 className="mt-6 max-w-[700px] text-[40px] font-semibold leading-[1.02] tracking-[-0.04em] text-white sm:text-[58px] lg:text-[70px]">
+            Build and iterate from one browser workspace.
           </h1>
-          <p className="text-lg text-white/70">
-            Edit, preview, and share projects instantly with a minimal interface,
-            multiplayer-ready foundation, and thoughtful defaults. Yentic keeps the
-            tooling out of your way so you can stay in flow.
+
+          <p className="mt-5 max-w-[620px] text-base leading-relaxed text-white/65 sm:text-lg">
+            A lightweight and fast web IDE that feels instantly familiar.
           </p>
-          <div className="flex flex-wrap gap-4">
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
               href="/ide"
-              className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+              className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-slate-200"
             >
-              Launch the IDE
+              Open IDE
             </Link>
             <Link
               href="/features"
-              className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white/80 transition hover:border-white/40 hover:text-white"
+              className="rounded-full border border-white/20 px-5 py-2.5 text-sm font-semibold text-white/90 transition hover:border-white/40"
             >
-              Explore the features
-            </Link>
-            <Link
-              href="/chat"
-              className="rounded-full border border-emerald-400/40 px-6 py-3 text-sm font-semibold text-emerald-200 transition hover:border-emerald-300/80 hover:text-emerald-100"
-            >
-              Join the collaborative chat lab
+              Product details
             </Link>
           </div>
         </div>
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-emerald-500/10">
-          <div className="mb-4 flex items-center justify-between text-xs uppercase tracking-[0.3em] text-white/40">
-            <span>Live preview</span>
-            <span>Sandpack</span>
-          </div>
-          <div className="space-y-3 text-sm text-white/70">
-            {snippetLines.map((line, index) => (
-              <p key={index} className="font-mono tracking-tight">
-                {line}
-              </p>
-            ))}
-          </div>
-        </div>
+
       </section>
 
-      <section className="grid gap-6 md:grid-cols-3">
-        {marketingHighlights.map(item => (
-          <div key={item.title} className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <h3 className="text-lg font-semibold text-white">{item.title}</h3>
-            <p className="mt-3 text-sm text-white/60">{item.body}</p>
-          </div>
-        ))}
-      </section>
+      <section className="relative overflow-hidden rounded-[10px] border border-[#bfc9d6] bg-[#dce5f0] text-[#131923]">
+        <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:radial-gradient(rgba(19,25,35,0.11)_1px,transparent_1px)] [background-size:26px_26px]" />
 
-      <section className="rounded-3xl border border-white/10 bg-black/40 p-10">
-        <div className="mb-10 max-w-3xl">
-          <h2 className="text-3xl font-semibold">Build flow that matches your muscle memory.</h2>
-          <p className="mt-4 text-base text-white/60">
-            We obsess over the little details: keyboard shortcuts that make sense, autosave that respects your intent, and
-            environment defaults tuned for shipping web experiences fast.
-          </p>
+        <div className="relative border-b border-[#b5c0ce] px-6 py-10 sm:px-8 sm:py-12">
+          <div className="max-w-[760px]">
+            <p className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.14em] text-[#445162]">
+              <span className="h-2 w-2 rounded-full bg-[#445162]" />
+              Workflow
+            </p>
+            <h2 className="mt-4 text-[30px] font-medium leading-[1.05] tracking-[-0.04em] text-[#0f1621] sm:text-[42px] lg:text-[52px]">
+              A tighter build loop from first file to final review.
+            </h2>
+          </div>
         </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          {marketingWorkflow.map(step => (
-            <div key={step.label} className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <span className="text-xs uppercase tracking-[0.3em] text-emerald-300/80">{step.label}</span>
-              <p className="mt-3 text-sm text-white/70">{step.description}</p>
-            </div>
+
+        <div className="relative grid md:grid-cols-3">
+          {workflowSteps.map((item, index) => (
+            <article
+              key={item.title}
+              className={`px-6 py-7 sm:px-8 sm:py-8 ${index < workflowSteps.length - 1 ? 'border-b border-[#b5c0ce] md:border-b-0 md:border-r' : ''}`}
+            >
+              <p className="text-[12px] font-medium text-[#4f5d6f]">{item.step}</p>
+              <h3 className="mt-3 text-[22px] font-medium leading-[1.2] tracking-[-0.02em] text-[#101a27]">{item.title}</h3>
+              <p className="mt-3 max-w-[34ch] text-[14px] leading-[1.6] text-[#273446]/85">{item.body}</p>
+            </article>
           ))}
         </div>
       </section>
 
-      <section className="flex flex-col gap-6 rounded-3xl border border-white/10 bg-emerald-500/10 p-10">
-        <h2 className="text-3xl font-semibold">Ready when you are</h2>
-        <p className="text-base text-white/70">
-          Create your account with Google or email, invite collaborators, and let Yentic keep your projects synced across
-          devices. Multiplayer editing, build logs, and workspace history are rolling out over the next few sprints.
-        </p>
-        <div className="flex flex-wrap gap-4">
-          <Link
-            href="/roadmap"
-            className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:bg-white/90"
-          >
-            View the roadmap
-          </Link>
-          <a
-            href={`mailto:${site.contactEmail}`}
-            className="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white/80 transition hover:border-white/40 hover:text-white"
-          >
-            Request access
-          </a>
+      <section className="relative overflow-hidden rounded-[10px] border border-[#2d3643] bg-[#171d27]">
+        <div className="pointer-events-none absolute inset-0 opacity-50 [background-image:radial-gradient(circle_at_20%_0%,rgba(220,229,240,0.2),transparent_48%),linear-gradient(to_right,rgba(220,229,240,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(220,229,240,0.08)_1px,transparent_1px)] [background-size:auto,48px_48px,48px_48px]" />
+
+        <div className="relative lg:grid lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="border-b border-[#2f3a4a] px-6 py-9 sm:px-8 sm:py-10 lg:border-b-0 lg:border-r">
+            <p className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.14em] text-[#9fb0c4]">
+              <span className="h-2 w-2 rounded-full bg-[#93a8bf]" />
+              Product
+            </p>
+            <h2 className="mt-4 max-w-[660px] text-[30px] font-medium leading-[1.05] tracking-[-0.04em] text-[#edf3fb] sm:text-[40px] lg:text-[48px]">
+              Expanded details for people who actually build.
+            </h2>
+            <p className="mt-4 max-w-[58ch] text-[15px] leading-[1.55] text-[#b8c5d6]">
+              The structure stays simple: split columns, line-separated rows, and direct language.
+            </p>
+
+            <div className="mt-8 overflow-hidden rounded-lg border border-[#2f3a4a] bg-[#141b25]">
+              {detailRows.map(item => (
+                <div
+                  key={item.label}
+                  className="grid gap-2 border-b border-[#2f3a4a] px-5 py-4 last:border-b-0 sm:grid-cols-[104px_minmax(0,1fr)] sm:gap-4"
+                >
+                  <p className="text-[12px] uppercase tracking-[0.12em] text-[#8ea0b6]">{item.label}</p>
+                  <p className="text-[14px] leading-[1.55] text-[#d3dfee]">{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/ide"
+                className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-slate-200"
+              >
+                Open IDE
+              </Link>
+              <Link
+                href="/features"
+                className="rounded-full border border-white/20 px-5 py-2.5 text-sm font-semibold text-white/90 transition hover:border-white/40"
+              >
+                Product details
+              </Link>
+            </div>
+          </div>
+
+          <div className="px-6 py-9 sm:px-8 sm:py-10">
+            <p className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.14em] text-[#9fb0c4]">
+              <span className="h-2 w-2 rounded-full bg-[#93a8bf]" />
+              Release track
+            </p>
+            <div className="mt-5 overflow-hidden rounded-lg border border-[#2f3a4a] bg-[#131923]">
+              {planningCards.map(item => (
+                <article key={item.stage} className="border-b border-[#2f3a4a] px-5 py-5 last:border-b-0">
+                  <p className="text-[12px] uppercase tracking-[0.12em] text-[#8ea0b6]">{item.stage}</p>
+                  <p className="mt-2 text-[14px] leading-[1.55] text-[#c6d4e4]">{item.notes}</p>
+                </article>
+              ))}
+            </div>
+
+            <p className="mt-6 text-[13px] leading-[1.6] text-[#9fb0c4]">
+              Focus: faster editing and less friction between idea and outcome.
+            </p>
+          </div>
         </div>
+
       </section>
-    </>
+    </div>
   );
 }
 
@@ -171,94 +184,71 @@ function AuthenticatedHome({ userName }: { userName: string }) {
   const firstName = userName.split(' ')[0] ?? 'there';
 
   return (
-    <div className="flex flex-col gap-10">
-      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 via-white/5 to-transparent p-8 shadow-xl shadow-emerald-500/10 sm:p-10">
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.15),_transparent_55%)]" />
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex-1 space-y-4">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-white/70">
+    <div className="flex flex-col gap-14">
+      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#07090d] p-8 sm:p-10">
+        <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:48px_48px]" />
+        <div className="relative grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+          <div>
+            <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-white/70">
               Welcome back
             </span>
-            <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
-              Hey {firstName}, let&apos;s ship something new.
-            </h1>
-            <p className="max-w-2xl text-sm text-white/70 sm:text-base">
-              Launch a fresh project, name it, and start building. Need to revisit something? Load any saved cloud project in just a couple of clicks.
+            <h1 className="mt-5 text-4xl font-semibold tracking-[-0.03em] text-white">{firstName}, continue building.</h1>
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/65 sm:text-base">
+              Start a new project or reopen a saved one.
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 href="/ide"
-                className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+                className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-slate-200"
               >
-                Choose a workspace
-                <span aria-hidden>→</span>
+                New project
               </Link>
               <Link
                 href="/ide#saved-projects"
-                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white/80 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
+                className="rounded-full border border-white/20 px-5 py-2.5 text-sm font-semibold text-white/90 transition hover:border-white/40"
               >
-                Load a saved project
+                Saved projects
               </Link>
             </div>
           </div>
-          <div className="mt-6 w-full max-w-sm lg:mt-0">
+
+          <div className="rounded-xl border border-white/10 bg-black/35 p-4">
             <AuthStatus />
           </div>
         </div>
       </section>
 
-      <section className="space-y-6">
+      <section className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold text-white">Start a new project</h2>
-            <p className="text-sm text-white/60">Pick a workspace and we&apos;ll ask for a project name as soon as it opens.</p>
+            <h2 className="text-2xl font-semibold tracking-[-0.02em] text-white">Choose a workspace</h2>
+            <p className="mt-1 text-sm text-white/65">Open a runtime and start coding.</p>
           </div>
           <Link
             href="/ide"
-            className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:bg-white/10 hover:text-white"
+            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white/75 transition hover:border-white/40"
           >
-            View all workspaces
+            Browse all
           </Link>
         </div>
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {workspaceList.map(workspace => (
             <Link
               key={workspace.slug}
               href={`/ide/${workspace.slug}`}
-              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-6 transition hover:-translate-y-1 hover:border-white/20 hover:bg-white/10"
+              className="group overflow-hidden rounded-xl border border-white/10 bg-[#0b0e13] transition hover:border-white/25"
             >
-              <div className="pointer-events-none absolute inset-0 opacity-0 transition duration-300 group-hover:opacity-100">
-                <div className={`absolute inset-0 bg-gradient-to-br ${accentCardGradients[workspace.slug]}`} />
-              </div>
-              <div className="relative space-y-3">
-                <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/70">
-                  Workspace
-                </span>
+              <div className={`h-28 border-b border-white/10 bg-gradient-to-br ${workspaceTint[workspace.slug]}`} />
+              <div className="space-y-3 p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Workspace</p>
                 <h3 className="text-lg font-semibold text-white">{workspace.title}</h3>
-                <p className="text-sm text-white/60">{workspace.description}</p>
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-200">
-                  Create project
-                  <span aria-hidden className="transition group-hover:translate-x-1">→</span>
-                </span>
+                <p className="text-sm leading-relaxed text-white/65">{workspace.description}</p>
+                <p className="text-sm font-semibold text-white/90">
+                  Create project <span aria-hidden>→</span>
+                </p>
               </div>
             </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-white/10 bg-black/40 p-10">
-        <div className="mb-10 max-w-3xl">
-          <h2 className="text-3xl font-semibold">Build flow that matches your muscle memory.</h2>
-          <p className="mt-4 text-base text-white/60">
-            We obsess over the little details: keyboard shortcuts that make sense, autosave that respects your intent, and environment defaults tuned for shipping web experiences fast.
-          </p>
-        </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          {marketingWorkflow.map(step => (
-            <div key={step.label} className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <span className="text-xs uppercase tracking-[0.3em] text-emerald-300/80">{step.label}</span>
-              <p className="mt-3 text-sm text-white/70">{step.description}</p>
-            </div>
           ))}
         </div>
       </section>
@@ -270,7 +260,7 @@ export default function Home() {
   const { data: session, status } = useSession();
 
   if (status !== 'authenticated' || !session?.user) {
-    return <MarketingLanding />;
+    return <LandingHome />;
   }
 
   const displayName = session.user.name ?? session.user.email ?? 'there';
