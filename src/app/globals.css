@@ -38,6 +38,30 @@
   --font-mono: var(--font-geist-mono), "SF Mono", "Fira Code", monospace;
 }
 
+.ide-shell {
+  --ide-bg-app: #181818;
+  --ide-bg-elevated: #212121;
+  --ide-bg-panel: #252526;
+  --ide-bg-editor: #1e1e1e;
+  --ide-bg-hover: #2a2d2e;
+  --ide-bg-active: #37373d;
+  --ide-bg-tab: #2d2d2d;
+
+  --ide-border: #313131;
+  --ide-border-strong: #454545;
+
+  --ide-text: #cccccc;
+  --ide-text-muted: #9da3a6;
+  --ide-text-faint: #6f767d;
+  --ide-accent: #3794ff;
+  --ide-danger: #f48771;
+}
+
+.ide-shell ::selection {
+  background-color: rgba(55, 148, 255, 0.3);
+  color: #ffffff;
+}
+
 @theme inline {
   --color-bg-primary: var(--color-bg-primary);
   --color-bg-elevated: var(--color-bg-elevated);

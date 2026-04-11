@@ -23,7 +23,17 @@ test('local C workspace supports naming, file creation, execution, and local bac
   await fileRenameInput.press('Enter');
 
   await expect(page.getByTestId('file-entry-helpers.c')).toBeVisible();
+  await expect(page.getByTestId('editor-tab-main.c')).toBeVisible();
+  await expect(page.getByTestId('editor-tab-helpers.c')).toBeVisible();
+  await expect(page.getByTestId('editor-tab-helpers.c')).toHaveAttribute('data-state', 'active');
+
   await page.getByTestId('file-entry-main.c').click();
+  await expect(page.getByTestId('editor-tab-main.c')).toHaveAttribute('data-state', 'active');
+
+  await page.getByTestId('editor-tab-helpers.c').click();
+  await expect(page.getByTestId('editor-tab-helpers.c')).toHaveAttribute('data-state', 'active');
+  await page.getByTestId('editor-tab-main.c').click();
+  await expect(page.getByTestId('editor-tab-main.c')).toHaveAttribute('data-state', 'active');
 
   await page.getByTestId('preview-run-button').click();
   await expect(page.getByTestId('runtime-output')).toContainText('Hello from Yentic!');

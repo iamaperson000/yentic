@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { clsx } from 'clsx';
 
-import { ChevronLeft, RotateCw, Settings } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
@@ -72,6 +73,10 @@ function colorForUser(userId: string) {
   return `hsl(${hue}deg 75% 65%)`;
 }
 
+function sameTabOrder(left: string[], right: string[]) {
+  return left.length === right.length && left.every((path, index) => path === right[index]);
+}
+
 type WorkspaceClientProps = {
   workspaceId: string;
   initialSlug: WorkspaceSlug;
@@ -110,6 +115,7 @@ export default function WorkspaceClient({
 
   const [files, setFilesState] = useState<ProjectFileMap>(() => initialProject?.files ?? getStarterProject(slug));
   const [activePath, setActivePath] = useState<string>(config.defaultActivePath);
+  const [openTabs, setOpenTabs] = useState<string[]>(() => [config.defaultActivePath]);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(
     initialProject?.updatedAt ? new Date(initialProject.updatedAt) : null
   );
@@ -196,6 +202,11 @@ export default function WorkspaceClient({
     []
   );
 
+  const activatePath = useCallback((path: string) => {
+    setActivePath(path);
+    setOpenTabs(previous => (previous.includes(path) ? previous : [...previous, path]));
+  }, []);
+
   useEffect(() => {
     if (initialProject?.id) {
       loadedCloudProjectIdRef.current = initialProject.id;
@@ -228,6 +239,23 @@ export default function WorkspaceClient({
   const markRemoteMutation = useCallback(() => {
     collaborativeDirtyRef.current = true;
   }, []);
+
+  useEffect(() => {
+    if (!activePath || !files[activePath]) {
+      return;
+    }
+
+    setOpenTabs(previous => {
+      const nextTabs = previous.filter(path => files[path]);
+      if (!nextTabs.includes(activePath)) {
+        nextTabs.push(activePath);
+      }
+      if (!nextTabs.length) {
+        nextTabs.push(activePath);
+      }
+      return sameTabOrder(previous, nextTabs) ? previous : nextTabs;
+    });
+  }, [activePath, files]);
 
   useEffect(() => {
     if (isNameRequired) {
@@ -296,6 +324,7 @@ export default function WorkspaceClient({
           ? config.defaultActivePath
           : Object.keys(initialProject.files).sort((a, b) => a.localeCompare(b))[0] ?? config.defaultActivePath;
         setActivePath(preferred);
+        setOpenTabs([preferred]);
         saveWorkspaceFiles(workspaceId, initialProject.files);
       }
       setEncodedYjsState(initialProject.yjsState ?? null);
@@ -315,10 +344,12 @@ export default function WorkspaceClient({
         ? config.defaultActivePath
         : Object.keys(stored).sort((a, b) => a.localeCompare(b))[0] ?? config.defaultActivePath;
       setActivePath(preferred);
+      setOpenTabs([preferred]);
     } else {
       const starter = getStarterProject(slug);
       updateFiles(starter);
       setActivePath(config.defaultActivePath);
+      setOpenTabs([config.defaultActivePath]);
       saveWorkspaceFiles(workspaceId, starter);
     }
     setEncodedYjsState(null);
@@ -366,6 +397,7 @@ export default function WorkspaceClient({
     const starter = getStarterProject(slug);
     updateFiles(starter);
     setActivePath(config.defaultActivePath);
+    setOpenTabs([config.defaultActivePath]);
     saveWorkspaceFiles(workspaceId, starter);
     setProjectMeta({ id: null, name: defaultProjectName, shareToken: null });
     setCollaborationRoomKey(null);
@@ -448,6 +480,10 @@ export default function WorkspaceClient({
         return { ...rest, [nextPath]: { ...oldFile, path: nextPath, language: nextLanguage } };
       });
 
+      if (!error && renamed) {
+        setOpenTabs(previous => previous.map(path => (path === oldPath ? nextPath : path)));
+      }
+
       if (!error && renamed && activePath === oldPath) {
         setActivePath(nextPath);
       }
@@ -484,6 +520,7 @@ export default function WorkspaceClient({
       return nextFiles;
     });
 
+    setOpenTabs(previous => previous.filter(tabPath => tabPath !== path));
     if (shouldUpdateActive) {
       setActivePath(nextActivePath);
     }
@@ -509,6 +546,27 @@ export default function WorkspaceClient({
     return nextPath;
   }, [config.newFilePlaceholder, updateFiles]);
 
+  const closeTab = useCallback((path: string) => {
+    let nextActive: string | null = null;
+
+    setOpenTabs(previous => {
+      if (!previous.includes(path) || previous.length === 1) {
+        return previous;
+      }
+
+      const index = previous.indexOf(path);
+      const nextTabs = previous.filter(tabPath => tabPath !== path);
+      if (activePath === path) {
+        nextActive = nextTabs[index] ?? nextTabs[index - 1] ?? nextTabs[0] ?? null;
+      }
+      return nextTabs;
+    });
+
+    if (nextActive) {
+      setActivePath(nextActive);
+    }
+  }, [activePath]);
+
   const pushToast = useCallback((next: { kind: 'success' | 'error'; message: string }) => {
     setToast(next);
     if (toastTimeoutRef.current) {
@@ -527,6 +585,7 @@ export default function WorkspaceClient({
       updateFiles(project.files);
       const firstPath = Object.keys(project.files).sort()[0] || config.defaultActivePath;
       setActivePath(firstPath);
+      setOpenTabs([firstPath]);
       const normalizedName = project.name.trim() || defaultProjectName;
       setProjectMeta({ id: project.id, name: normalizedName, shareToken: project.shareToken ?? null });
       setCollaborationRoomKey(project.collaborationKey ?? null);
@@ -1188,6 +1247,7 @@ export default function WorkspaceClient({
     return map;
   }, [files]);
 
+  const visibleTabs = useMemo(() => openTabs.filter(path => files[path]), [files, openTabs]);
   const formattedTime = formatTime(lastSavedAt);
   const orderedLiveCollaborators = useMemo(() => {
     if (!liveCollaborators.length) {
@@ -1217,29 +1277,27 @@ export default function WorkspaceClient({
     savedLabel = 'Local backup only';
   }
 
-  const statusBadgeClass = cloudAuthRequired
-    ? 'inline-flex items-center gap-1.5 rounded-full border border-amber-400/70 bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-amber-100'
-    : cloudError
-      ? 'inline-flex items-center gap-1.5 rounded-full border border-rose-400/60 bg-rose-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-rose-100'
-      : isSaving || isLoadingCloudProject
-        ? 'inline-flex items-center gap-1.5 rounded-full border border-amber-300/60 bg-amber-400/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-amber-100'
-        : 'inline-flex items-center gap-1.5 rounded-full border border-[#445162] bg-[#131923] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#c6d4e4]';
-
-  const actionButtonBaseClass =
-    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.75 text-[13px] font-semibold transition duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8ea0b6]/70 disabled:cursor-not-allowed disabled:opacity-60 hover:-translate-y-[1px] shadow-md shadow-black/10';
-  const primaryActionClass =
-    `${actionButtonBaseClass} bg-white text-black hover:bg-slate-200`;
-  const subtleActionClass =
-    `${actionButtonBaseClass} border border-[#445162] bg-[#131923] text-[#d3dfee] hover:border-[#8ea0b6] hover:bg-[#1a2433] hover:text-white`;
-  const dangerActionClass =
-    `${actionButtonBaseClass} border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:border-rose-300 hover:bg-rose-500/20 hover:text-rose-50`;
-  const shareButtonDisabled = !projectMeta.id;
   const canEdit = viewerRole !== 'viewer';
+  const shareButtonDisabled = !projectMeta.id;
   const canManageShareLink = viewerRole === 'owner' && !shareButtonDisabled;
-  const shareButtonClass =
-    viewerRole === 'owner'
-      ? subtleActionClass
-      : `${actionButtonBaseClass} border border-white/15 bg-white/5 text-white/60 hover:border-white/25 hover:bg-white/10 hover:text-white`;
+  const statusBadgeClass = clsx(
+    'inline-flex h-6 items-center gap-2 border px-2 text-[10px] font-medium uppercase tracking-[0.12em]',
+    cloudAuthRequired
+      ? 'border-amber-400/40 bg-amber-500/10 text-amber-100'
+      : cloudError
+        ? 'border-[var(--ide-danger)]/50 bg-[var(--ide-danger)]/10 text-[#f2b8ae]'
+        : isSaving || isLoadingCloudProject
+          ? 'border-amber-300/40 bg-amber-500/10 text-amber-100'
+          : 'border-[var(--ide-border-strong)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-muted)]'
+  );
+  const chromeButtonClass =
+    'inline-flex h-7 items-center border px-2.5 text-[11px] font-medium text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ide-accent)] disabled:cursor-not-allowed disabled:opacity-40';
+  const activeChromeButtonClass =
+    'border-[var(--ide-border-strong)] bg-[var(--ide-bg-active)] text-[var(--ide-text)]';
+  const shareButtonClass = clsx(
+    chromeButtonClass,
+    viewerRole === 'owner' && !shareButtonDisabled && activeChromeButtonClass
+  );
 
   const createSmartFile = useCallback(() => {
     if (viewerRole === 'viewer') {
@@ -1250,6 +1308,7 @@ export default function WorkspaceClient({
     const activeLanguage = activeFile?.language;
     const placeholder = smartPlaceholder(config.newFilePlaceholder, activeLanguage);
     const createdPath = onCreate(placeholder);
+    setOpenTabs(previous => (previous.includes(createdPath) ? previous : [...previous, createdPath]));
     setRecentlyCreatedPath(createdPath);
     pushToast({ kind: 'success', message: `Created file ${createdPath}` });
   }, [files, activePath, config.newFilePlaceholder, onCreate, pushToast, viewerRole]);
@@ -1269,6 +1328,7 @@ export default function WorkspaceClient({
     autoSaveSkipRef.current = true;
     updateFiles(starter);
     setActivePath(config.defaultActivePath);
+    setOpenTabs([config.defaultActivePath]);
     saveWorkspaceFiles(workspaceId, starter);
     if (!projectMeta.id) {
       setLastSavedAt(null);
@@ -1295,7 +1355,7 @@ export default function WorkspaceClient({
   }, [recentlyCreatedPath]);
 
   const content = (
-    <div className="flex min-h-screen flex-col bg-[var(--color-bg-primary)] text-white">
+    <div className="ide-shell flex min-h-screen flex-col bg-[var(--ide-bg-app)] text-[var(--ide-text)]">
       <ProjectShareModal
         isOpen={isShareModalOpen}
         onClose={closeShareModal}
@@ -1318,19 +1378,19 @@ export default function WorkspaceClient({
         onCopyShareUrl={handleCopyShareLink}
         onResetShareUrl={rotateShareUrl}
       />
-      <header className="border-b border-[var(--color-border-medium)] bg-[var(--color-bg-primary)]/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-11 w-full max-w-[1440px] items-center gap-3 px-4 lg:px-8">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 text-sm">
+      <header className="border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)]">
+        <div className="flex h-10 items-center gap-2 px-3">
+          <div className="flex min-w-0 items-center gap-2">
             <Link
               href="/ide"
-              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[var(--color-text-muted)] transition hover:bg-white/5 hover:text-[var(--color-text-primary)]"
+              className={clsx(chromeButtonClass, 'w-7 justify-center px-0')}
+              aria-label="Back to workspaces"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{config.title}</span>
-              <span className="sm:hidden">Back</span>
             </Link>
-            <span className="text-[var(--color-text-muted)]">/</span>
+            <div className="flex min-w-0 items-center gap-2 text-[12px]">
+              <span className="text-[var(--ide-text-faint)]">{config.title}</span>
+              <span className="text-[var(--ide-text-faint)]">/</span>
             {isRenamingProject ? (
               <input
                 data-testid="project-name-input"
@@ -1350,25 +1410,25 @@ export default function WorkspaceClient({
                 onBlur={commitProjectRename}
                 autoFocus
                 placeholder={isNameRequired ? 'Name your project' : 'Project name'}
-                className="w-[180px] rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] px-2 py-0.5 text-sm text-white placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+                className="w-[180px] border border-[var(--ide-border-strong)] bg-[var(--ide-bg-panel)] px-2 py-1 text-[12px] text-[var(--ide-text)] placeholder:text-[var(--ide-text-faint)] outline-none focus:border-[var(--ide-accent)]"
               />
             ) : (
               <button
                 data-testid="project-title"
                 onClick={viewerRole === 'owner' ? beginProjectRename : undefined}
-                className="truncate text-sm text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
+                className="truncate text-[12px] text-[var(--ide-text-muted)] transition hover:text-[var(--ide-text)]"
               >
                 {projectMeta.name?.trim() || defaultProjectName}
               </button>
             )}
-            <span className="text-[var(--color-text-muted)]">/</span>
-            <span className="truncate text-sm text-[var(--color-text-primary)]">{activePath}</span>
+              <span className="text-[var(--ide-text-faint)]">/</span>
+              <span className="truncate text-[12px] text-[var(--ide-text)]">{activePath}</span>
+            </div>
           </div>
 
           <div className="flex-1" />
 
-          {/* Right zone */}
-          <div className="flex items-center gap-2 text-[11px] text-white/60">
+          <div className="flex items-center gap-2">
             <span data-testid="save-status" className={statusBadgeClass}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
               {savedLabel}
@@ -1376,99 +1436,144 @@ export default function WorkspaceClient({
             {orderedLiveCollaborators.length ? (
               <PresenceAvatars collaborators={orderedLiveCollaborators} />
             ) : null}
-            {cloudError ? <span className="text-[11px] text-rose-200">{cloudError}</span> : null}
-            <div className="flex items-center gap-1.5">
-              <button onClick={createSmartFile} className={primaryActionClass} disabled={!canEdit}>
-                New file
-              </button>
-              <button
-                data-testid="share-button"
-                onClick={openShareModal}
-                className={shareButtonClass}
-                disabled={shareButtonDisabled}
-                title={
-                  shareButtonDisabled
-                    ? 'Save this project to enable sharing'
-                    : viewerRole === 'owner'
-                      ? 'Invite collaborators'
-                      : 'View collaborators'
-                }
-              >
-                Share
-              </button>
-              <button onClick={resetWorkspace} className={dangerActionClass} disabled={viewerRole !== 'owner'}>
-                Reset
-              </button>
-            </div>
+            {cloudError ? <span className="text-[11px] text-[#f2b8ae]">{cloudError}</span> : null}
+            <button
+              type="button"
+              onClick={() => setShowExplorer(previous => !previous)}
+              className={clsx(chromeButtonClass, showExplorer && activeChromeButtonClass)}
+            >
+              Explorer
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPreview(previous => !previous)}
+              className={clsx(chromeButtonClass, showPreview && activeChromeButtonClass)}
+            >
+              Preview
+            </button>
+            <button
+              data-testid="share-button"
+              onClick={openShareModal}
+              className={shareButtonClass}
+              disabled={shareButtonDisabled}
+              title={
+                shareButtonDisabled
+                  ? 'Save this project to enable sharing'
+                  : viewerRole === 'owner'
+                    ? 'Invite collaborators'
+                    : 'View collaborators'
+              }
+            >
+              Share
+            </button>
           </div>
         </div>
       </header>
-      <main className="flex flex-1 overflow-hidden">
-        <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-3 lg:px-8">
-          <div className="flex h-full flex-1 gap-3 md:gap-3">
-            {showExplorer && (
-              <div className="flex h-full min-h-0 w-[220px] flex-shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--color-border-medium)] bg-[var(--color-bg-surface)]">
-                <FileExplorer
-                  files={files}
-                  activePath={activePath}
-                  onSelect={setActivePath}
-                  onRename={onRename}
-                  onDelete={onDelete}
-                  onCreateFile={createSmartFile}
-                  newlyCreatedPath={recentlyCreatedPath}
-                  onFeedback={pushToast}
-                  placeholder={config.newFilePlaceholder}
-                  readOnly={!canEdit}
-                />
-              </div>
-            )}
-            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--color-border-medium)] bg-[var(--color-bg-surface)]">
-              <Editor value={code} language={lang} onChange={setActiveCode} readOnly={!canEdit} path={activePath} />
-            </div>
-            {showPreview && (
-              <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--color-border-medium)] bg-[var(--color-bg-surface)]">
-                <div className="flex h-8 items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] px-3">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">Preview</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setPreviewRefreshKey(k => k + 1)}
-                      className="text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]"
-                      title="Refresh preview"
-                    >
-                      <RotateCw className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+      <main className="flex flex-1 min-h-0 overflow-hidden">
+        {showExplorer ? (
+          <aside className="flex min-h-0 w-[248px] shrink-0 border-r border-[var(--ide-border)]">
+            <FileExplorer
+              files={files}
+              activePath={activePath}
+              onSelect={activatePath}
+              onRename={onRename}
+              onDelete={onDelete}
+              onCreateFile={createSmartFile}
+              onResetWorkspace={resetWorkspace}
+              canReset={viewerRole === 'owner'}
+              newlyCreatedPath={recentlyCreatedPath}
+              onFeedback={pushToast}
+              placeholder={config.newFilePlaceholder}
+              readOnly={!canEdit}
+            />
+          </aside>
+        ) : null}
+
+        <section
+          className={clsx(
+            'flex min-w-0 flex-1 min-h-0 flex-col bg-[var(--ide-bg-editor)]',
+            showPreview && 'border-r border-[var(--ide-border)]'
+          )}
+        >
+          <div className="custom-scrollbar flex h-9 items-stretch overflow-x-auto border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)]">
+            {visibleTabs.map(path => {
+              const isActive = path === activePath;
+
+              return (
+                <div
+                  key={path}
+                  data-testid={`editor-tab-${path}`}
+                  data-state={isActive ? 'active' : 'inactive'}
+                  className={clsx(
+                    'group flex min-w-[160px] max-w-[240px] items-center border-r border-[var(--ide-border)]',
+                    isActive
+                      ? 'bg-[var(--ide-bg-editor)] text-[var(--ide-text)]'
+                      : 'bg-[var(--ide-bg-tab)] text-[var(--ide-text-muted)] hover:bg-[var(--ide-bg-hover)]'
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => activatePath(path)}
+                    className="flex min-w-0 flex-1 items-center gap-2 px-3 text-left text-[12px]"
+                  >
+                    <span className="truncate">{path}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => closeTab(path)}
+                    disabled={visibleTabs.length === 1}
+                    className="mr-1 inline-flex h-6 w-6 items-center justify-center text-[var(--ide-text-faint)] transition hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)] disabled:opacity-0"
+                    aria-label={`Close ${path}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <Preview
-                  key={previewRefreshKey}
-                  files={sandpackFiles}
-                  activePath={`/${activePath}`}
-                  template={config.previewTemplate}
-                  mode={config.previewMode}
-                  disabledMessage={config.previewMessage}
-                  activeFileCode={code}
-                  activeFileLanguage={lang}
-                />
-              </div>
-            )}
+              );
+            })}
           </div>
-        </div>
+
+          <div className="flex min-h-0 flex-1 bg-[var(--ide-bg-editor)]">
+            <Editor
+              value={code}
+              language={lang}
+              onChange={setActiveCode}
+              onCursorChange={(line, column) => {
+                setCursorLine(line);
+                setCursorColumn(column);
+              }}
+              readOnly={!canEdit}
+              path={activePath}
+            />
+          </div>
+        </section>
+
+        {showPreview ? (
+          <aside className="flex min-h-0 w-[min(40vw,34rem)] shrink-0 bg-[var(--ide-bg-panel)]">
+            <Preview
+              key={previewRefreshKey}
+              files={sandpackFiles}
+              activePath={`/${activePath}`}
+              template={config.previewTemplate}
+              mode={config.previewMode}
+              disabledMessage={config.previewMessage}
+              activeFileCode={code}
+              activeFileLanguage={lang}
+              onRefresh={() => setPreviewRefreshKey(key => key + 1)}
+            />
+          </aside>
+        ) : null}
       </main>
-      <StatusBar
-        language={lang}
-        cursorLine={cursorLine}
-        cursorColumn={cursorColumn}
-      />
+      <StatusBar language={lang} cursorLine={cursorLine} cursorColumn={cursorColumn} />
       {toast ? (
-        <div className="pointer-events-none fixed inset-x-0 top-6 flex justify-center px-4">
+        <div className="pointer-events-none fixed bottom-4 right-4 flex justify-end">
           <div
-            className={`pointer-events-auto inline-flex items-center gap-3 rounded-full border px-4 py-2 text-sm shadow-lg backdrop-blur ${
+            className={`pointer-events-auto inline-flex items-center gap-3 border px-3 py-2 text-[12px] shadow-lg ${
               toast.kind === 'success'
-                ? 'border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)]'
-                : 'border-rose-400/50 bg-rose-500/15 text-rose-100'
+                ? 'border-[var(--ide-border-strong)] bg-[var(--ide-bg-panel)] text-[var(--ide-text)]'
+                : 'border-[var(--ide-danger)]/50 bg-[var(--ide-danger)]/12 text-[#f2b8ae]'
             }`}
           >
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px] font-semibold uppercase tracking-[0.2em]">
+            <span className="inline-flex h-5 w-5 items-center justify-center border border-current text-[10px] font-semibold uppercase tracking-[0.12em]">
               {toast.kind === 'success' ? 'OK' : 'ERR'}
             </span>
             <span>{toast.message}</span>

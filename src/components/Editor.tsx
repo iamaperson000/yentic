@@ -10,20 +10,24 @@ type EditorProps = {
   onChange: (value: string) => void;
   readOnly?: boolean;
   path?: string;
+  onCursorChange?: (line: number, column: number) => void;
 };
 
-export function Editor({ value, language, onChange, readOnly = false, path }: EditorProps) {
+export function Editor({ value, language, onChange, readOnly = false, path, onCursorChange }: EditorProps) {
   const monacoLanguage = language === 'c' ? 'cpp' : language;
   const { awareness, getTextForPath, isActive } = useCollaboration();
   const yText = useMemo(() => (path && isActive ? getTextForPath(path) : null), [getTextForPath, isActive, path]);
   const collaborative = Boolean(yText && awareness);
   const bindingRef = useRef<{ destroy?: () => void } | null>(null);
   const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
+  const cursorSubscriptionRef = useRef<{ dispose?: () => void } | null>(null);
 
   useEffect(() => {
     return () => {
       bindingRef.current?.destroy?.();
       bindingRef.current = null;
+      cursorSubscriptionRef.current?.dispose?.();
+      cursorSubscriptionRef.current = null;
     };
   }, []);
 
@@ -73,6 +77,14 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
 
   const handleMount = (editor: import('monaco-editor').editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
+    cursorSubscriptionRef.current?.dispose?.();
+    const position = editor.getPosition();
+    if (position) {
+      onCursorChange?.(position.lineNumber, position.column);
+    }
+    cursorSubscriptionRef.current = editor.onDidChangeCursorPosition(event => {
+      onCursorChange?.(event.position.lineNumber, event.position.column);
+    });
   };
 
   const handleChange = (next?: string) => {
@@ -94,14 +106,14 @@ export function Editor({ value, language, onChange, readOnly = false, path }: Ed
         defaultValue={collaborative && yText ? yText.toString() : value}
         options={{
           minimap: { enabled: false },
-          fontSize: 15,
+          fontSize: 13,
           tabSize: 2,
           fontFamily: 'var(--font-mono)',
           smoothScrolling: true,
-          lineHeight: 22,
+          lineHeight: 20,
           scrollBeyondLastLine: false,
           automaticLayout: true,
-          padding: { top: 12 },
+          padding: { top: 10 },
           glyphMargin: false,
           lineDecorationsWidth: 8,
           overviewRulerBorder: false,
