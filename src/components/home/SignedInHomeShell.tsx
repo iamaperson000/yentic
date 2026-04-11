@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Folder,
@@ -337,9 +338,10 @@ export default function SignedInHomeShell() {
   const selectedTabCount = currentProjects.length;
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-primary)] text-[var(--color-text-primary)]">
-      <div className="grid min-h-screen lg:grid-cols-[248px_minmax(0,1fr)]">
-        <aside className="hidden border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] px-4 py-5 lg:flex lg:flex-col">
+    <section className="relative overflow-hidden rounded-[10px] border border-[var(--color-border-medium)] bg-[var(--color-bg-overlay)] text-[var(--color-text-primary)]">
+      <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(circle_at_20%_0%,rgba(220,229,240,0.18),transparent_45%),linear-gradient(to_right,rgba(220,229,240,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(220,229,240,0.08)_1px,transparent_1px)] [background-size:auto,48px_48px,48px_48px]" />
+      <div className="relative grid min-h-[72vh] lg:grid-cols-[248px_minmax(0,1fr)]">
+        <aside className="hidden border-r border-[var(--color-border-medium)] bg-[var(--color-bg-elevated)] px-4 py-5 lg:flex lg:flex-col">
           <button
             type="button"
             onClick={() => {
@@ -363,9 +365,9 @@ export default function SignedInHomeShell() {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-col">
-          <header className="sticky top-0 z-20 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-primary)]/95 px-4 py-3 backdrop-blur sm:px-6">
-            <div className="flex items-center justify-between gap-3">
+        <main className="flex min-w-0 flex-col bg-[var(--color-bg-primary)]/45">
+          <header className="border-b border-[var(--color-border-medium)] bg-[var(--color-bg-elevated)]/70 px-4 py-4 sm:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -379,9 +381,23 @@ export default function SignedInHomeShell() {
                   Projects
                 </h1>
               </div>
-              <p className="text-xs uppercase tracking-[0.2em] text-[var(--color-text-muted)]">
-                {selectedTabCount} total
-              </p>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/features"
+                  className="rounded-full border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/85 transition hover:border-white/40"
+                >
+                  Features
+                </Link>
+                <Link
+                  href="/ide"
+                  className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-slate-200"
+                >
+                  Open IDE
+                </Link>
+                <p className="ml-1 text-xs uppercase tracking-[0.2em] text-[var(--color-text-muted)]">
+                  {selectedTabCount} in view
+                </p>
+              </div>
             </div>
           </header>
 
@@ -487,12 +503,13 @@ export default function SignedInHomeShell() {
                   return (
                     <article
                       key={project.id}
-                      className="relative rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] p-4 transition hover:border-[var(--color-border-strong)]"
+                      className="relative overflow-hidden rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] p-4 transition hover:-translate-y-0.5 hover:border-[var(--color-border-strong)]"
                     >
+                      <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:40px_40px]" />
                       <button
                         type="button"
                         onClick={() => openProject(project.id)}
-                        className="w-full cursor-pointer pr-10 text-left"
+                        className="relative w-full cursor-pointer pr-10 text-left"
                       >
                         <p className="truncate text-base font-semibold text-white">{project.name}</p>
                         <p className="mt-1 text-xs uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
@@ -710,6 +727,6 @@ export default function SignedInHomeShell() {
           </button>
         </div>
       </Modal>
-    </div>
+    </section>
   );
 }
