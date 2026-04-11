@@ -41,24 +41,26 @@ const footerColumns = [
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div
-      className="relative min-h-screen bg-[#08090a] text-white"
-      style={{ fontFamily: '"Geist", "Inter", "SF Pro Display", "Segoe UI", sans-serif' }}
-    >
+    <div className="relative min-h-screen bg-[var(--color-bg-primary)] text-white">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_-10%,_rgba(255,255,255,0.09),_transparent_58%)]" />
+
       <div className="relative">
-        <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/60 backdrop-blur-xl">
-          <MarketingNav links={navLinks} />
-        </header>
-        <main className="mx-auto flex w-full max-w-[1436px] flex-col gap-24 px-6 py-12 sm:py-16">{children}</main>
-        <footer className="border-t border-white/10 bg-black/35 py-10">
+        <MarketingNav links={navLinks} />
+
+        <main className="mx-auto flex w-full max-w-[1436px] flex-col gap-24 px-6 py-12 sm:py-16">
+          {children}
+        </main>
+
+        <footer className="border-t border-[var(--color-border-subtle)] bg-black/35 py-10">
           <div className="mx-auto flex w-full max-w-[1436px] flex-col gap-8 px-6">
-            <div className="grid gap-8 border-b border-white/10 pb-8 md:grid-cols-3">
-              {footerColumns.map(column => (
+            <div className="grid gap-8 border-b border-[var(--color-border-subtle)] pb-8 md:grid-cols-3">
+              {footerColumns.map((column) => (
                 <section key={column.title}>
-                  <p className="text-[12px] uppercase tracking-[0.12em] text-white/45">{column.title}</p>
+                  <p className="text-[12px] uppercase tracking-[0.12em] text-white/45">
+                    {column.title}
+                  </p>
                   <div className="mt-3 flex flex-col gap-2">
-                    {column.links.map(link => (
+                    {column.links.map((link) => (
                       <Link
                         key={link.href}
                         href={link.href}
@@ -74,7 +76,8 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
 
             <div className="flex flex-col gap-2 text-sm text-white/55">
               <p>
-                © {new Date().getFullYear()} {site.name}. Fast browser editing without the noise.
+                &copy; {new Date().getFullYear()} {site.name}. Fast browser editing without the
+                noise.
               </p>
               <p className="text-white/40">
                 Follow updates at{' '}
@@ -85,7 +88,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
                   rel="noreferrer"
                 >
                   {new URL(site.marketingUrl).host}
-                </a>{' '}
+                </a>
                 .
               </p>
             </div>

@@ -5,12 +5,16 @@ import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { ChevronLeft, ExternalLink, RotateCw, Settings } from 'lucide-react';
+
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
 import { Preview } from '@/components/Preview';
 import CollaborativeEditor from '@/components/CollaborativeEditor';
 import PresenceAvatars from '@/components/PresenceAvatars';
 import { ProjectShareModal } from '@/components/ProjectShareModal';
+import { StatusBar } from '@/components/StatusBar';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
   type CollaboratorInfo,
   type CollaboratorPresence,
@@ -156,6 +160,15 @@ export default function WorkspaceClient({
   const [shareUrlError, setShareUrlError] = useState<string | null>(null);
   const [isShareUrlLoading, setIsShareUrlLoading] = useState(false);
   const [liveCollaborators, setLiveCollaborators] = useState<CollaboratorPresence[]>([]);
+  const [showExplorer, setShowExplorer] = useState(true);
+  const [showPreview, setShowPreview] = useState(true);
+  const [cursorLine, setCursorLine] = useState<number>(1);
+  const [cursorColumn, setCursorColumn] = useState<number>(1);
+
+  useKeyboardShortcuts(useMemo(() => [
+    { key: 'b', meta: true, handler: () => setShowExplorer(prev => !prev) },
+    { key: '\\', meta: true, handler: () => setShowPreview(prev => !prev) },
+  ], []));
 
   const localCollaboratorPresence = sessionUser?.id
     ? {
@@ -1209,14 +1222,14 @@ export default function WorkspaceClient({
       ? 'inline-flex items-center gap-1.5 rounded-full border border-rose-400/60 bg-rose-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-rose-100'
       : isSaving || isLoadingCloudProject
         ? 'inline-flex items-center gap-1.5 rounded-full border border-amber-300/60 bg-amber-400/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-amber-100'
-        : 'inline-flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-emerald-100';
+        : 'inline-flex items-center gap-1.5 rounded-full border border-[#445162] bg-[#131923] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#c6d4e4]';
 
   const actionButtonBaseClass =
-    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.75 text-[13px] font-semibold transition duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-60 hover:-translate-y-[1px] shadow-md shadow-black/10';
+    'inline-flex items-center gap-1.5 rounded-full px-3 py-1.75 text-[13px] font-semibold transition duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8ea0b6]/70 disabled:cursor-not-allowed disabled:opacity-60 hover:-translate-y-[1px] shadow-md shadow-black/10';
   const primaryActionClass =
-    `${actionButtonBaseClass} bg-gradient-to-r from-emerald-500 to-cyan-400 text-slate-950 shadow-emerald-500/40 hover:from-emerald-400 hover:to-cyan-300`;
+    `${actionButtonBaseClass} bg-white text-black hover:bg-slate-200`;
   const subtleActionClass =
-    `${actionButtonBaseClass} border border-white/15 bg-white/5 text-white/85 hover:border-white/35 hover:bg-white/12 hover:text-white`;
+    `${actionButtonBaseClass} border border-[#445162] bg-[#131923] text-[#d3dfee] hover:border-[#8ea0b6] hover:bg-[#1a2433] hover:text-white`;
   const dangerActionClass =
     `${actionButtonBaseClass} border border-rose-400/40 bg-rose-500/10 text-rose-100 hover:border-rose-300 hover:bg-rose-500/20 hover:text-rose-50`;
   const shareButtonDisabled = !projectMeta.id;
@@ -1281,7 +1294,7 @@ export default function WorkspaceClient({
   }, [recentlyCreatedPath]);
 
   const content = (
-    <div className="flex min-h-screen flex-col bg-[#05060d] text-white">
+    <div className="flex min-h-screen flex-col bg-[var(--color-bg-primary)] text-white">
       <ProjectShareModal
         isOpen={isShareModalOpen}
         onClose={closeShareModal}
@@ -1304,62 +1317,56 @@ export default function WorkspaceClient({
         onCopyShareUrl={handleCopyShareLink}
         onResetShareUrl={rotateShareUrl}
       />
-      <header className="border-b border-white/10 bg-[#080b16]/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-3 px-4 py-3 lg:px-8">
-          <Link
-            href="/"
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 text-[13px] font-semibold text-white/75 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10">
-              <svg viewBox="0 0 20 20" aria-hidden className="h-3.5 w-3.5">
-                <path
-                  d="M11.75 5.75 8 9.5l3.75 3.75"
-                  className="fill-none stroke-current stroke-[1.5]"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-            <span className="hidden sm:inline">Back to home</span>
-            <span className="sm:hidden">Home</span>
-          </Link>
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-white/40">Workspace</p>
-              <p className="truncate text-sm font-semibold text-white sm:text-base">{config.title}</p>
-            </div>
-            <p className="hidden min-w-0 truncate text-xs text-white/50 sm:block">{config.description}</p>
+      <header className="border-b border-[var(--color-border-medium)] bg-[var(--color-bg-primary)]/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-11 w-full max-w-[1440px] items-center gap-3 px-4 lg:px-8">
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 text-sm">
+            <Link
+              href="/ide"
+              className="flex items-center gap-1 text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{config.title}</span>
+            </Link>
+            <span className="text-[var(--color-text-muted)]">/</span>
+            {isRenamingProject ? (
+              <input
+                data-testid="project-name-input"
+                ref={projectNameInputRef}
+                value={projectNameDraft}
+                onChange={event => setProjectNameDraft(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitProjectRename();
+                  }
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    cancelProjectRename();
+                  }
+                }}
+                onBlur={commitProjectRename}
+                autoFocus
+                placeholder={isNameRequired ? 'Name your project' : 'Project name'}
+                className="w-[180px] rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] px-2 py-0.5 text-sm text-white placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]/40"
+              />
+            ) : (
+              <button
+                data-testid="project-title"
+                onClick={viewerRole === 'owner' ? beginProjectRename : undefined}
+                className="truncate text-sm text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
+              >
+                {projectMeta.name?.trim() || defaultProjectName}
+              </button>
+            )}
+            <span className="text-[var(--color-text-muted)]">/</span>
+            <span className="truncate text-sm text-[var(--color-text-primary)]">{activePath}</span>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-white/60">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">Project</span>
-              {isRenamingProject ? (
-                <input
-                  data-testid="project-name-input"
-                  ref={projectNameInputRef}
-                  value={projectNameDraft}
-                  onChange={event => setProjectNameDraft(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      commitProjectRename();
-                    }
-                    if (event.key === 'Escape') {
-                      event.preventDefault();
-                      cancelProjectRename();
-                    }
-                  }}
-                  onBlur={commitProjectRename}
-                  autoFocus
-                  placeholder={isNameRequired ? 'Name your project' : 'Project name'}
-                  className="w-[180px] rounded-md border border-white/20 bg-black/60 px-2.5 py-1 text-sm text-white placeholder:text-white/40 focus:border-emerald-300/60 focus:outline-none focus:ring-1 focus:ring-emerald-300/40"
-                />
-              ) : (
-                <span data-testid="project-title" className="truncate text-sm font-semibold text-white/80">
-                  {projectMeta.name?.trim() || defaultProjectName}
-                </span>
-              )}
-            </div>
+
+          <div className="flex-1" />
+
+          {/* Right zone */}
+          <div className="flex items-center gap-2 text-[11px] text-white/60">
             <span data-testid="save-status" className={statusBadgeClass}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
               {savedLabel}
@@ -1372,32 +1379,6 @@ export default function WorkspaceClient({
               <button onClick={createSmartFile} className={primaryActionClass} disabled={!canEdit}>
                 New file
               </button>
-              {!isRenamingProject ? (
-                <button
-                  onClick={beginProjectRename}
-                  className={subtleActionClass}
-                  disabled={viewerRole !== 'owner'}
-                  title={
-                    viewerRole !== 'owner'
-                      ? 'Only owners can rename projects'
-                      : projectMeta.name
-                        ? `Rename project (current: ${projectMeta.name})`
-                        : 'Rename project'
-                  }
-                  aria-label={
-                    viewerRole !== 'owner'
-                      ? 'Only owners can rename projects'
-                      : projectMeta.name
-                        ? `Rename project. Current name ${projectMeta.name}.`
-                        : 'Rename project'
-                  }
-                >
-                  Rename
-                  <span className="sr-only">
-                    {projectMeta.name ? `Current project name ${projectMeta.name}` : ''}
-                  </span>
-                </button>
-              ) : null}
               <button
                 data-testid="share-button"
                 onClick={openShareModal}
@@ -1414,17 +1395,17 @@ export default function WorkspaceClient({
                 Share
               </button>
               <button onClick={resetWorkspace} className={dangerActionClass} disabled={viewerRole !== 'owner'}>
-                Reset workspace
+                Reset
               </button>
             </div>
           </div>
         </div>
       </header>
       <main className="flex flex-1 overflow-hidden">
-        <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-4 px-4 py-4 lg:px-8">
-          <div className="grid h-full flex-1 gap-3 md:gap-4 lg:grid-cols-[200px_minmax(0,2fr)_minmax(0,1.05fr)] xl:grid-cols-[220px_minmax(0,2.1fr)_minmax(0,1.05fr)]">
-            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f1c]">
-              <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-3 lg:px-8">
+          <div className="flex h-full flex-1 gap-3 md:gap-3">
+            {showExplorer && (
+              <div className="flex h-full min-h-0 w-[220px] flex-shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--color-border-medium)] bg-[var(--color-bg-surface)]">
                 <FileExplorer
                   files={files}
                   activePath={activePath}
@@ -1438,30 +1419,48 @@ export default function WorkspaceClient({
                   readOnly={!canEdit}
                 />
               </div>
-            </div>
-            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d1324]">
+            )}
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--color-border-medium)] bg-[var(--color-bg-surface)]">
               <Editor value={code} language={lang} onChange={setActiveCode} readOnly={!canEdit} path={activePath} />
             </div>
-            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d1324]">
-              <Preview
-                files={sandpackFiles}
-                activePath={`/${activePath}`}
-                template={config.previewTemplate}
-                mode={config.previewMode}
-                disabledMessage={config.previewMessage}
-                activeFileCode={code}
-                activeFileLanguage={lang}
-              />
-            </div>
+            {showPreview && (
+              <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--color-border-medium)] bg-[var(--color-bg-surface)]">
+                <div className="flex h-8 items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] px-3">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">Preview</span>
+                  <div className="flex items-center gap-2">
+                    <button className="text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]" title="Refresh preview">
+                      <RotateCw className="h-3.5 w-3.5" />
+                    </button>
+                    <button className="text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]" title="Open in new tab">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <Preview
+                  files={sandpackFiles}
+                  activePath={`/${activePath}`}
+                  template={config.previewTemplate}
+                  mode={config.previewMode}
+                  disabledMessage={config.previewMessage}
+                  activeFileCode={code}
+                  activeFileLanguage={lang}
+                />
+              </div>
+            )}
           </div>
         </div>
       </main>
+      <StatusBar
+        language={lang}
+        cursorLine={cursorLine}
+        cursorColumn={cursorColumn}
+      />
       {toast ? (
         <div className="pointer-events-none fixed inset-x-0 top-6 flex justify-center px-4">
           <div
             className={`pointer-events-auto inline-flex items-center gap-3 rounded-full border px-4 py-2 text-sm shadow-lg backdrop-blur ${
               toast.kind === 'success'
-                ? 'border-emerald-400/50 bg-emerald-500/15 text-emerald-100'
+                ? 'border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)]'
                 : 'border-rose-400/50 bg-rose-500/15 text-rose-100'
             }`}
           >

@@ -1,80 +1,59 @@
-'use client'
+'use client';
 
-import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
-import { useSession, signIn, signOut } from 'next-auth/react'
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession, signIn, signOut } from 'next-auth/react';
+import { Dropdown, DropdownItem } from '@/components/ui/Dropdown';
 
 function getInitials(value: string) {
   return value
     .split(/\s+/)
     .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() ?? '')
+    .map(part => part[0]?.toUpperCase() ?? '')
     .join('')
-    .slice(0, 2)
+    .slice(0, 2);
 }
 
 export default function AuthStatus() {
-  const { data: session, status } = useSession()
-  const [open, setOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-
-    function handleClick(event: MouseEvent) {
-      if (!menuRef.current) return
-      if (!menuRef.current.contains(event.target as Node)) {
-        setOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
+  const { data: session, status } = useSession();
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   if (status === 'loading') {
     return (
-      <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/60">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" aria-hidden="true" />
+      <div className="flex items-center gap-3 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/70">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-[#93a8bf]" aria-hidden="true" />
         <span>Checking session…</span>
       </div>
-    )
+    );
   }
 
   if (session?.user) {
-    const displayName = session.user.name ?? session.user.email ?? 'Account'
-    const initials = getInitials(displayName || '') || 'Y'
-    const username = session.user.username ?? session.user.email ?? 'account'
-    const profileHref = session.user.username ? `/u/${session.user.username}` : '/setup-profile'
+    const displayName = session.user.name ?? session.user.email ?? 'Account';
+    const initials = getInitials(displayName || '') || 'Y';
+    const username = session.user.username ?? session.user.email ?? 'account';
+    const profileHref = session.user.username ? `/u/${session.user.username}` : '/setup-profile';
 
     return (
-      <div className="relative" ref={menuRef}>
+      <div className="relative">
         <button
           type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-left text-sm text-white/80 shadow-lg shadow-emerald-500/10 backdrop-blur transition hover:border-emerald-300/60 hover:text-white"
+          onClick={() => setOpen(value => !value)}
+          className="flex items-center gap-3 rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] px-4 py-2 text-left text-sm text-[var(--color-text-primary)] transition hover:border-[var(--color-text-muted)] hover:text-white"
         >
           {session.user.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={session.user.image}
-              alt={displayName}
-              className="h-9 w-9 rounded-full border border-white/20 object-cover"
-            />
+            <img src={session.user.image} alt={displayName} className="h-9 w-9 rounded-full border border-[var(--color-border-strong)] object-cover" />
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-xs font-semibold text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border-strong)] bg-[#0f141d] text-xs font-semibold text-[var(--color-text-primary)]">
               {initials}
             </div>
           )}
           <div className="flex flex-col leading-tight">
-            <span className="text-[10px] uppercase tracking-[0.4em] text-white/50">Signed in</span>
+            <span className="text-[10px] uppercase tracking-[0.4em] text-[var(--color-text-muted)]">Signed in</span>
             <span className="font-semibold text-white">@{username}</span>
           </div>
-          <svg
-            className={`h-4 w-4 text-white/50 transition ${open ? 'rotate-180 text-white' : ''}`}
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
+          <svg className={`h-4 w-4 text-[var(--color-text-muted)] transition ${open ? 'rotate-180 text-white' : ''}`} viewBox="0 0 24 24" aria-hidden="true">
             <path
               d="m6 9 6 6 6-6"
               fill="none"
@@ -85,43 +64,27 @@ export default function AuthStatus() {
             />
           </svg>
         </button>
-        {open && (
-          <div className="absolute right-0 z-50 mt-3 w-48 overflow-hidden rounded-xl border border-white/10 bg-slate-900/90 p-2 text-sm text-white shadow-emerald-500/20 backdrop-blur">
-            <Link
-              href="/dashboard"
-              className="block rounded-lg px-3 py-2 text-white/80 transition hover:bg-white/10 hover:text-white"
-              onClick={() => setOpen(false)}
-            >
-              Dashboard
-            </Link>
-            <Link
-              href={profileHref}
-              className="block rounded-lg px-3 py-2 text-white/80 transition hover:bg-white/10 hover:text-white"
-              onClick={() => setOpen(false)}
-            >
-              {session.user.username ? 'Profile' : 'Finish profile'}
-            </Link>
-            <button
-              onClick={() => {
-                setOpen(false)
-                void signOut()
-              }}
-              className="block w-full rounded-lg px-3 py-2 text-left text-white/80 transition hover:bg-white/10 hover:text-white"
-            >
-              Logout
-            </button>
-          </div>
-        )}
+        <Dropdown open={open} onClose={() => setOpen(false)}>
+          <DropdownItem onSelect={() => router.push('/dashboard')}>
+            Dashboard
+          </DropdownItem>
+          <DropdownItem onSelect={() => router.push(profileHref)}>
+            {session.user.username ? 'Profile' : 'Finish profile'}
+          </DropdownItem>
+          <DropdownItem onSelect={() => signOut()} destructive>
+            Logout
+          </DropdownItem>
+        </Dropdown>
       </div>
-    )
+    );
   }
 
   return (
     <button
       onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-      className="group flex items-center gap-4 rounded-full border border-white/10 bg-white/5 px-5 py-2 text-left text-sm text-white/90 shadow-lg shadow-emerald-500/10 transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/10 hover:text-white hover:shadow-emerald-500/20"
+      className="group flex items-center gap-4 rounded-full border border-white/15 bg-white/5 px-5 py-2 text-left text-sm text-white/90 transition hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/10 hover:text-white"
     >
-      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-md shadow-emerald-500/20">
+      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-md">
         <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
           <path
             d="M21.35 11.1h-9.18v2.96h5.48c-.24 1.45-1.46 2.76-3.25 2.76-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6c1.02 0 1.94.43 2.57 1.12l2.06-2.06C17.83 6.69 16.02 5.9 14 5.9c-3.8 0-6.88 3.08-6.88 6.88s3.08 6.88 6.88 6.88c3.94 0 6.55-2.77 6.55-6.55 0-.44-.05-.9-.12-1.31z"
@@ -142,14 +105,10 @@ export default function AuthStatus() {
         </svg>
       </span>
       <div className="flex flex-col leading-tight">
-        <span className="text-[10px] uppercase tracking-[0.4em] text-white/50">Continue with</span>
+        <span className="text-[10px] uppercase tracking-[0.4em] text-white/55">Continue with</span>
         <span className="font-semibold">Google</span>
       </div>
-      <svg
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        className="ml-auto h-4 w-4 text-white/50 transition group-hover:translate-x-1 group-hover:text-white"
-      >
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="ml-auto h-4 w-4 text-white/55 transition group-hover:translate-x-1 group-hover:text-white">
         <path
           d="M5 12h14m0 0-5-5m5 5-5 5"
           fill="none"
@@ -161,5 +120,5 @@ export default function AuthStatus() {
       </svg>
       <span className="sr-only">Sign in with Google</span>
     </button>
-  )
+  );
 }

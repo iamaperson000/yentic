@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useRouter } from 'next/navigation';
+import { FormEvent, useState } from 'react';
 
 export function UsernameSearchForm({
-  initialUsername = "",
+  initialUsername = '',
 }: {
   initialUsername?: string;
 }) {
@@ -23,10 +23,7 @@ export function UsernameSearchForm({
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:gap-2"
-    >
+    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
       <label className="sr-only" htmlFor="username-search">
         Search by username
       </label>
@@ -34,13 +31,13 @@ export function UsernameSearchForm({
         id="username-search"
         type="search"
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={event => setValue(event.target.value)}
         placeholder="Search username"
-        className="w-full rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm text-white/80 placeholder:text-white/40 shadow-inner shadow-black/10 transition focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+        className="w-full rounded-full border border-[#3b4a60] bg-[#0f141d] px-5 py-2.5 text-sm text-[#d3dfee] placeholder:text-[#6f8097] transition focus:border-[#93a8bf] focus:outline-none focus:ring-2 focus:ring-[#93a8bf]/35"
       />
       <button
         type="submit"
-        className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-black shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+        className="inline-flex items-center justify-center rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-slate-200"
       >
         Search
       </button>
