@@ -8,9 +8,10 @@ export const dynamic = 'force-dynamic';
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams?: { q?: string };
+  searchParams?: Promise<{ q?: string }>;
 }) {
-  const query = searchParams?.q?.trim() ?? '';
+  const resolvedParams = (await searchParams) ?? {};
+  const query = resolvedParams.q?.trim() ?? '';
 
   if (!process.env.DATABASE_URL) {
     return (

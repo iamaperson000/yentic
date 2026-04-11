@@ -9,7 +9,6 @@ const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/features', label: 'Features' },
   { href: '/roadmap', label: 'Roadmap' },
-  { href: '/chat', label: 'Chat Lab' },
 ];
 
 const footerColumns = [
@@ -18,7 +17,7 @@ const footerColumns = [
     links: [
       { href: '/features', label: 'Features' },
       { href: '/roadmap', label: 'Roadmap' },
-      { href: '/chat', label: 'Chat Lab' },
+      { href: '/ide', label: 'Open IDE' },
     ],
   },
   {
@@ -34,7 +33,7 @@ const footerColumns = [
     links: [
       { href: '/terms', label: 'Terms' },
       { href: '/privacy', label: 'Privacy' },
-      { href: '/', label: 'Home' },
+      { href: '/signup', label: 'Sign up' },
     ],
   },
 ];

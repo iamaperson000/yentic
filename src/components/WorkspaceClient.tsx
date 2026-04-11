@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { ChevronLeft, ExternalLink, RotateCw, Settings } from 'lucide-react';
+import { ChevronLeft, RotateCw, Settings } from 'lucide-react';
 
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
@@ -162,6 +162,7 @@ export default function WorkspaceClient({
   const [liveCollaborators, setLiveCollaborators] = useState<CollaboratorPresence[]>([]);
   const [showExplorer, setShowExplorer] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [cursorLine, setCursorLine] = useState<number>(1);
   const [cursorColumn, setCursorColumn] = useState<number>(1);
 
@@ -538,7 +539,7 @@ export default function WorkspaceClient({
       setEncodedYjsState(project.yjsState ?? null);
       collaborativeDirtyRef.current = false;
       if (!options?.silent) {
-        pushToast({ kind: 'success', message: `✅ Loaded project: ${normalizedName}` });
+        pushToast({ kind: 'success', message: `Loaded project: ${normalizedName}` });
       }
     },
     [config.defaultActivePath, defaultProjectName, pushToast, updateFiles, workspaceId]
@@ -600,8 +601,8 @@ export default function WorkspaceClient({
               kind: 'error',
               message:
                 res.status === 403
-                  ? '❌ Finish setting up your profile to sync projects.'
-                  : '❌ Sign in to sync projects to the cloud.',
+                  ? 'Finish setting up your profile to sync projects.'
+                  : 'Sign in to sync projects to the cloud.',
             });
           }
           return {
@@ -628,7 +629,7 @@ export default function WorkspaceClient({
           message = message || 'Save failed';
           setCloudError(message);
           if (context !== 'auto') {
-            pushToast({ kind: 'error', message: `❌ Save failed: ${message}` });
+            pushToast({ kind: 'error', message: `Save failed: ${message}` });
           }
           return { ok: false as const, reason: 'error' as const, message };
         }
@@ -655,7 +656,7 @@ export default function WorkspaceClient({
         console.error('Save failed:', error);
         setCloudError('Network error');
         if (context !== 'auto') {
-          pushToast({ kind: 'error', message: '❌ Save failed: network or auth issue' });
+          pushToast({ kind: 'error', message: 'Save failed: network or auth issue' });
         }
         return { ok: false as const, reason: 'error' as const, message: 'network' };
       } finally {
@@ -1130,21 +1131,21 @@ export default function WorkspaceClient({
         if (res.status === 401) {
           if (!cancelled) {
             setCloudAuthRequired(true);
-            pushToast({ kind: 'error', message: '❌ Sign in to load cloud projects.' });
+            pushToast({ kind: 'error', message: 'Sign in to load cloud projects.' });
             loadedCloudProjectIdRef.current = null;
           }
           return;
         }
         if (res.status === 404) {
           if (!cancelled) {
-            pushToast({ kind: 'error', message: '❌ Project not found or inaccessible.' });
+            pushToast({ kind: 'error', message: 'Project not found or inaccessible.' });
             loadedCloudProjectIdRef.current = null;
           }
           return;
         }
         if (!res.ok) {
           if (!cancelled) {
-            pushToast({ kind: 'error', message: '❌ Failed to load project from cloud.' });
+            pushToast({ kind: 'error', message: 'Failed to load project from cloud.' });
             loadedCloudProjectIdRef.current = null;
           }
           return;
@@ -1153,7 +1154,7 @@ export default function WorkspaceClient({
         const targetSlug = resolveWorkspaceSlugFromLanguage(project.language, slug);
         if (targetSlug !== slug) {
           if (!cancelled) {
-            pushToast({ kind: 'error', message: '❌ Project belongs to a different workspace.' });
+            pushToast({ kind: 'error', message: 'Project belongs to a different workspace.' });
             loadedCloudProjectIdRef.current = null;
           }
           return;
@@ -1164,7 +1165,7 @@ export default function WorkspaceClient({
       } catch (error) {
         console.error('Failed to load project:', error);
         if (!cancelled) {
-          pushToast({ kind: 'error', message: '❌ Failed to load project from cloud.' });
+          pushToast({ kind: 'error', message: 'Failed to load project from cloud.' });
           loadedCloudProjectIdRef.current = null;
         }
       } finally {
@@ -1323,10 +1324,11 @@ export default function WorkspaceClient({
           <div className="flex items-center gap-1.5 text-sm">
             <Link
               href="/ide"
-              className="flex items-center gap-1 text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]"
+              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[var(--color-text-muted)] transition hover:bg-white/5 hover:text-[var(--color-text-primary)]"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{config.title}</span>
+              <span className="sm:hidden">Back</span>
             </Link>
             <span className="text-[var(--color-text-muted)]">/</span>
             {isRenamingProject ? (
@@ -1428,15 +1430,17 @@ export default function WorkspaceClient({
                 <div className="flex h-8 items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] px-3">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">Preview</span>
                   <div className="flex items-center gap-2">
-                    <button className="text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]" title="Refresh preview">
+                    <button
+                      onClick={() => setPreviewRefreshKey(k => k + 1)}
+                      className="text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]"
+                      title="Refresh preview"
+                    >
                       <RotateCw className="h-3.5 w-3.5" />
-                    </button>
-                    <button className="text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]" title="Open in new tab">
-                      <ExternalLink className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
                 <Preview
+                  key={previewRefreshKey}
                   files={sandpackFiles}
                   activePath={`/${activePath}`}
                   template={config.previewTemplate}

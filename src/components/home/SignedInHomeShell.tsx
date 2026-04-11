@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -107,6 +107,7 @@ export default function SignedInHomeShell() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
@@ -121,6 +122,25 @@ export default function SignedInHomeShell() {
   const [renameDraft, setRenameDraft] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
+
+  const showFeedback = useCallback((message: string) => {
+    setFeedback(message);
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
+    feedbackTimeoutRef.current = setTimeout(() => {
+      setFeedback(null);
+      feedbackTimeoutRef.current = null;
+    }, 4000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -245,14 +265,14 @@ export default function SignedInHomeShell() {
 
       setRenameTarget(null);
       setRenameDraft('');
-      setFeedback('Project renamed.');
+      showFeedback('Project renamed.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to rename project';
       setRenameError(message);
     } finally {
       setIsRenaming(false);
     }
-  }, [renameDraft, renameTarget]);
+  }, [renameDraft, renameTarget, showFeedback]);
 
   const handleDeleteOwnedProject = useCallback(async (project: HomeProjectSummary) => {
     const confirmed = window.confirm(`Delete "${project.name}"? This cannot be undone.`);
@@ -270,12 +290,12 @@ export default function SignedInHomeShell() {
       }
 
       setOwnedProjects((projects) => projects.filter((entry) => entry.id !== project.id));
-      setFeedback('Project deleted.');
+      showFeedback('Project deleted.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete project';
-      setFeedback(message);
+      showFeedback(message);
     }
-  }, []);
+  }, [showFeedback]);
 
   const handleShareOwnedProject = useCallback(async (project: HomeProjectSummary) => {
     try {
@@ -301,15 +321,15 @@ export default function SignedInHomeShell() {
 
       try {
         await navigator.clipboard.writeText(fullUrl);
-        setFeedback('Share link copied to clipboard.');
+        showFeedback('Share link copied to clipboard.');
       } catch {
-        setFeedback(fullUrl);
+        showFeedback(fullUrl);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create share link';
-      setFeedback(message);
+      showFeedback(message);
     }
-  }, []);
+  }, [showFeedback]);
 
   const handleActionSelect = useCallback(
     async (action: ProjectMenuAction, project: HomeProjectSummary) => {

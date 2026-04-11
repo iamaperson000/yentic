@@ -10,7 +10,7 @@ import SessionWrapper from '@/components/SessionWrapper';
 export const metadata: Metadata = {
   title: 'Yentic — Classic Web IDE',
   description: 'A clean, fast, collaborative-ready web IDE (no AI bloat).',
-  metadataBase: new URL('http://localhost:3000'),
+  metadataBase: new URL(process.env.NEXTAUTH_URL ?? 'http://localhost:3000'),
 };
 
 export default function RootLayout({

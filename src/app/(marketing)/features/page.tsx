@@ -78,7 +78,7 @@ export default function FeaturesPage() {
             {featureGroups.map(group => (
               <section key={group.title} className="bg-[var(--color-light-bg)] px-6 py-7 sm:px-8 sm:py-8">
                 <h3 className="flex items-center gap-2 text-[22px] font-medium leading-[1.2] tracking-[-0.02em] text-[#101a27]">
-                  <group.icon size={20} className="text-[var(--color-text-muted)]" />
+                  <group.icon size={20} className="text-[var(--color-light-muted)]" />
                   {group.title}
                 </h3>
                 <p className="mt-3 text-[14px] leading-[1.6] text-[#273446]/85">{group.description}</p>

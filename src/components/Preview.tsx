@@ -813,12 +813,6 @@ export function Preview({
                     display: 'none'
                   }}
                 />
-                <SandpackCodeEditor
-                  className="hidden"
-                  style={{
-                    display: 'none'
-                  }}
-                />
               </SandpackLayout>
             </div>
           </SandpackProvider>

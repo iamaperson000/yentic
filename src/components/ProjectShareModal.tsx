@@ -83,7 +83,8 @@ export function ProjectShareModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#0b0f1a] p-6 text-white shadow-2xl">
+      <div className="absolute inset-0" onClick={onClose} />
+      <div className="relative w-full max-w-lg rounded-2xl border border-white/15 bg-[#0b0f1a] p-6 text-white shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold">Share project</h2>

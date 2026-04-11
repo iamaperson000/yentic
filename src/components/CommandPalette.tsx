@@ -11,7 +11,7 @@ const navigationItems = [
   { label: 'Home', href: '/', icon: Home },
   { label: 'Features', href: '/features', icon: FileCode },
   { label: 'Roadmap', href: '/roadmap', icon: Map },
-  { label: 'Profile', href: '/', icon: UserCircle },
+  { label: 'Profile', href: '/setup-profile', icon: UserCircle },
 ];
 
 const workspaceItems = [
@@ -76,7 +76,6 @@ export function CommandPalette() {
                 </Command.Empty>
 
                 <Command.Group heading="Navigation">
-                  <p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">Navigation</p>
                   {navigationItems.map((item) => (
                     <Command.Item
                       key={item.href}
@@ -91,7 +90,6 @@ export function CommandPalette() {
                 </Command.Group>
 
                 <Command.Group heading="Workspaces">
-                  <p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">Workspaces</p>
                   {workspaceItems.map((item) => (
                     <Command.Item
                       key={item.href}
