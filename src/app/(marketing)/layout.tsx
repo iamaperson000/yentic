@@ -24,7 +24,6 @@ const footerColumns = [
     title: 'Workspace',
     links: [
       { href: '/ide', label: 'Open IDE' },
-      { href: '/ide#saved-projects', label: 'Saved Projects' },
       { href: '/signup', label: 'Create Account' },
     ],
   },
