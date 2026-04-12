@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import Monaco from '@monaco-editor/react';
 
 import { useCollaboration } from '@/components/CollaborativeEditor';
+import { shouldReplaceStandaloneEditorValue } from '@/lib/workspace-collaboration';
 
 type EditorProps = {
   value: string;
@@ -16,7 +17,7 @@ type EditorProps = {
 export function Editor({ value, language, onChange, readOnly = false, path, onCursorChange }: EditorProps) {
   const monacoLanguage = language === 'c' ? 'cpp' : language;
   const { awareness, getTextForPath, isActive } = useCollaboration();
-  const yText = useMemo(() => (path && isActive ? getTextForPath(path) : null), [getTextForPath, isActive, path]);
+  const yText = path && isActive ? getTextForPath(path) : null;
   const collaborative = Boolean(yText && awareness);
   const bindingRef = useRef<{ destroy?: () => void } | null>(null);
   const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
@@ -33,47 +34,60 @@ export function Editor({ value, language, onChange, readOnly = false, path, onCu
 
   useEffect(() => {
     const editor = editorRef.current;
+    const model = editor?.getModel();
     let cancelled = false;
 
     bindingRef.current?.destroy?.();
     bindingRef.current = null;
 
-    if (!editor) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const model = editor.getModel();
-    if (!model) {
+    if (!editor || !model || !collaborative || !yText || !awareness) {
       return () => {
         cancelled = true;
       };
     }
     const activeEditor = editor;
     const activeModel = model;
+    const activeYText = yText;
+    const activeAwareness = awareness;
 
-    async function syncEditor() {
-      if (collaborative && yText && awareness) {
-        const { MonacoBinding } = await import('y-monaco');
-        if (cancelled) {
-          return;
-        }
-        bindingRef.current = new MonacoBinding(yText, activeModel, new Set([activeEditor]), awareness);
+    async function bindEditor() {
+      const { MonacoBinding } = await import('y-monaco');
+      if (cancelled) {
         return;
       }
 
-      activeEditor.setValue(value);
+      bindingRef.current = new MonacoBinding(activeYText, activeModel, new Set([activeEditor]), activeAwareness);
     }
 
-    void syncEditor();
+    void bindEditor();
 
     return () => {
       cancelled = true;
       bindingRef.current?.destroy?.();
       bindingRef.current = null;
     };
-  }, [awareness, collaborative, value, yText]);
+  }, [awareness, collaborative, yText]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+
+    if (!editor || !model) {
+      return;
+    }
+
+    if (
+      !shouldReplaceStandaloneEditorValue({
+        modelValue: model.getValue(),
+        nextValue: value,
+        collaborative,
+      })
+    ) {
+      return;
+    }
+
+    model.setValue(value);
+  }, [collaborative, value]);
 
   const handleMount = (editor: import('monaco-editor').editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
@@ -102,6 +116,7 @@ export function Editor({ value, language, onChange, readOnly = false, path, onCu
         width="100%"
         theme="vs-dark"
         language={monacoLanguage === 'javascript' ? 'javascript' : monacoLanguage}
+        path={path}
         value={collaborative ? undefined : value}
         defaultValue={collaborative && yText ? yText.toString() : value}
         options={{

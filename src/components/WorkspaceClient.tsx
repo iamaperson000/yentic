@@ -37,6 +37,11 @@ import {
   workspaceConfigs,
   writeWorkspaceMeta,
 } from '@/lib/project';
+import {
+  getSavedStatusLabel,
+  shouldApplyRemoteCollaborativeState,
+  shouldPersistCollaborativeState,
+} from '@/lib/workspace-collaboration';
 
 const extensionMap: Record<SupportedLanguage, string> = {
   html: 'html',
@@ -150,10 +155,11 @@ export default function WorkspaceClient({
   const collaborativeSnapshotRef = useRef<string | null>(initialProject?.yjsState ?? null);
   const collaborativeDirtyRef = useRef(false);
   const collaborativeSaveInFlightRef = useRef(false);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [collaborationRoomKey, setCollaborationRoomKey] = useState<string | null>(
     initialProject?.collaborationKey ?? null
   );
-  const collaborationKey = projectMeta.id ? collaborationRoomKey : workspaceId;
+  const collaborationKey = projectMeta.id ? collaborationRoomKey ?? projectMeta.id : null;
   const [isShareModalOpen, setShareModalOpen] = useState(false);
   const [isLoadingCollaborators, setIsLoadingCollaborators] = useState(false);
   const [inviteValue, setInviteValue] = useState('');
@@ -171,6 +177,10 @@ export default function WorkspaceClient({
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [cursorLine, setCursorLine] = useState<number>(1);
   const [cursorColumn, setCursorColumn] = useState<number>(1);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useKeyboardShortcuts(useMemo(() => [
     { key: 'b', meta: true, handler: () => setShowExplorer(prev => !prev) },
@@ -774,16 +784,14 @@ export default function WorkspaceClient({
   }, [files, viewerRole]);
 
   const flushCollaborativeState = useCallback((options?: { keepalive?: boolean }) => {
-    if (viewerRole === 'viewer') {
-      return Promise.resolve(false);
-    }
-    if (!projectMeta.id) {
-      return Promise.resolve(false);
-    }
-    if (!collaborativeDirtyRef.current) {
-      return Promise.resolve(false);
-    }
-    if (collaborativeSaveInFlightRef.current) {
+    if (
+      !shouldPersistCollaborativeState({
+        projectId: projectMeta.id,
+        viewerRole,
+        isDirty: collaborativeDirtyRef.current,
+        isSaving: collaborativeSaveInFlightRef.current,
+      })
+    ) {
       return Promise.resolve(false);
     }
     collaborativeSaveInFlightRef.current = true;
@@ -800,6 +808,25 @@ export default function WorkspaceClient({
     }, 30000);
     return () => window.clearInterval(interval);
   }, [flushCollaborativeState, projectMeta.id, viewerRole]);
+
+  useEffect(() => {
+    if (
+      !shouldPersistCollaborativeState({
+        projectId: projectMeta.id,
+        viewerRole,
+        isDirty: collaborativeDirtyRef.current,
+        isSaving: collaborativeSaveInFlightRef.current,
+      })
+    ) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void flushCollaborativeState();
+    }, 1200);
+
+    return () => window.clearTimeout(timeout);
+  }, [encodedYjsState, flushCollaborativeState, projectMeta.id, viewerRole]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -826,6 +853,75 @@ export default function WorkspaceClient({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [flushCollaborativeState, projectMeta.id, viewerRole]);
+
+  useEffect(() => {
+    if (!projectMeta.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncRemoteProject = async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectMeta.id}`, { cache: 'no-store' });
+        if (!res.ok) {
+          return;
+        }
+
+        const project = (await res.json()) as CloudProject;
+        if (cancelled) {
+          return;
+        }
+
+        const nextSavedAt = project.updatedAt ? new Date(project.updatedAt) : null;
+        setLastSavedAt(previous => {
+          if (!nextSavedAt) {
+            return previous;
+          }
+          if (previous && previous.getTime() === nextSavedAt.getTime()) {
+            return previous;
+          }
+          return nextSavedAt;
+        });
+
+        if (
+          typeof project.collaborationKey === 'string' &&
+          project.collaborationKey.length > 0 &&
+          project.collaborationKey !== collaborationRoomKey
+        ) {
+          setCollaborationRoomKey(project.collaborationKey);
+        }
+
+        if (project.viewerRole && project.viewerRole !== viewerRole) {
+          setViewerRole(project.viewerRole);
+        }
+
+        if (
+          shouldApplyRemoteCollaborativeState({
+            incomingState: project.yjsState ?? null,
+            localState: collaborativeSnapshotRef.current ?? null,
+            hasPendingLocalChanges:
+              collaborativeDirtyRef.current || collaborativeSaveInFlightRef.current,
+          })
+        ) {
+          collaborativeSnapshotRef.current = project.yjsState ?? null;
+          setEncodedYjsState(project.yjsState ?? null);
+        }
+      } catch (error) {
+        console.error('Failed to poll project collaboration state', error);
+      }
+    };
+
+    void syncRemoteProject();
+    const interval = window.setInterval(() => {
+      void syncRemoteProject();
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [collaborationRoomKey, projectMeta.id, viewerRole]);
 
   const syncCollaborationMetadata = useCallback(async () => {
     if (!projectMeta.id) {
@@ -1267,7 +1363,7 @@ export default function WorkspaceClient({
   }, [files]);
 
   const visibleTabs = useMemo(() => openTabs.filter(path => files[path]), [files, openTabs]);
-  const formattedTime = formatTime(lastSavedAt);
+  const formattedTime = isHydrated ? formatTime(lastSavedAt) : null;
   const orderedLiveCollaborators = useMemo(() => {
     if (!liveCollaborators.length) {
       return [] as CollaboratorPresence[];
@@ -1279,22 +1375,15 @@ export default function WorkspaceClient({
       return a.userId.localeCompare(b.userId);
     });
   }, [liveCollaborators]);
-  let savedLabel: string;
-  if (isLoadingCloudProject) {
-    savedLabel = 'Loading project…';
-  } else if (cloudAuthRequired) {
-    savedLabel = 'Not syncing (sign in)';
-  } else if (cloudError) {
-    savedLabel = 'Sync issue';
-  } else if (isSaving) {
-    savedLabel = 'Saving…';
-  } else if (formattedTime) {
-    savedLabel = `Saved at ${formattedTime}`;
-  } else if (lastSavedAt) {
-    savedLabel = 'Synced to cloud';
-  } else {
-    savedLabel = 'Local backup only';
-  }
+  const savedLabel = getSavedStatusLabel({
+    isLoadingCloudProject,
+    cloudAuthRequired,
+    cloudError,
+    isSaving,
+    lastSavedAt,
+    hydrated: isHydrated,
+    formattedTime,
+  });
 
   const canEdit = viewerRole !== 'viewer';
   const shareButtonDisabled = !projectMeta.id;

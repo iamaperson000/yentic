@@ -10,11 +10,12 @@ import {
   type ReactNode,
 } from 'react';
 import { Buffer } from 'buffer';
-import type { Awareness } from 'y-protocols/awareness';
+import { Awareness } from 'y-protocols/awareness';
 import { WebrtcProvider } from 'y-webrtc';
 import * as Y from 'yjs';
 
 import { inferLanguage, type ProjectFile, type ProjectFileMap } from '@/lib/project';
+import { parseCollaborationSignalingServers } from '@/lib/workspace-collaboration';
 import type { CollaboratorPresence, LocalCollaboratorPresence } from '@/types/collaboration';
 
 /* -------------------------------------------------------------------------- */
@@ -44,6 +45,7 @@ type CollaborationContextValue = {
 /* -------------------------------------------------------------------------- */
 
 const LOCAL_ORIGIN = Symbol('collaboration-local');
+const SIGNALING_SERVERS = parseCollaborationSignalingServers(process.env.NEXT_PUBLIC_COLLAB_SIGNALING);
 
 const CollaborationContext = createContext<CollaborationContextValue>({
   getTextForPath: () => null,
@@ -249,6 +251,7 @@ export default function CollaborativeEditor({
 }: CollaborativeEditorProps) {
   const ydocRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebrtcProvider | null>(null);
+  const awarenessRef = useRef<Awareness | null>(null);
   const filesMapRef = useRef<Y.Map<Y.Map<unknown>> | null>(null);
   const suppressLocalSyncRef = useRef(false);
   const initialisedRef = useRef(false);
@@ -310,8 +313,13 @@ export default function CollaborativeEditor({
 
   useEffect(() => {
     if (!projectId || typeof window === 'undefined') {
-      providerRef.current?.destroy();
+      const provider = providerRef.current;
+      provider?.destroy();
       providerRef.current = null;
+      if (!provider) {
+        awarenessRef.current?.destroy();
+      }
+      awarenessRef.current = null;
       ydocRef.current?.destroy();
       ydocRef.current = null;
       filesMapRef.current = null;
@@ -350,38 +358,37 @@ export default function CollaborativeEditor({
       doc.transact(() => applyFilesToMap(filesMap, sanitized), LOCAL_ORIGIN);
     }
 
-    const provider = new WebrtcProvider(`project-${projectId}`, doc, {
-      signaling: [
-        'wss://signaling.yjs.dev',
-        'wss://y-webrtc-signaling-us.herokuapp.com',
-        'wss://y-webrtc-signaling-eu.herokuapp.com',
-      ],
-      maxConns: 20,
-      filterBcConns: true,
-    });
+    const provider =
+      SIGNALING_SERVERS.length > 0
+        ? new WebrtcProvider(`project-${projectId}`, doc, {
+            signaling: SIGNALING_SERVERS,
+            maxConns: 20,
+            filterBcConns: true,
+          })
+        : null;
     providerRef.current = provider;
+    const awarenessInstance = provider?.awareness ?? new Awareness(doc);
+    awarenessRef.current = awarenessInstance;
 
     const handleAwarenessUpdate = () => {
-      setAwareness(provider.awareness);
+      setAwareness(awarenessInstance);
       setIsActive(true);
-      const presence = presenceFromAwareness(provider.awareness, localPresenceRef.current);
+      const presence = presenceFromAwareness(awarenessInstance, localPresenceRef.current);
       onPresenceChangeRef.current?.(presence);
     };
 
-    provider.awareness.setLocalStateField('user', initialLocalPresence ?? null);
-    provider.awareness.on('update', handleAwarenessUpdate);
+    awarenessInstance.setLocalStateField('user', initialLocalPresence ?? null);
+    awarenessInstance.on('update', handleAwarenessUpdate);
     handleAwarenessUpdate();
 
     const handleDocUpdate = () => {
       onSnapshotChangeRef.current?.(encodeUpdate(Y.encodeStateAsUpdate(doc)));
     };
 
-    const handleFilesChange = (_events: unknown, transaction: Y.Transaction) => {
+    const handleFilesChange = () => {
       const snapshot = mapToProjectFileMap(filesMap);
       applySnapshotToParent(snapshot);
-      if (!transaction.local) {
-        onRemoteMutationRef.current?.();
-      }
+      onRemoteMutationRef.current?.();
     };
 
     doc.on('update', handleDocUpdate);
@@ -395,9 +402,13 @@ export default function CollaborativeEditor({
     return () => {
       filesMap.unobserveDeep(handleFilesChange);
       doc.off('update', handleDocUpdate);
-      provider.awareness.off('update', handleAwarenessUpdate);
-      provider.destroy();
+      awarenessInstance.off('update', handleAwarenessUpdate);
+      provider?.destroy();
       providerRef.current = null;
+      if (!provider) {
+        awarenessInstance.destroy();
+      }
+      awarenessRef.current = null;
       doc.destroy();
       ydocRef.current = null;
       filesMapRef.current = null;
@@ -410,9 +421,9 @@ export default function CollaborativeEditor({
 
   useEffect(() => {
     if (!projectId) return;
-    const provider = providerRef.current;
-    if (!provider) return;
-    provider.awareness.setLocalStateField('user', localPresence ?? null);
+    const awarenessInstance = awarenessRef.current;
+    if (!awarenessInstance) return;
+    awarenessInstance.setLocalStateField('user', localPresence ?? null);
   }, [localPresence, projectId]);
 
   useEffect(() => {
