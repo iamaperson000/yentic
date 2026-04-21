@@ -345,7 +345,6 @@ function CollaborativeEditorInner({
       provider.destroy();
       providerRef.current = null;
       awarenessRef.current = null;
-      doc.destroy();
       ydocRef.current = null;
       filesMapRef.current = null;
       initialisedRef.current = false;
