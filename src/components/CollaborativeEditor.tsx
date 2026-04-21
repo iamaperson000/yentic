@@ -10,17 +10,19 @@ import {
   type ReactNode,
 } from 'react';
 import { Buffer } from 'buffer';
+import {
+  LiveblocksProvider,
+  RoomProvider,
+  ClientSideSuspense,
+  useRoom,
+} from '@liveblocks/react/suspense';
+import { LiveblocksYjsProvider } from '@liveblocks/yjs';
 import { Awareness } from 'y-protocols/awareness';
-import { WebrtcProvider } from 'y-webrtc';
 import * as Y from 'yjs';
 
 import { inferLanguage, type ProjectFile, type ProjectFileMap } from '@/lib/project';
-import { parseCollaborationSignalingServers } from '@/lib/workspace-collaboration';
+import { projectRoomId } from '@/lib/room-id';
 import type { CollaboratorPresence, LocalCollaboratorPresence } from '@/types/collaboration';
-
-/* -------------------------------------------------------------------------- */
-/*                                   Types                                    */
-/* -------------------------------------------------------------------------- */
 
 type CollaborativeEditorProps = {
   projectId: string | null;
@@ -40,12 +42,7 @@ type CollaborationContextValue = {
   isActive: boolean;
 };
 
-/* -------------------------------------------------------------------------- */
-/*                                   Utils                                    */
-/* -------------------------------------------------------------------------- */
-
 const LOCAL_ORIGIN = Symbol('collaboration-local');
-const SIGNALING_SERVERS = parseCollaborationSignalingServers(process.env.NEXT_PUBLIC_COLLAB_SIGNALING);
 
 const CollaborationContext = createContext<CollaborationContextValue>({
   getTextForPath: () => null,
@@ -57,26 +54,21 @@ export function useCollaboration() {
   return useContext(CollaborationContext);
 }
 
+/* -------------------------------- Utils ---------------------------------- */
+
 function sanitizeProjectFile(raw: unknown): ProjectFile | null {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
+  if (!raw || typeof raw !== 'object') return null;
   const { path, language, code } = raw as Partial<ProjectFile> & {
     path?: unknown;
     language?: unknown;
     code?: unknown;
   };
-
-  if (typeof path !== 'string' || path.trim().length === 0) {
-    return null;
-  }
+  if (typeof path !== 'string' || path.trim().length === 0) return null;
   const normalizedPath = path.trim().slice(0, 260);
-
   const normalizedLanguage: ProjectFile['language'] =
     typeof language === 'string' && ['html', 'css', 'javascript', 'python', 'c', 'cpp', 'java'].includes(language.trim())
       ? (language.trim() as ProjectFile['language'])
       : inferLanguage(normalizedPath);
-
   const normalizedCode = typeof code === 'string' ? code : '';
   return { path: normalizedPath, language: normalizedLanguage, code: normalizedCode };
 }
@@ -85,9 +77,7 @@ function sanitizeProjectMap(map: ProjectFileMap): ProjectFileMap {
   const result: ProjectFileMap = {};
   Object.values(map).forEach(file => {
     const sanitized = sanitizeProjectFile(file);
-    if (sanitized) {
-      result[sanitized.path] = { ...sanitized };
-    }
+    if (sanitized) result[sanitized.path] = { ...sanitized };
   });
   return result;
 }
@@ -95,24 +85,12 @@ function sanitizeProjectMap(map: ProjectFileMap): ProjectFileMap {
 function projectMapsEqual(left: ProjectFileMap, right: ProjectFileMap): boolean {
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);
-
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-
+  if (leftKeys.length !== rightKeys.length) return false;
   return leftKeys.every(path => {
-    const leftFile = left[path];
-    const rightFile = right[path];
-
-    if (!leftFile || !rightFile) {
-      return false;
-    }
-
-    return (
-      leftFile.path === rightFile.path &&
-      leftFile.language === rightFile.language &&
-      leftFile.code === rightFile.code
-    );
+    const l = left[path];
+    const r = right[path];
+    if (!l || !r) return false;
+    return l.path === r.path && l.language === r.language && l.code === r.code;
   });
 }
 
@@ -120,15 +98,11 @@ function decodeSnapshotToMap(encoded: string): ProjectFileMap | null {
   try {
     const binary = typeof window === 'undefined' ? Buffer.from(encoded, 'base64').toString('utf-8') : atob(encoded);
     const parsed = JSON.parse(binary) as unknown;
-    if (!Array.isArray(parsed)) {
-      return null;
-    }
+    if (!Array.isArray(parsed)) return null;
     const out: ProjectFileMap = {};
     parsed.forEach(entry => {
       const sanitized = sanitizeProjectFile(entry);
-      if (sanitized) {
-        out[sanitized.path] = { ...sanitized };
-      }
+      if (sanitized) out[sanitized.path] = { ...sanitized };
     });
     return out;
   } catch {
@@ -137,13 +111,9 @@ function decodeSnapshotToMap(encoded: string): ProjectFileMap | null {
 }
 
 function encodeUpdate(update: Uint8Array): string {
-  if (typeof window === 'undefined') {
-    return Buffer.from(update).toString('base64');
-  }
+  if (typeof window === 'undefined') return Buffer.from(update).toString('base64');
   let binary = '';
-  update.forEach(byte => {
-    binary += String.fromCharCode(byte);
-  });
+  update.forEach(byte => { binary += String.fromCharCode(byte); });
   return btoa(binary);
 }
 
@@ -159,7 +129,6 @@ function decodeUpdate(encoded?: string | null): Uint8Array | null {
 
 function applyFilesToMap(target: Y.Map<Y.Map<unknown>>, files: ProjectFileMap) {
   const seen = new Set<string>();
-
   Object.values(files).forEach(file => {
     let entry = target.get(file.path);
     if (!entry) {
@@ -167,7 +136,6 @@ function applyFilesToMap(target: Y.Map<Y.Map<unknown>>, files: ProjectFileMap) {
       entry.set('text', new Y.Text());
       target.set(file.path, entry);
     }
-
     entry.set('language', file.language);
     const text = entry.get('text');
     if (text instanceof Y.Text) {
@@ -177,20 +145,15 @@ function applyFilesToMap(target: Y.Map<Y.Map<unknown>>, files: ProjectFileMap) {
         text.insert(0, file.code);
       }
     }
-
     seen.add(file.path);
   });
-
   Array.from(target.keys()).forEach(path => {
-    if (!seen.has(path)) {
-      target.delete(path);
-    }
+    if (!seen.has(path)) target.delete(path);
   });
 }
 
 function mapToProjectFileMap(target: Y.Map<Y.Map<unknown>>): ProjectFileMap {
   const snapshot: ProjectFileMap = {};
-
   target.forEach((entry, path) => {
     if (!(entry instanceof Y.Map)) return;
     const language = entry.get('language');
@@ -204,23 +167,17 @@ function mapToProjectFileMap(target: Y.Map<Y.Map<unknown>>): ProjectFileMap {
       code: text instanceof Y.Text ? text.toString() : '',
     };
     const sanitized = sanitizeProjectFile(normalized);
-    if (sanitized) {
-      snapshot[path] = sanitized;
-    }
+    if (sanitized) snapshot[path] = sanitized;
   });
-
   return snapshot;
 }
 
 function presenceFromAwareness(awareness: Awareness, localPresence?: LocalCollaboratorPresence | null): CollaboratorPresence[] {
   const localId = localPresence?.id ?? null;
   const states: CollaboratorPresence[] = [];
-
   awareness.getStates().forEach((state, clientId) => {
     const user = (state as { user?: LocalCollaboratorPresence | null } | undefined)?.user;
-    if (!user || typeof user.id !== 'string' || user.id.length === 0) {
-      return;
-    }
+    if (!user || typeof user.id !== 'string' || user.id.length === 0) return;
     states.push({
       clientId: `yjs:${clientId}`,
       userId: user.id,
@@ -230,15 +187,46 @@ function presenceFromAwareness(awareness: Awareness, localPresence?: LocalCollab
       isSelf: Boolean(localId && user.id === localId),
     });
   });
-
   return states;
 }
 
-/* -------------------------------------------------------------------------- */
-/*                                Component                                   */
-/* -------------------------------------------------------------------------- */
+/* ------------------------------ Component -------------------------------- */
 
-export default function CollaborativeEditor({
+export default function CollaborativeEditor(props: CollaborativeEditorProps) {
+  const { projectId } = props;
+
+  if (!projectId || typeof window === 'undefined') {
+    return (
+      <CollaborationContext.Provider
+        value={{ getTextForPath: () => null, awareness: null, isActive: false }}
+      >
+        {props.children ?? null}
+      </CollaborationContext.Provider>
+    );
+  }
+
+  return (
+    <LiveblocksProvider authEndpoint="/api/liveblocks-auth">
+      <RoomProvider id={projectRoomId(projectId)}>
+        <ClientSideSuspense fallback={<OfflineShell {...props} />}>
+          <CollaborativeEditorInner {...props} />
+        </ClientSideSuspense>
+      </RoomProvider>
+    </LiveblocksProvider>
+  );
+}
+
+function OfflineShell(props: CollaborativeEditorProps) {
+  return (
+    <CollaborationContext.Provider
+      value={{ getTextForPath: () => null, awareness: null, isActive: false }}
+    >
+      {props.children ?? null}
+    </CollaborationContext.Provider>
+  );
+}
+
+function CollaborativeEditorInner({
   projectId,
   files,
   onFilesChange,
@@ -249,8 +237,10 @@ export default function CollaborativeEditor({
   onRemoteMutation,
   children,
 }: CollaborativeEditorProps) {
+  const room = useRoom();
+
   const ydocRef = useRef<Y.Doc | null>(null);
-  const providerRef = useRef<WebrtcProvider | null>(null);
+  const providerRef = useRef<LiveblocksYjsProvider | null>(null);
   const awarenessRef = useRef<Awareness | null>(null);
   const filesMapRef = useRef<Y.Map<Y.Map<unknown>> | null>(null);
   const suppressLocalSyncRef = useRef(false);
@@ -266,74 +256,32 @@ export default function CollaborativeEditor({
   const [awareness, setAwareness] = useState<Awareness | null>(null);
   const [isActive, setIsActive] = useState(false);
 
-  useEffect(() => {
-    onFilesChangeRef.current = onFilesChange;
-  }, [onFilesChange]);
+  useEffect(() => { onFilesChangeRef.current = onFilesChange; }, [onFilesChange]);
+  useEffect(() => { onSnapshotChangeRef.current = onSnapshotChange; }, [onSnapshotChange]);
+  useEffect(() => { onPresenceChangeRef.current = onPresenceChange; }, [onPresenceChange]);
+  useEffect(() => { onRemoteMutationRef.current = onRemoteMutation; }, [onRemoteMutation]);
+  useEffect(() => { filesRef.current = files; }, [files]);
+  useEffect(() => { encodedStateRef.current = encodedState; }, [encodedState]);
+  useEffect(() => { localPresenceRef.current = localPresence; }, [localPresence]);
+
+  const applySnapshotToParent = useCallback((snapshot: ProjectFileMap) => {
+    if (projectMapsEqual(snapshot, filesRef.current)) return;
+    suppressLocalSyncRef.current = true;
+    onFilesChangeRef.current(snapshot);
+    const doc = ydocRef.current;
+    const encoded = doc ? encodeUpdate(Y.encodeStateAsUpdate(doc)) : null;
+    onSnapshotChangeRef.current?.(encoded);
+    queueMicrotask(() => { suppressLocalSyncRef.current = false; });
+  }, []);
 
   useEffect(() => {
-    onSnapshotChangeRef.current = onSnapshotChange;
-  }, [onSnapshotChange]);
-
-  useEffect(() => {
-    onPresenceChangeRef.current = onPresenceChange;
-  }, [onPresenceChange]);
-
-  useEffect(() => {
-    onRemoteMutationRef.current = onRemoteMutation;
-  }, [onRemoteMutation]);
-
-  useEffect(() => {
-    filesRef.current = files;
-  }, [files]);
-
-  useEffect(() => {
-    encodedStateRef.current = encodedState;
-  }, [encodedState]);
-
-  useEffect(() => {
-    localPresenceRef.current = localPresence;
-  }, [localPresence]);
-
-  const applySnapshotToParent = useCallback(
-    (snapshot: ProjectFileMap) => {
-      if (projectMapsEqual(snapshot, filesRef.current)) {
-        return;
-      }
-      suppressLocalSyncRef.current = true;
-      onFilesChangeRef.current(snapshot);
-      const doc = ydocRef.current;
-      const encoded = doc ? encodeUpdate(Y.encodeStateAsUpdate(doc)) : null;
-      onSnapshotChangeRef.current?.(encoded);
-      queueMicrotask(() => {
-        suppressLocalSyncRef.current = false;
-      });
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!projectId || typeof window === 'undefined') {
-      const provider = providerRef.current;
-      provider?.destroy();
-      providerRef.current = null;
-      if (!provider) {
-        awarenessRef.current?.destroy();
-      }
-      awarenessRef.current = null;
-      ydocRef.current?.destroy();
-      ydocRef.current = null;
-      filesMapRef.current = null;
-      initialisedRef.current = false;
-      lastEncodedStateRef.current = null;
-      return;
-    }
-
     const doc = new Y.Doc();
     ydocRef.current = doc;
 
     const initialEncodedState = encodedStateRef.current;
     const initialFiles = filesRef.current;
     const initialLocalPresence = localPresenceRef.current;
+
     const update = decodeUpdate(initialEncodedState);
     if (update) {
       try {
@@ -344,9 +292,7 @@ export default function CollaborativeEditor({
     } else {
       const legacy = initialEncodedState ? decodeSnapshotToMap(initialEncodedState) : null;
       if (legacy) {
-        doc.transact(() => {
-          applyFilesToMap(doc.getMap('files'), legacy);
-        }, LOCAL_ORIGIN);
+        doc.transact(() => { applyFilesToMap(doc.getMap('files'), legacy); }, LOCAL_ORIGIN);
       }
     }
 
@@ -358,16 +304,10 @@ export default function CollaborativeEditor({
       doc.transact(() => applyFilesToMap(filesMap, sanitized), LOCAL_ORIGIN);
     }
 
-    const provider =
-      SIGNALING_SERVERS.length > 0
-        ? new WebrtcProvider(`project-${projectId}`, doc, {
-            signaling: SIGNALING_SERVERS,
-            maxConns: 20,
-            filterBcConns: true,
-          })
-        : null;
+    const provider = new LiveblocksYjsProvider(room, doc);
     providerRef.current = provider;
-    const awarenessInstance = provider?.awareness ?? new Awareness(doc);
+
+    const awarenessInstance = provider.awareness as unknown as Awareness;
     awarenessRef.current = awarenessInstance;
 
     const handleAwarenessUpdate = () => {
@@ -394,7 +334,6 @@ export default function CollaborativeEditor({
     doc.on('update', handleDocUpdate);
     filesMap.observeDeep(handleFilesChange);
 
-    // Sync initial snapshot to parent
     applySnapshotToParent(mapToProjectFileMap(filesMap));
     initialisedRef.current = true;
     lastEncodedStateRef.current = initialEncodedState;
@@ -403,11 +342,8 @@ export default function CollaborativeEditor({
       filesMap.unobserveDeep(handleFilesChange);
       doc.off('update', handleDocUpdate);
       awarenessInstance.off('update', handleAwarenessUpdate);
-      provider?.destroy();
+      provider.destroy();
       providerRef.current = null;
-      if (!provider) {
-        awarenessInstance.destroy();
-      }
       awarenessRef.current = null;
       doc.destroy();
       ydocRef.current = null;
@@ -417,33 +353,24 @@ export default function CollaborativeEditor({
       setAwareness(null);
       setIsActive(false);
     };
-  }, [applySnapshotToParent, projectId]);
+  }, [applySnapshotToParent, room]);
 
   useEffect(() => {
-    if (!projectId) return;
     const awarenessInstance = awarenessRef.current;
     if (!awarenessInstance) return;
     awarenessInstance.setLocalStateField('user', localPresence ?? null);
-  }, [localPresence, projectId]);
+  }, [localPresence]);
 
   useEffect(() => {
-    if (!projectId || typeof window === 'undefined') {
-      return;
-    }
-
+    if (typeof window === 'undefined') return;
     const doc = ydocRef.current;
     const filesMap = filesMapRef.current;
-    if (!doc || !filesMap) {
-      return;
-    }
+    if (!doc || !filesMap) return;
 
     const incomingUpdate = decodeUpdate(encodedState);
     const isNewState = encodedState !== lastEncodedStateRef.current;
     lastEncodedStateRef.current = encodedState;
-
-    if (!isNewState) {
-      return;
-    }
+    if (!isNewState) return;
 
     if (incomingUpdate) {
       try {
@@ -458,32 +385,23 @@ export default function CollaborativeEditor({
     if (encodedState) {
       const legacy = decodeSnapshotToMap(encodedState);
       if (legacy) {
-        doc.transact(() => {
-          applyFilesToMap(filesMap, legacy);
-        }, LOCAL_ORIGIN);
+        doc.transact(() => { applyFilesToMap(filesMap, legacy); }, LOCAL_ORIGIN);
       }
     }
-  }, [encodedState, projectId]);
+  }, [encodedState]);
 
   useEffect(() => {
-    if (!projectId || suppressLocalSyncRef.current) {
-      return;
-    }
+    if (suppressLocalSyncRef.current) return;
     const doc = ydocRef.current;
     const filesMap = filesMapRef.current;
-    if (!doc || !filesMap) {
-      return;
-    }
+    if (!doc || !filesMap) return;
 
     const sanitized = sanitizeProjectMap(files);
     const currentSnapshot = mapToProjectFileMap(filesMap);
-
-    if (projectMapsEqual(sanitized, currentSnapshot)) {
-      return;
-    }
+    if (projectMapsEqual(sanitized, currentSnapshot)) return;
 
     doc.transact(() => applyFilesToMap(filesMap, sanitized), LOCAL_ORIGIN);
-  }, [files, projectId]);
+  }, [files]);
 
   const contextValue: CollaborationContextValue = {
     getTextForPath: (path: string) => {
