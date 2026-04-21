@@ -1,33 +1,87 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { Command } from 'cmdk';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Code2, FileCode, Globe, Home, Map, Terminal, UserCircle } from 'lucide-react';
+import { Code2, FileCode, Globe, Home, Map, Terminal, UserCircle, type LucideIcon } from 'lucide-react';
 
-const navigationItems = [
-  { label: 'Open IDE', href: '/ide', icon: Code2 },
-  { label: 'Home', href: '/', icon: Home },
-  { label: 'Features', href: '/features', icon: FileCode },
-  { label: 'Roadmap', href: '/roadmap', icon: Map },
-  { label: 'Profile', href: '/setup-profile', icon: UserCircle },
+type CommandPaletteItem = {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  keywords?: string[];
+};
+
+const baseNavigationItems: CommandPaletteItem[] = [
+  { label: 'Open IDE', href: '/ide', icon: Code2, keywords: ['workspace', 'picker', 'launch'] },
+  { label: 'Home', href: '/', icon: Home, keywords: ['landing', 'dashboard'] },
+  { label: 'Features', href: '/features', icon: FileCode, keywords: ['capabilities', 'product'] },
+  { label: 'Roadmap', href: '/roadmap', icon: Map, keywords: ['plans', 'future'] },
 ];
 
-const workspaceItems = [
-  { label: 'Web', href: '/ide/web', icon: Globe },
-  { label: 'Python', href: '/ide/python', icon: Terminal },
-  { label: 'C', href: '/ide/c', icon: Terminal },
-  { label: 'C++', href: '/ide/cpp', icon: Terminal },
-  { label: 'Java', href: '/ide/java', icon: Terminal },
+const workspaceItems: CommandPaletteItem[] = [
+  { label: 'Web', href: '/ide/web', icon: Globe, keywords: ['html', 'css', 'javascript', 'browser'] },
+  { label: 'Python', href: '/ide/python', icon: Terminal, keywords: ['py', 'runtime'] },
+  { label: 'C', href: '/ide/c', icon: Terminal, keywords: ['clang', 'runtime'] },
+  { label: 'C++', href: '/ide/cpp', icon: Terminal, keywords: ['cpp', 'cplusplus', 'runtime'] },
+  { label: 'Java', href: '/ide/java', icon: Terminal, keywords: ['jvm', 'runtime'] },
 ];
+
+function normalizePath(path: string | null | undefined) {
+  if (!path) {
+    return '/';
+  }
+
+  const [pathname] = path.split('?');
+  if (!pathname || pathname === '/') {
+    return '/';
+  }
+
+  return pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+}
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+  const { data: session, status } = useSession();
+  const currentPath = normalizePath(pathname);
+
+  const profileItem: CommandPaletteItem =
+    status !== 'authenticated'
+      ? {
+          label: 'Sign up',
+          href: '/signup',
+          icon: UserCircle,
+          keywords: ['account', 'register', 'profile'],
+        }
+      : session?.user?.username
+        ? {
+            label: 'Profile',
+            href: `/u/${session.user.username}`,
+            icon: UserCircle,
+            keywords: ['account', 'user', session.user.username],
+          }
+        : {
+            label: 'Finish profile',
+            href: '/setup-profile',
+            icon: UserCircle,
+            keywords: ['username', 'account', 'setup'],
+          };
+
+  const navigationItems = [...baseNavigationItems, profileItem].filter(
+    (item) => normalizePath(item.href) !== currentPath
+  );
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        return;
+      }
+
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
         setOpen((prev) => !prev);
@@ -75,25 +129,29 @@ export function CommandPalette() {
                   No results found.
                 </Command.Empty>
 
-                <Command.Group heading="Navigation">
-                  {navigationItems.map((item) => (
-                    <Command.Item
-                      key={item.href}
-                      value={item.label}
-                      onSelect={() => navigate(item.href)}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-[var(--color-text-secondary)] transition-colors data-[selected=true]:bg-white/5 data-[selected=true]:text-[var(--color-text-primary)]"
-                    >
-                      <item.icon className="h-4 w-4 text-[var(--color-text-muted)]" />
-                      {item.label}
-                    </Command.Item>
-                  ))}
-                </Command.Group>
+                {navigationItems.length > 0 && (
+                  <Command.Group heading="Navigation">
+                    {navigationItems.map((item) => (
+                      <Command.Item
+                        key={item.href}
+                        value={item.label}
+                        keywords={item.keywords}
+                        onSelect={() => navigate(item.href)}
+                        className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-[var(--color-text-secondary)] transition-colors data-[selected=true]:bg-white/5 data-[selected=true]:text-[var(--color-text-primary)]"
+                      >
+                        <item.icon className="h-4 w-4 text-[var(--color-text-muted)]" />
+                        {item.label}
+                      </Command.Item>
+                    ))}
+                  </Command.Group>
+                )}
 
                 <Command.Group heading="Workspaces">
                   {workspaceItems.map((item) => (
                     <Command.Item
                       key={item.href}
-                      value={`${item.label} workspace`}
+                      value={item.label}
+                      keywords={item.keywords}
                       onSelect={() => navigate(item.href)}
                       className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-[var(--color-text-secondary)] transition-colors data-[selected=true]:bg-white/5 data-[selected=true]:text-[var(--color-text-primary)]"
                     >
