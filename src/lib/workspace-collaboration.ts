@@ -29,17 +29,6 @@ type SavedStatusLabelOptions = {
   formattedTime: string | null;
 };
 
-export function parseCollaborationSignalingServers(value: string | null | undefined): string[] {
-  if (!value) {
-    return [];
-  }
-
-  return value
-    .split(/[\n,]/)
-    .map(entry => entry.trim())
-    .filter(entry => entry.length > 0);
-}
-
 export function shouldPersistCollaborativeState({
   projectId,
   viewerRole,

@@ -3,24 +3,10 @@ import test from 'node:test';
 
 import {
   getSavedStatusLabel,
-  parseCollaborationSignalingServers,
   shouldApplyRemoteCollaborativeState,
   shouldPersistCollaborativeState,
   shouldReplaceStandaloneEditorValue,
 } from '../src/lib/workspace-collaboration';
-
-test('parseCollaborationSignalingServers returns an empty list when no endpoints are configured', () => {
-  assert.deepEqual(parseCollaborationSignalingServers(undefined), []);
-  assert.deepEqual(parseCollaborationSignalingServers(''), []);
-  assert.deepEqual(parseCollaborationSignalingServers(' , \n '), []);
-});
-
-test('parseCollaborationSignalingServers trims and preserves configured endpoints', () => {
-  assert.deepEqual(
-    parseCollaborationSignalingServers(' wss://one.example/ws, \n wss://two.example/ws  '),
-    ['wss://one.example/ws', 'wss://two.example/ws'],
-  );
-});
 
 test('shouldPersistCollaborativeState only allows dirty editable cloud projects to flush', () => {
   assert.equal(
