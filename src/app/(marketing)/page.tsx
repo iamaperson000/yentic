@@ -12,23 +12,6 @@ function LandingHome() {
       className="-mx-6 -mt-12 overflow-hidden sm:-mt-16"
       style={{ color: 'var(--y-fg)', background: 'var(--y-ink)', borderBottom: '1px solid var(--y-line)' }}
     >
-        {/* tab strip */}
-        <div
-          className="flex font-[family-name:var(--font-mono-code)] text-[12.5px]"
-          style={{ background: 'var(--y-panel2)', borderBottom: '1px solid var(--y-line)' }}
-        >
-          <div
-            className="flex items-center gap-2 border-r px-[18px] py-[9px]"
-            style={{ borderColor: 'var(--y-line)', borderTop: '2px solid var(--y-brand)', color: 'var(--y-fg)' }}
-          >
-            <span className="h-[7px] w-[7px] rounded-full" style={{ background: 'var(--y-brand)' }} />
-            welcome.py
-          </div>
-          <div className="border-r px-[18px] py-[11px]" style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}>
-            readme.md
-          </div>
-        </div>
-
         {/* hero */}
         <div className="min-w-0 px-6 py-10 sm:px-[52px] sm:py-[52px]">
             <h1
