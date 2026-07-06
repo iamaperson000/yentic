@@ -1,13 +1,13 @@
 # Yentic
 
-Yentic is a browser-based IDE built with Next.js, Monaco, Prisma, NextAuth, and Yjs. It includes project persistence, shareable project links, collaborative editing primitives, and a small Pusher-backed chat demo.
+Yentic is a browser-based IDE built with Next.js, Monaco, Prisma, NextAuth, and Yjs over Liveblocks. It includes project persistence, shareable project links, collaborative editing primitives, and a small Pusher-backed chat demo.
 
 ## Features
 
 - Multi-language workspaces with a Monaco editor and runtime previews
 - Google authentication with profile onboarding
 - Postgres-backed project storage with share tokens
-- Collaborative editing powered by Yjs and WebRTC
+- Collaborative editing powered by Yjs over Liveblocks
 - Marketing and dashboard flows for public profiles and projects
 - Optional realtime chat demo at `/chat` backed by Pusher Channels
 
@@ -17,7 +17,7 @@ Yentic is a browser-based IDE built with Next.js, Monaco, Prisma, NextAuth, and 
 - Prisma + PostgreSQL
 - NextAuth with Google OAuth
 - Monaco Editor
-- Yjs + `y-webrtc`
+- Yjs + `@liveblocks/yjs`
 - Pusher Channels for the chat demo
 
 ## Requirements
@@ -97,7 +97,7 @@ See [`.env.example`](./.env.example) for the expected shape.
 
 ## Realtime Notes
 
-- The main collaborative editor uses Yjs with WebRTC signaling.
+- The main collaborative editor uses Yjs with a Liveblocks provider.
 - The `/chat` route is separate from editor collaboration, depends on Pusher, and requires sign-in to post messages.
 - If Pusher is not configured, avoid the `/chat` route or wire in your own credentials first.
 
