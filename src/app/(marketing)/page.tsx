@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 
-import GutterSpine from '@/components/marketing/GutterSpine';
 import StatusBar from '@/components/marketing/StatusBar';
 import SignedInHomeShell from '@/components/home/SignedInHomeShell';
 
@@ -30,10 +29,8 @@ function LandingHome() {
           </div>
         </div>
 
-        {/* hero: gutter + stage */}
-        <div className="grid grid-cols-[40px_1fr] sm:grid-cols-[56px_1fr]">
-          <GutterSpine lines={17} />
-          <div className="min-w-0 px-6 py-10 sm:px-[52px] sm:py-[52px]">
+        {/* hero */}
+        <div className="min-w-0 px-6 py-10 sm:px-[52px] sm:py-[52px]">
             <h1
               className="font-[family-name:var(--font-display)] text-[clamp(34px,6vw,60px)] font-extrabold leading-[1.0] tracking-[-0.035em]"
               style={{ maxWidth: '16ch' }}
@@ -126,7 +123,6 @@ function LandingHome() {
               </div>
             </div>
           </div>
-        </div>
 
         <StatusBar
           items={['welcome.py', 'Python 3.12', 'Ln 15, Col 22']}
