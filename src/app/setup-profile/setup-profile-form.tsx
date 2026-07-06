@@ -131,17 +131,18 @@ export default function SetupProfileForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2 text-left">
-        <label htmlFor="username" className="text-sm font-medium text-[#edf3fb]">
+        <label htmlFor="username" className="text-sm font-medium" style={{ color: 'var(--y-fg)' }}>
           Username
         </label>
         <div className="relative flex items-center">
-          <span className="pointer-events-none absolute left-3 text-[#9fb0c4]">@</span>
+          <span className="pointer-events-none absolute left-3" style={{ color: 'var(--y-muted)' }}>@</span>
           <input
             id="username"
             name="username"
             value={username}
             onChange={event => setUsername(event.target.value.toLowerCase())}
-            className="w-full rounded-lg border border-[#3b4a60] bg-[#0f141d] px-9 py-3 text-base text-[#edf3fb] outline-none transition placeholder:text-[#6f8097] focus:border-[#93a8bf] focus:ring-2 focus:ring-[#93a8bf]/30"
+            className="w-full rounded-lg border px-9 py-3 text-base outline-none transition focus:ring-2"
+            style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-fg)' }}
             placeholder="yourname"
             autoComplete="off"
             spellCheck={false}
@@ -150,35 +151,37 @@ export default function SetupProfileForm({
             required
           />
         </div>
-        {showPatternHint && <p className="text-xs text-amber-300/85">Use 3-20 lowercase letters, numbers, or underscores.</p>}
-        {displayStatus === 'checking' && <p className="text-xs text-[#b8c5d6]">Checking availability…</p>}
+        {showPatternHint && <p className="text-xs" style={{ color: 'var(--y-brand)' }}>Use 3-20 lowercase letters, numbers, or underscores.</p>}
+        {displayStatus === 'checking' && <p className="text-xs" style={{ color: 'var(--y-muted)' }}>Checking availability…</p>}
         {shouldCheckAvailability && message && displayStatus !== 'checking' && (
-          <p className={`text-xs ${displayStatus === 'available' ? 'text-[#c6d4e4]' : 'text-rose-300'}`}>{message}</p>
+          <p className="text-xs" style={{ color: displayStatus === 'available' ? 'var(--y-str)' : 'var(--y-kw)' }}>{message}</p>
         )}
         {shouldCheckAvailability && displayStatus === 'available' && !message && (
-          <p className="text-xs text-[#c6d4e4]">Nice. That username is available.</p>
+          <p className="text-xs" style={{ color: 'var(--y-str)' }}>Nice. That username is available.</p>
         )}
       </div>
 
       <div className="space-y-2 text-left">
-        <label htmlFor="bio" className="text-sm font-medium text-[#edf3fb]">
-          Bio <span className="text-[#8ea0b6]">(optional)</span>
+        <label htmlFor="bio" className="text-sm font-medium" style={{ color: 'var(--y-fg)' }}>
+          Bio <span style={{ color: 'var(--y-muted)' }}>(optional)</span>
         </label>
         <textarea
           id="bio"
           name="bio"
           value={bio}
           onChange={event => setBio(event.target.value)}
-          className="h-32 w-full rounded-lg border border-[#3b4a60] bg-[#0f141d] px-4 py-3 text-sm text-[#edf3fb] outline-none transition placeholder:text-[#6f8097] focus:border-[#93a8bf] focus:ring-2 focus:ring-[#93a8bf]/30"
+          className="h-32 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:ring-2"
+          style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-fg)' }}
           placeholder="Tell people what you are building."
         />
-        <p className="text-xs text-[#8ea0b6]">You can update this later from your profile page.</p>
+        <p className="text-xs" style={{ color: 'var(--y-muted)' }}>You can update this later from your profile page.</p>
       </div>
 
       <button
         type="submit"
         disabled={submitting || displayStatus === 'checking'}
-        className="w-full rounded-lg bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-white/65"
+        className="w-full rounded-lg px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+        style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
       >
         {submitting ? 'Saving…' : 'Save and continue'}
       </button>
