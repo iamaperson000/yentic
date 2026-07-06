@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 
 import { authOptions } from '@/lib/auth';
+import SiteShell from '@/components/marketing/SiteShell';
 import SetupProfileForm from './setup-profile-form';
 
 function getSafeNextPath(value: string | undefined) {
@@ -34,7 +35,7 @@ export default async function SetupProfilePage({
   }
 
   return (
-    <div className="min-h-screen px-4 py-12 sm:px-6 sm:py-16" style={{ background: 'var(--y-ink)', color: 'var(--y-fg)' }}>
+    <SiteShell>
       <div className="mx-auto flex w-full max-w-[920px] flex-col gap-10">
         <section className="overflow-hidden rounded-[14px] border" style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}>
           <div className="px-6 py-12 sm:px-8 sm:py-14">
@@ -63,6 +64,6 @@ export default async function SetupProfilePage({
           </div>
         </section>
       </div>
-    </div>
+    </SiteShell>
   );
 }

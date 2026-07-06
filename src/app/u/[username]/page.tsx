@@ -1,5 +1,6 @@
 import { NoUserFoundNotice } from '@/components/users/NoUserFoundNotice';
 import { UsernameSearchForm } from '@/components/users/UsernameSearchForm';
+import SiteShell from '@/components/marketing/SiteShell';
 import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -12,11 +13,11 @@ type UserPageParams = { username?: string };
 
 function Shell({ children, width = '980px' }: { children: React.ReactNode; width?: string }) {
   return (
-    <div className="min-h-screen px-4 py-12 sm:px-6 sm:py-16" style={{ background: 'var(--y-ink)', color: 'var(--y-fg)' }}>
+    <SiteShell>
       <div className="mx-auto flex w-full flex-col gap-8" style={{ maxWidth: width }}>
         {children}
       </div>
-    </div>
+    </SiteShell>
   );
 }
 

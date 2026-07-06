@@ -45,7 +45,7 @@ export default function FeaturesPage() {
         <PageHero
           eyebrow="product"
           title="Features."
-          lead="A browser IDE with Monaco, live preview, and multi-language runtimes — no AI assistants, no bloat."
+          lead="A browser IDE with Monaco, live preview, and runtimes for five languages. Nothing to install."
         />
       </AnimateIn>
 
@@ -72,7 +72,7 @@ export default function FeaturesPage() {
                   className="flex items-center gap-2 font-[family-name:var(--font-display)] text-lg font-bold tracking-[-0.02em]"
                   style={{ color: 'var(--y-fg)' }}
                 >
-                  <group.icon size={18} style={{ color: 'var(--y-brand)' }} />
+                  <group.icon size={18} style={{ color: 'var(--y-fg)' }} />
                   {group.title}
                 </h3>
                 <p className="mt-3 text-sm leading-[1.6]" style={{ color: 'var(--y-muted)' }}>
@@ -81,7 +81,7 @@ export default function FeaturesPage() {
                 <ul className="mt-5 space-y-3 text-sm leading-[1.55]" style={{ color: 'var(--y-muted)' }}>
                   {group.bullets.map((item) => (
                     <li key={item} className="flex gap-3">
-                      <span className="mt-[8px] h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: 'var(--y-brand)' }} />
+                      <span className="mt-[8px] h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: 'var(--y-muted)' }} />
                       <span>{item}</span>
                     </li>
                   ))}

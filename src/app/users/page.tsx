@@ -2,16 +2,17 @@ import Link from 'next/link';
 import type { Prisma } from '@prisma/client';
 
 import prisma from '@/lib/prisma';
+import SiteShell from '@/components/marketing/SiteShell';
 
 export const dynamic = 'force-dynamic';
 
 function Shell({ children, width = '1200px' }: { children: React.ReactNode; width?: string }) {
   return (
-    <div className="min-h-screen px-4 py-12 sm:px-6 sm:py-16" style={{ background: 'var(--y-ink)', color: 'var(--y-fg)' }}>
+    <SiteShell>
       <div className="mx-auto flex w-full flex-col gap-10" style={{ maxWidth: width }}>
         {children}
       </div>
-    </div>
+    </SiteShell>
   );
 }
 

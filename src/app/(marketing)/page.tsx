@@ -85,7 +85,7 @@ function LandingHome() {
                 <span style={{ color: 'var(--y-brand)' }}>▶ run</span>
               </div>
               <pre
-                className="overflow-x-auto whitespace-pre px-5 py-[18px] font-[family-name:var(--font-mono-code)] text-[13px] leading-[1.9]"
+                className="overflow-x-auto whitespace-pre px-5 py-[18px] font-[family-name:var(--font-mono-code)] text-[10.5px] leading-[1.75] sm:text-[13px] sm:leading-[1.9]"
                 style={{ color: 'var(--y-fg)' }}
               >
                 <span style={{ color: 'var(--y-muted)', fontStyle: 'italic' }}>
