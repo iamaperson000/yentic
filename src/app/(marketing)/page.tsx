@@ -9,11 +9,10 @@ import SignedInHomeShell from '@/components/home/SignedInHomeShell';
 
 function LandingHome() {
   return (
-    <div className="mx-auto w-full max-w-[1080px]" style={{ color: 'var(--y-fg)' }}>
-      <div
-        className="overflow-hidden rounded-[14px] border shadow-[0_30px_90px_rgba(0,0,0,.4)]"
-        style={{ background: 'var(--y-ink)', borderColor: 'var(--y-line)' }}
-      >
+    <div
+      className="-mx-6 -mt-12 overflow-hidden sm:-mt-16"
+      style={{ color: 'var(--y-fg)', background: 'var(--y-ink)', borderBottom: '1px solid var(--y-line)' }}
+    >
         {/* tab strip */}
         <div
           className="flex font-[family-name:var(--font-mono-code)] text-[12.5px]"
@@ -133,7 +132,6 @@ function LandingHome() {
           items={['welcome.py', 'Python 3.12', 'Ln 15, Col 22']}
           right={['runs in-browser', 'UTF-8', '⧉ share']}
         />
-      </div>
     </div>
   );
 }
