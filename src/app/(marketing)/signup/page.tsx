@@ -17,7 +17,7 @@ const benefits = [
   },
   {
     title: 'Collaborate smoothly',
-    body: 'Collaboration features are coming soon. Share links and real-time editing are on the roadmap.'
+    body: 'Share a project with a link, and choose who can view or edit it.'
   }
 ];
 

@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+/* ── Yentic editor-identity tokens (redesign) ── */
+:root {
+  --y-ink:#16141a; --y-panel:#1d1a22; --y-panel2:#221e28; --y-line:#2c2833;
+  --y-fg:#ece7de; --y-muted:#847e74; --y-gnum:#4a4550;
+  --y-brand:#f0a840;
+  --y-kw:#ff8489; --y-str:#8ee06f; --y-fn:#f0a840; --y-num:#79c0ff; --y-op:#c9a2ff;
+  --y-sel-hl:rgba(240,168,64,.24); --y-sel-tint:rgba(240,168,64,.12);
+  --y-statfg:#1a130a; --y-console-bg:#100e13;
+}
+[data-theme="daylight"] {
+  --y-ink:#f7f3ea; --y-panel:#efe9db; --y-panel2:#e8e1d0; --y-line:#ddd4c1;
+  --y-fg:#211e18; --y-muted:#8c8473; --y-gnum:#c3bba8;
+  --y-brand:#c17615;
+  --y-kw:#c0355a; --y-str:#2f8a45; --y-fn:#c17615; --y-num:#2d5bd6; --y-op:#8043c9;
+  --y-sel-hl:rgba(193,118,21,.20); --y-sel-tint:rgba(193,118,21,.10);
+  --y-statfg:#fdf6ea; --y-console-bg:#eef0e4;
+}
+@keyframes yblink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .y-caret { animation: none !important; }
+}
+
 /* ── Design tokens ── */
 :root {
   --color-bg-primary: #08090a;

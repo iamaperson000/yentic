@@ -1,11 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Folder,
-  FolderOpen,
   Menu,
   MoreVertical,
   Plus,
@@ -358,141 +356,149 @@ export default function SignedInHomeShell() {
   const selectedTabCount = currentProjects.length;
 
   return (
-    <section className="relative overflow-hidden rounded-[10px] border border-[var(--color-border-medium)] bg-[var(--color-bg-overlay)] text-[var(--color-text-primary)]">
-      <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(circle_at_20%_0%,rgba(220,229,240,0.18),transparent_45%),linear-gradient(to_right,rgba(220,229,240,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(220,229,240,0.08)_1px,transparent_1px)] [background-size:auto,48px_48px,48px_48px]" />
-      <div className="relative grid min-h-[72vh] lg:grid-cols-[248px_minmax(0,1fr)]">
-        <aside className="hidden border-r border-[var(--color-border-medium)] bg-[var(--color-bg-elevated)] px-4 py-5 lg:flex lg:flex-col">
+    <section
+      className="relative overflow-hidden rounded-[12px] border"
+      style={{ background: 'var(--y-ink)', borderColor: 'var(--y-line)', color: 'var(--y-fg)' }}
+    >
+      <div className="grid min-h-[72vh] lg:grid-cols-[236px_minmax(0,1fr)]">
+        {/* sidebar */}
+        <aside
+          className="hidden flex-col border-r px-3 py-4 font-[family-name:var(--font-mono-code)] text-[12.5px] lg:flex"
+          style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
+        >
           <button
             type="button"
             onClick={() => {
               setCreateError(null);
               setIsCreateModalOpen(true);
             }}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-border-medium)] bg-white/5 px-3 py-2 text-sm font-semibold text-white transition hover:border-[var(--color-border-strong)] hover:bg-white/10"
+            className="mb-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 font-semibold"
+            style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
           >
-            <Plus className="h-4 w-4" />
-            Create
+            <Plus className="h-4 w-4" /> New project
           </button>
 
-          <div className="mt-6 space-y-1">
-            <button
-              type="button"
-              className="inline-flex w-full items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white"
-            >
-              <FolderOpen className="h-4 w-4" />
-              Projects
-            </button>
-          </div>
+          <p className="px-2 py-1 text-[11px]" style={{ color: 'var(--y-muted)' }}>Workspaces</p>
+          <button
+            type="button"
+            onClick={() => setActiveScope('owned')}
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left"
+            style={
+              activeScope === 'owned'
+                ? { background: 'var(--y-sel-tint)', color: 'var(--y-fg)', borderLeft: '2px solid var(--y-brand)' }
+                : { color: 'var(--y-muted)' }
+            }
+          >
+            <span className="h-[6px] w-[6px] rounded-[2px]" style={{ background: 'var(--y-brand)' }} />
+            All projects ({ownedProjects.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveScope('shared')}
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left"
+            style={
+              activeScope === 'shared'
+                ? { background: 'var(--y-sel-tint)', color: 'var(--y-fg)', borderLeft: '2px solid var(--y-brand)' }
+                : { color: 'var(--y-muted)' }
+            }
+          >
+            <span className="h-[6px] w-[6px] rounded-[2px]" style={{ background: 'var(--y-str)' }} />
+            Shared with me ({sharedProjects.length})
+          </button>
+
+          <p className="mt-4 px-2 py-1 text-[11px]" style={{ color: 'var(--y-muted)' }}>Runtimes</p>
+          {(['python', 'c', 'cpp', 'java', 'web'] as WorkspaceSlug[]).map((slug) => (
+            <span key={slug} className="px-2 py-1" style={{ color: 'var(--y-muted)' }}>
+              {workspaceConfigs[slug].title}
+            </span>
+          ))}
         </aside>
 
-        <main className="flex min-w-0 flex-col bg-[var(--color-bg-primary)]/45">
-          <header className="border-b border-[var(--color-border-medium)] bg-[var(--color-bg-elevated)]/70 px-4 py-4 sm:px-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsMobileSidebarOpen(true)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border-medium)] bg-[var(--color-bg-elevated)] text-[var(--color-text-secondary)] transition hover:text-white lg:hidden"
-                  aria-label="Open sidebar"
-                >
-                  <Menu className="h-4 w-4" />
-                </button>
-                <h1 className="text-xl font-semibold tracking-[-0.02em] text-white sm:text-2xl">
-                  Projects
-                </h1>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/features"
-                  className="rounded-full border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/85 transition hover:border-white/40"
-                >
-                  Features
-                </Link>
-                <Link
-                  href="/ide"
-                  className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-slate-200"
-                >
-                  Open IDE
-                </Link>
-                <p className="ml-1 text-xs uppercase tracking-[0.2em] text-[var(--color-text-muted)]">
-                  {selectedTabCount} in view
-                </p>
-              </div>
+        {/* main */}
+        <main className="flex min-w-0 flex-col" style={{ background: 'var(--y-ink)' }}>
+          <header
+            className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-6"
+            style={{ borderColor: 'var(--y-line)' }}
+          >
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border lg:hidden"
+                style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
+                aria-label="Open sidebar"
+              >
+                <Menu className="h-4 w-4" />
+              </button>
+              <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-0.02em]">
+                {activeScope === 'owned' ? 'All projects' : 'Shared with me'}
+              </h1>
             </div>
+            <p className="font-[family-name:var(--font-mono-code)] text-xs" style={{ color: 'var(--y-muted)' }}>
+              {selectedTabCount} {selectedTabCount === 1 ? 'workspace' : 'workspaces'}
+            </p>
           </header>
 
-          <section className="flex-1 space-y-4 px-4 py-5 sm:px-6 sm:py-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="relative w-full md:max-w-[360px]">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search projects"
-                  className="pl-9"
-                />
-              </div>
-
-              <div className="inline-flex w-fit items-center rounded-lg border border-[var(--color-border-medium)] bg-[var(--color-bg-elevated)] p-1">
-                <button
-                  type="button"
-                  onClick={() => setActiveScope('owned')}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                    activeScope === 'owned'
-                      ? 'bg-white/10 text-white'
-                      : 'text-[var(--color-text-secondary)] hover:text-white'
-                  }`}
-                >
-                  Owned ({ownedProjects.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveScope('shared')}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                    activeScope === 'shared'
-                      ? 'bg-white/10 text-white'
-                      : 'text-[var(--color-text-secondary)] hover:text-white'
-                  }`}
-                >
-                  Shared ({sharedProjects.length})
-                </button>
-              </div>
+          <section className="flex-1 space-y-4 px-4 py-5 sm:px-6">
+            <div className="relative w-full md:max-w-[360px]">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                style={{ color: 'var(--y-muted)' }}
+              />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search projects"
+                className="pl-9"
+              />
             </div>
 
             {feedback ? (
-              <div className="rounded-md border border-[var(--color-border-medium)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm text-[var(--color-text-secondary)]">
+              <div
+                className="rounded-md border px-3 py-2 text-sm"
+                style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-fg)' }}
+              >
                 {feedback}
               </div>
             ) : null}
 
             {isLoading ? (
-              <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] p-8 text-sm text-[var(--color-text-secondary)]">
+              <div
+                className="rounded-xl border p-8 text-sm"
+                style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-muted)' }}
+              >
                 Loading projects…
               </div>
             ) : null}
 
             {!isLoading && loadError ? (
-              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-6 text-sm text-red-200">
+              <div
+                className="rounded-xl border p-6 text-sm"
+                style={{ borderColor: 'var(--y-kw)', background: 'var(--y-sel-tint)', color: 'var(--y-fg)' }}
+              >
                 <p>{loadError}</p>
                 <button
                   type="button"
                   onClick={() => void loadProjects()}
-                  className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-400/40 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-red-100 transition hover:bg-red-500/20"
+                  className="mt-3 inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold"
+                  style={{ borderColor: 'var(--y-line)', color: 'var(--y-fg)' }}
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Retry
+                  <RefreshCw className="h-3.5 w-3.5" /> Retry
                 </button>
               </div>
             ) : null}
 
             {!isLoading && !loadError && filteredProjects.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[var(--color-border-medium)] bg-[var(--color-bg-elevated)] px-5 py-10 text-center">
-                <Folder className="mx-auto h-5 w-5 text-[var(--color-text-muted)]" />
-                <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
+              <div
+                className="rounded-xl border border-dashed px-5 py-10 text-center"
+                style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
+              >
+                <Folder className="mx-auto h-5 w-5" style={{ color: 'var(--y-muted)' }} />
+                <p className="mt-3 text-sm" style={{ color: 'var(--y-muted)' }}>
                   {activeScope === 'owned'
                     ? query.trim()
-                      ? 'No owned projects match your search.'
-                      : 'No projects yet. Create your first project to get started.'
+                      ? 'No projects match your search.'
+                      : 'No projects yet. Create your first one to get started.'
                     : query.trim()
                       ? 'No shared projects match your search.'
                       : 'Nothing has been shared with you yet.'}
@@ -501,83 +507,94 @@ export default function SignedInHomeShell() {
                   <button
                     type="button"
                     onClick={() => setIsCreateModalOpen(true)}
-                    className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[var(--color-border-medium)] bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:border-[var(--color-border-strong)] hover:bg-white/10"
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
+                    style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
                   >
-                    <Plus className="h-4 w-4" />
-                    Create project
+                    <Plus className="h-4 w-4" /> New project
                   </button>
                 ) : null}
               </div>
             ) : null}
 
             {!isLoading && !loadError && filteredProjects.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="flex flex-col">
                 {filteredProjects.map((project) => {
                   const resolvedSlug = resolveWorkspaceSlugFromLanguage(project.language);
                   const workspace = workspaceConfigs[resolvedSlug];
+                  const entry =
+                    { web: 'index.html', python: 'main.py', c: 'main.c', cpp: 'main.cpp', java: 'App.java' }[
+                      resolvedSlug
+                    ] ?? 'main';
                   const ownerLabel =
                     activeScope === 'shared'
                       ? project.user?.username || project.user?.name || 'Unknown owner'
                       : null;
 
                   return (
-                    <article
+                    <div
                       key={project.id}
-                      className="relative overflow-hidden rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] p-4 transition hover:-translate-y-0.5 hover:border-[var(--color-border-strong)]"
+                      className="grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b py-3.5"
+                      style={{ borderColor: 'var(--y-line)' }}
                     >
-                      <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:40px_40px]" />
                       <button
                         type="button"
                         onClick={() => openProject(project.id)}
-                        className="relative w-full cursor-pointer pr-10 text-left"
+                        className="min-w-0 truncate pr-2 text-left font-[family-name:var(--font-mono-code)] text-sm"
+                        style={{ color: 'var(--y-fg)' }}
                       >
-                        <p className="truncate text-base font-semibold text-white">{project.name}</p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
-                          {workspace?.title ?? project.language}
-                        </p>
-                        <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
-                          {formatUpdatedAt(project.updatedAt)}
-                        </p>
+                        {project.name}
+                        <span style={{ color: 'var(--y-muted)' }}>/{entry}</span>
                         {ownerLabel ? (
-                          <p className="mt-1 text-xs text-[var(--color-text-faint)]">Owner: {ownerLabel}</p>
+                          <span className="ml-2 text-[11.5px]" style={{ color: 'var(--y-muted)' }}>· {ownerLabel}</span>
                         ) : null}
                       </button>
-
-                      <div className="absolute right-3 top-3 z-20">
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setMenuProjectId((prev) =>
-                              prev === project.id ? null : project.id,
-                            );
-                          }}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-[var(--color-text-muted)] transition hover:border-[var(--color-border-medium)] hover:bg-white/5 hover:text-white"
-                          aria-label={`Open actions for ${project.name}`}
+                      <span
+                        className="rounded-[5px] px-2 py-0.5 font-[family-name:var(--font-mono-code)] text-[11px]"
+                        style={{ background: 'var(--y-sel-tint)', color: 'var(--y-brand)' }}
+                      >
+                        {workspace?.title ?? project.language}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="hidden font-[family-name:var(--font-mono-code)] text-[11.5px] sm:inline"
+                          style={{ color: 'var(--y-muted)' }}
                         >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-
-                        <Dropdown
-                          open={menuProjectId === project.id}
-                          onClose={() => setMenuProjectId(null)}
-                          align="right"
-                        >
-                          {menuActions.map((action) => (
-                            <DropdownItem
-                              key={action}
-                              destructive={action === 'delete'}
-                              onSelect={() => {
-                                setMenuProjectId(null);
-                                void handleActionSelect(action, project);
-                              }}
-                            >
-                              {menuLabel(action)}
-                            </DropdownItem>
-                          ))}
-                        </Dropdown>
+                          {formatUpdatedAt(project.updatedAt)}
+                        </span>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setMenuProjectId((prev) => (prev === project.id ? null : project.id));
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md"
+                            style={{ color: 'var(--y-muted)' }}
+                            aria-label={`Open actions for ${project.name}`}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                          <Dropdown
+                            open={menuProjectId === project.id}
+                            onClose={() => setMenuProjectId(null)}
+                            align="right"
+                          >
+                            {menuActions.map((action) => (
+                              <DropdownItem
+                                key={action}
+                                destructive={action === 'delete'}
+                                onSelect={() => {
+                                  setMenuProjectId(null);
+                                  void handleActionSelect(action, project);
+                                }}
+                              >
+                                {menuLabel(action)}
+                              </DropdownItem>
+                            ))}
+                          </Dropdown>
+                        </div>
                       </div>
-                    </article>
+                    </div>
                   );
                 })}
               </div>
@@ -594,20 +611,21 @@ export default function SignedInHomeShell() {
             onClick={() => setIsMobileSidebarOpen(false)}
             aria-label="Close sidebar"
           />
-          <aside className="relative h-full w-[260px] border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] px-4 py-5">
+          <aside
+            className="relative h-full w-[260px] border-r px-4 py-5 font-[family-name:var(--font-mono-code)] text-[12.5px]"
+            style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
+          >
             <div className="mb-5 flex items-center justify-between">
-              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
-                Workspace
-              </p>
+              <p style={{ color: 'var(--y-muted)' }}>workspace</p>
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border-medium)] text-[var(--color-text-secondary)]"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border"
+                style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-
             <button
               type="button"
               onClick={() => {
@@ -615,19 +633,32 @@ export default function SignedInHomeShell() {
                 setCreateError(null);
                 setIsCreateModalOpen(true);
               }}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-border-medium)] bg-white/5 px-3 py-2 text-sm font-semibold text-white"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 font-semibold"
+              style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
             >
-              <Plus className="h-4 w-4" />
-              Create
+              <Plus className="h-4 w-4" /> New project
             </button>
-
             <button
               type="button"
-              onClick={() => setIsMobileSidebarOpen(false)}
-              className="mt-5 inline-flex w-full items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white"
+              onClick={() => {
+                setActiveScope('owned');
+                setIsMobileSidebarOpen(false);
+              }}
+              className="mt-4 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left"
+              style={{ color: 'var(--y-fg)' }}
             >
-              <FolderOpen className="h-4 w-4" />
-              Projects
+              All projects ({ownedProjects.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveScope('shared');
+                setIsMobileSidebarOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left"
+              style={{ color: 'var(--y-fg)' }}
+            >
+              Shared with me ({sharedProjects.length})
             </button>
           </aside>
         </div>
@@ -644,32 +675,35 @@ export default function SignedInHomeShell() {
         }}
         className="w-[min(92vw,460px)] p-5"
       >
-        <h2 className="text-lg font-semibold text-white">New project</h2>
-        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-          Pick a runtime and start coding immediately.
+        <h2 className="font-[family-name:var(--font-display)] text-lg font-bold" style={{ color: 'var(--y-fg)' }}>
+          New project
+        </h2>
+        <p className="mt-1 text-sm" style={{ color: 'var(--y-muted)' }}>
+          Pick a runtime and start coding.
         </p>
 
         <div className="mt-4 space-y-3">
           <div>
-            <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+            <label className="mb-1 block font-[family-name:var(--font-mono-code)] text-xs" style={{ color: 'var(--y-muted)' }}>
               Project name
             </label>
             <Input
               value={createName}
               onChange={(event) => setCreateName(event.target.value)}
-              placeholder="My project"
+              placeholder="my-project"
               error={createError ?? undefined}
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+            <label className="mb-1 block font-[family-name:var(--font-mono-code)] text-xs" style={{ color: 'var(--y-muted)' }}>
               Runtime
             </label>
             <select
               value={createRuntime}
               onChange={(event) => setCreateRuntime(event.target.value as WorkspaceSlug)}
-              className="w-full rounded-lg border border-[var(--color-border-medium)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/30"
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-fg)' }}
             >
               {runtimeChoices.map((runtime) => (
                 <option key={runtime} value={runtime}>
@@ -684,7 +718,8 @@ export default function SignedInHomeShell() {
           <button
             type="button"
             onClick={() => setIsCreateModalOpen(false)}
-            className="rounded-md border border-[var(--color-border-medium)] px-3 py-2 text-sm text-[var(--color-text-secondary)] transition hover:text-white"
+            className="rounded-md border px-3 py-2 text-sm"
+            style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
             disabled={isCreating}
           >
             Cancel
@@ -692,7 +727,8 @@ export default function SignedInHomeShell() {
           <button
             type="button"
             onClick={() => void handleCreate()}
-            className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
             disabled={isCreating}
           >
             {isCreating ? 'Creating…' : 'Create'}
@@ -711,19 +747,21 @@ export default function SignedInHomeShell() {
         }}
         className="w-[min(92vw,440px)] p-5"
       >
-        <h2 className="text-lg font-semibold text-white">Rename project</h2>
-        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-          Update the project name shown in your workspace list.
+        <h2 className="font-[family-name:var(--font-display)] text-lg font-bold" style={{ color: 'var(--y-fg)' }}>
+          Rename project
+        </h2>
+        <p className="mt-1 text-sm" style={{ color: 'var(--y-muted)' }}>
+          Update the name shown in your workspace list.
         </p>
 
         <div className="mt-4">
-          <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+          <label className="mb-1 block font-[family-name:var(--font-mono-code)] text-xs" style={{ color: 'var(--y-muted)' }}>
             New name
           </label>
           <Input
             value={renameDraft}
             onChange={(event) => setRenameDraft(event.target.value)}
-            placeholder="Project name"
+            placeholder="project name"
             error={renameError ?? undefined}
           />
         </div>
@@ -732,7 +770,8 @@ export default function SignedInHomeShell() {
           <button
             type="button"
             onClick={() => setRenameTarget(null)}
-            className="rounded-md border border-[var(--color-border-medium)] px-3 py-2 text-sm text-[var(--color-text-secondary)] transition hover:text-white"
+            className="rounded-md border px-3 py-2 text-sm"
+            style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
             disabled={isRenaming}
           >
             Cancel
@@ -740,7 +779,8 @@ export default function SignedInHomeShell() {
           <button
             type="button"
             onClick={() => void handleRename()}
-            className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
             disabled={isRenaming}
           >
             {isRenaming ? 'Saving…' : 'Save'}

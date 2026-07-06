@@ -12,7 +12,7 @@ const featureGroups = [
     bullets: [
       'Command palette for quick file switching and actions (⌘K / Ctrl+K).',
       'Language-aware scaffolds and syntax highlighting for HTML, CSS, JS, and TS.',
-      'In-editor formatting powered by Prettier presets (coming soon).'
+      'Run Python and web projects in the browser, no install required.'
     ]
   },
   {
