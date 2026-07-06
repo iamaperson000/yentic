@@ -33,11 +33,13 @@ export function UsernameSearchForm({
         value={value}
         onChange={event => setValue(event.target.value)}
         placeholder="Search username"
-        className="w-full rounded-full border border-[#3b4a60] bg-[#0f141d] px-5 py-2.5 text-sm text-[#d3dfee] placeholder:text-[#6f8097] transition focus:border-[#93a8bf] focus:outline-none focus:ring-2 focus:ring-[#93a8bf]/35"
+        className="w-full rounded-lg border px-5 py-2.5 text-sm transition focus:outline-none focus:ring-2"
+        style={{ borderColor: 'var(--y-line)', background: 'var(--y-ink)', color: 'var(--y-fg)' }}
       />
       <button
         type="submit"
-        className="inline-flex items-center justify-center rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-slate-200"
+        className="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold transition"
+        style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
       >
         Search
       </button>

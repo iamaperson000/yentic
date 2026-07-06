@@ -10,6 +10,16 @@ export async function generateStaticParams() {
 
 type UserPageParams = { username?: string };
 
+function Shell({ children, width = '980px' }: { children: React.ReactNode; width?: string }) {
+  return (
+    <div className="min-h-screen px-4 py-12 sm:px-6 sm:py-16" style={{ background: 'var(--y-ink)', color: 'var(--y-fg)' }}>
+      <div className="mx-auto flex w-full flex-col gap-8" style={{ maxWidth: width }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default async function UserPage({
   params,
 }: {
@@ -17,13 +27,14 @@ export default async function UserPage({
 }) {
   if (!process.env.DATABASE_URL) {
     return (
-      <div className="min-h-screen bg-[#08090a] px-4 py-12 text-white sm:px-6 sm:py-16">
-        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-8">
-          <div className="rounded-[10px] border border-amber-400/35 bg-amber-500/10 p-8 text-center text-sm text-white/75">
-            Public profiles are unavailable until a database is configured.
-          </div>
+      <Shell>
+        <div
+          className="rounded-[12px] border p-8 text-center text-sm"
+          style={{ borderColor: 'var(--y-brand)', background: 'var(--y-sel-tint)', color: 'var(--y-fg)' }}
+        >
+          Public profiles are unavailable until a database is configured.
         </div>
-      </div>
+      </Shell>
     );
   }
 
@@ -32,11 +43,11 @@ export default async function UserPage({
 
   if (!username) {
     return (
-      <div className="min-h-screen bg-[#08090a] px-4 py-12 text-white sm:px-6 sm:py-16">
-        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-8">
-          <div className="text-center text-sm text-white/60">Something went wrong while loading this profile.</div>
+      <Shell>
+        <div className="text-center text-sm" style={{ color: 'var(--y-muted)' }}>
+          Something went wrong while loading this profile.
         </div>
-      </div>
+      </Shell>
     );
   }
 
@@ -47,49 +58,49 @@ export default async function UserPage({
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#08090a] px-4 py-12 text-white sm:px-6 sm:py-16">
-        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-8">
-          <div className="mx-auto w-full max-w-md">
-            <UsernameSearchForm initialUsername={username} />
-          </div>
-          <NoUserFoundNotice username={username} />
+      <Shell>
+        <div className="mx-auto w-full max-w-md">
+          <UsernameSearchForm initialUsername={username} />
         </div>
-      </div>
+        <NoUserFoundNotice username={username} />
+      </Shell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#08090a] px-4 py-12 text-white sm:px-6 sm:py-16">
-      <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-10">
-        <div className="mx-auto w-full max-w-md">
-          <UsernameSearchForm initialUsername={user.username ?? ''} />
-        </div>
-
-        <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#07090d]">
-          <div className="pointer-events-none absolute inset-0 opacity-[0.5] [background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:48px_48px]" />
-          <div className="relative flex flex-col items-center gap-6 px-6 py-12 text-center sm:px-8 sm:py-14">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={user.image ?? '/default-avatar.svg'}
-              alt={user.username ?? 'User'}
-              className="h-28 w-28 rounded-full border border-[#445162] bg-[#131923] object-cover"
-            />
-            <div className="space-y-2">
-              <p className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.14em] text-[#9fb0c4]">
-                <span className="h-2 w-2 rounded-full bg-[#93a8bf]" />
-                Creator profile
-              </p>
-              <h1 className="text-[34px] font-medium leading-[1.05] tracking-[-0.04em] text-[#edf3fb] sm:text-[48px]">@{user.username}</h1>
-              {user.name ? <p className="text-lg font-medium text-[#d3dfee]">{user.name}</p> : null}
-            </div>
-            {user.bio ? (
-              <p className="max-w-[66ch] text-[15px] leading-[1.6] text-[#b8c5d6]">{user.bio}</p>
-            ) : (
-              <p className="text-sm text-[#8ea0b6]">This creator has not added a bio yet.</p>
-            )}
-          </div>
-        </section>
+    <Shell width="1080px">
+      <div className="mx-auto w-full max-w-md">
+        <UsernameSearchForm initialUsername={user.username ?? ''} />
       </div>
-    </div>
+
+      <section className="overflow-hidden rounded-[14px] border" style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}>
+        <div className="flex flex-col items-center gap-6 px-6 py-12 text-center sm:px-8 sm:py-14">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={user.image ?? '/default-avatar.svg'}
+            alt={user.username ?? 'User'}
+            className="h-28 w-28 rounded-full border object-cover"
+            style={{ borderColor: 'var(--y-line)', background: 'var(--y-ink)' }}
+          />
+          <div className="space-y-2">
+            <p className="font-[family-name:var(--font-mono-code)] text-[12.5px]" style={{ color: 'var(--y-brand)' }}>
+              # creator profile
+            </p>
+            <h1
+              className="font-[family-name:var(--font-display)] text-[clamp(30px,4.5vw,48px)] font-extrabold leading-[1.03] tracking-[-0.035em]"
+              style={{ color: 'var(--y-fg)' }}
+            >
+              @{user.username}
+            </h1>
+            {user.name ? <p className="text-lg font-medium" style={{ color: 'var(--y-fg)' }}>{user.name}</p> : null}
+          </div>
+          {user.bio ? (
+            <p className="max-w-[66ch] text-[15px] leading-[1.6]" style={{ color: 'var(--y-muted)' }}>{user.bio}</p>
+          ) : (
+            <p className="text-sm" style={{ color: 'var(--y-muted)' }}>This creator has not added a bio yet.</p>
+          )}
+        </div>
+      </section>
+    </Shell>
   );
 }
