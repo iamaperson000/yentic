@@ -2,6 +2,7 @@
 
 import { site } from '@/config/site';
 import { AnimateIn } from '@/components/ui/AnimateIn';
+import PageHero from '@/components/marketing/PageHero';
 
 const roadmapPhases = [
   {
@@ -50,49 +51,44 @@ const autosavePlan = [
 
 export default function RoadmapPage() {
   return (
-    <div className="flex flex-col gap-16">
+    <div className="flex flex-col gap-14">
       <AnimateIn delay={0}>
-        <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]">
-          <div className="pointer-events-none absolute inset-0 opacity-[0.5] [background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:48px_48px]" />
-          <div className="relative max-w-[920px] px-6 py-14 sm:px-8 sm:py-16">
-            <p className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
-              <span className="h-2 w-2 rounded-full bg-[var(--color-text-muted)]" />
-              Roadmap
-            </p>
-            <h1 className="mt-4 text-[34px] font-medium leading-[1.05] tracking-[-0.04em] text-[var(--color-text-primary)] sm:text-[48px] lg:text-[56px]">
-              Where Yentic is headed.
-            </h1>
-            <p className="mt-4 max-w-[68ch] text-[15px] leading-[1.55] text-[var(--color-text-secondary)]">
-              Autosave and multiplayer are the next milestones. After that, server-side execution for more languages.
-            </p>
-          </div>
-        </section>
+        <PageHero
+          eyebrow="roadmap"
+          title="Where Yentic is headed."
+          lead="Autosave and multiplayer are the next milestones. After that, server-side execution for more languages."
+        />
       </AnimateIn>
 
       <AnimateIn delay={0.1}>
-        <section className="relative overflow-hidden rounded-[10px] border border-[#bfc9d6] bg-[var(--color-light-bg)] text-[var(--color-bg-surface)]">
-          <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:radial-gradient(rgba(19,25,35,0.11)_1px,transparent_1px)] [background-size:26px_26px]" />
-
-          <div className="relative border-b border-[var(--color-light-border)] px-6 py-10 sm:px-8 sm:py-12">
-            <div className="max-w-[760px]">
-              <p className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.14em] text-[var(--color-light-muted)]">
-                <span className="h-2 w-2 rounded-full bg-[var(--color-light-muted)]" />
-                Delivery phases
-              </p>
-              <h2 className="mt-4 text-[30px] font-medium leading-[1.05] tracking-[-0.04em] text-[#0f1621] sm:text-[40px] lg:text-[48px]">
-                Now, next, and later.
-              </h2>
-            </div>
+        <section
+          className="overflow-hidden rounded-[12px] border"
+          style={{ borderColor: 'var(--y-line)', background: 'var(--y-ink)' }}
+        >
+          <div className="border-b px-6 py-7 sm:px-8" style={{ borderColor: 'var(--y-line)' }}>
+            <p className="font-[family-name:var(--font-mono-code)] text-[12.5px]" style={{ color: 'var(--y-brand)' }}>
+              # delivery phases
+            </p>
+            <h2
+              className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-0.02em]"
+              style={{ color: 'var(--y-fg)' }}
+            >
+              Now, next, and later.
+            </h2>
           </div>
-
-          <div className="relative grid gap-px bg-[var(--color-light-border)] md:grid-cols-3">
-            {roadmapPhases.map(bucket => (
-              <section key={bucket.phase} className="bg-[var(--color-light-bg)] px-6 py-7 sm:px-8 sm:py-8">
-                <h3 className="text-[22px] font-medium leading-[1.2] tracking-[-0.02em] text-[#101a27]">{bucket.phase}</h3>
-                <ul className="mt-5 space-y-3 text-[14px] leading-[1.55] text-[#253243]">
-                  {bucket.highlights.map(item => (
+          <div className="grid gap-px md:grid-cols-3" style={{ background: 'var(--y-line)' }}>
+            {roadmapPhases.map((bucket) => (
+              <section key={bucket.phase} className="px-6 py-7 sm:px-8" style={{ background: 'var(--y-ink)' }}>
+                <h3
+                  className="font-[family-name:var(--font-mono-code)] text-sm font-semibold uppercase"
+                  style={{ color: 'var(--y-brand)' }}
+                >
+                  {bucket.phase}
+                </h3>
+                <ul className="mt-5 space-y-3 text-sm leading-[1.55]" style={{ color: 'var(--y-muted)' }}>
+                  {bucket.highlights.map((item) => (
                     <li key={item} className="flex gap-3">
-                      <span className="mt-[8px] h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--color-light-muted)]" />
+                      <span className="mt-[8px] h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: 'var(--y-brand)' }} />
                       <span>{item}</span>
                     </li>
                   ))}
@@ -104,42 +100,51 @@ export default function RoadmapPage() {
       </AnimateIn>
 
       <AnimateIn delay={0.2}>
-        <section className="relative overflow-hidden rounded-[10px] border border-[#2d3643] bg-[var(--color-bg-overlay)]">
-          <div className="pointer-events-none absolute inset-0 opacity-50 [background-image:radial-gradient(circle_at_20%_0%,rgba(220,229,240,0.2),transparent_48%),linear-gradient(to_right,rgba(220,229,240,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(220,229,240,0.08)_1px,transparent_1px)] [background-size:auto,48px_48px,48px_48px]" />
+        <section
+          className="overflow-hidden rounded-[12px] border lg:grid lg:grid-cols-[1.2fr_0.8fr]"
+          style={{ borderColor: 'var(--y-line)', background: 'var(--y-ink)' }}
+        >
+          <div className="border-b px-6 py-9 sm:px-8 lg:border-b-0 lg:border-r" style={{ borderColor: 'var(--y-line)' }}>
+            <p className="font-[family-name:var(--font-mono-code)] text-[12.5px]" style={{ color: 'var(--y-brand)' }}>
+              # autosave blueprint
+            </p>
+            <h2
+              className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-0.02em]"
+              style={{ color: 'var(--y-fg)' }}
+            >
+              How autosave will work.
+            </h2>
+            <p className="mt-4 max-w-[58ch] text-[15px] leading-[1.6]" style={{ color: 'var(--y-muted)' }}>
+              Autosave is currently local-first while we finalize the backend contract. The architecture below outlines the
+              production path.
+            </p>
+          </div>
 
-          <div className="relative lg:grid lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="border-b border-[var(--color-border-medium)] px-6 py-9 sm:px-8 sm:py-10 lg:border-b-0 lg:border-r">
-              <p className="inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.14em] text-[var(--color-text-faint)]">
-                <span className="h-2 w-2 rounded-full bg-[var(--color-text-muted)]" />
-                Autosave blueprint
-              </p>
-              <h2 className="mt-4 max-w-[660px] text-[30px] font-medium leading-[1.05] tracking-[-0.04em] text-[var(--color-text-primary)] sm:text-[40px] lg:text-[48px]">
-                How autosave will work.
-              </h2>
-              <p className="mt-4 max-w-[58ch] text-[15px] leading-[1.55] text-[var(--color-text-secondary)]">
-                Autosave is currently local-first while we finalize the backend contract. The architecture below outlines the
-                production path.
-              </p>
+          <div className="px-6 py-9 sm:px-8">
+            <div className="overflow-hidden rounded-lg border" style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}>
+              {autosavePlan.map((item) => (
+                <article
+                  key={item.title}
+                  className="border-b px-5 py-5 last:border-b-0"
+                  style={{ borderColor: 'var(--y-line)' }}
+                >
+                  <p className="font-[family-name:var(--font-mono-code)] text-xs" style={{ color: 'var(--y-brand)' }}>
+                    {item.title}
+                  </p>
+                  <p className="mt-2 text-sm leading-[1.6]" style={{ color: 'var(--y-muted)' }}>
+                    {item.detail}
+                  </p>
+                </article>
+              ))}
             </div>
 
-            <div className="px-6 py-9 sm:px-8 sm:py-10">
-              <div className="overflow-hidden rounded-lg border border-[var(--color-border-medium)] bg-[var(--color-bg-surface)]">
-                {autosavePlan.map(item => (
-                  <article key={item.title} className="border-b border-[var(--color-border-medium)] px-5 py-5 last:border-b-0">
-                    <p className="text-[12px] uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{item.title}</p>
-                    <p className="mt-2 text-[14px] leading-[1.55] text-[#c6d4e4]">{item.detail}</p>
-                  </article>
-                ))}
-              </div>
-
-              <p className="mt-6 text-[13px] leading-[1.6] text-[var(--color-text-faint)]">
-                Want to participate in early collaboration trials? Reach out at{' '}
-                <a className="underline decoration-[var(--color-text-muted)] underline-offset-4 transition hover:text-white" href={`mailto:${site.contactEmail}`}>
-                  {site.contactEmail}
-                </a>
-                .
-              </p>
-            </div>
+            <p className="mt-6 text-[13px] leading-[1.6]" style={{ color: 'var(--y-muted)' }}>
+              Want to join early collaboration trials? Reach out at{' '}
+              <a className="underline underline-offset-4" style={{ color: 'var(--y-brand)' }} href={`mailto:${site.contactEmail}`}>
+                {site.contactEmail}
+              </a>
+              .
+            </p>
           </div>
         </section>
       </AnimateIn>
