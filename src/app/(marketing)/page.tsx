@@ -34,7 +34,7 @@ function LandingHome() {
         {/* hero: gutter + stage */}
         <div className="grid grid-cols-[40px_1fr] sm:grid-cols-[56px_1fr]">
           <GutterSpine lines={17} />
-          <div className="px-6 py-10 sm:px-[52px] sm:py-[52px]">
+          <div className="min-w-0 px-6 py-10 sm:px-[52px] sm:py-[52px]">
             <h1
               className="font-[family-name:var(--font-display)] text-[clamp(34px,6vw,60px)] font-extrabold leading-[1.0] tracking-[-0.035em]"
               style={{ maxWidth: '16ch' }}
@@ -74,7 +74,7 @@ function LandingHome() {
 
             {/* live code block */}
             <div
-              className="mt-10 overflow-hidden rounded-[11px] border"
+              className="mt-10 min-w-0 overflow-hidden rounded-[11px] border"
               style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
             >
               <div

@@ -7,7 +7,7 @@ import { useSession } from 'next-auth/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Command, Menu, X } from 'lucide-react';
 
-import { site } from '@/config/site';
+import ThemeToggle from '@/components/ThemeToggle';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 
 export interface NavLink {
@@ -27,19 +27,20 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
       <motion.nav
         animate={{ y: hidden ? -100 : 0 }}
         transition={{ duration: 0.25, ease: 'easeInOut' }}
-        className={`sticky top-0 z-50 h-[64px] backdrop-blur-xl transition-colors duration-300 ${
-          scrolled
-            ? 'border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-primary)]/80'
-            : 'border-b border-transparent bg-transparent'
-        }`}
+        className="sticky top-0 z-50 h-[64px] backdrop-blur-xl transition-colors duration-300"
+        style={{
+          borderBottom: scrolled ? '1px solid var(--y-line)' : '1px solid transparent',
+          background: scrolled ? 'color-mix(in srgb, var(--y-ink) 80%, transparent)' : 'transparent',
+        }}
       >
         <div className="mx-auto flex h-full max-w-[1436px] items-center justify-between px-6 sm:px-8">
           <Link
             href="/"
-            className="flex items-center gap-2.5 text-sm font-semibold uppercase tracking-[0.14em] text-[var(--color-text-primary)]"
+            className="flex items-center gap-2 font-[family-name:var(--font-mono-code)] text-[15px] font-bold tracking-[-0.02em]"
+            style={{ color: 'var(--y-fg)' }}
           >
-            <span className="h-2 w-2 rounded-full bg-white" />
-            {site.name}
+            <span className="h-[15px] w-[15px] rounded-[4px]" style={{ background: 'var(--y-brand)' }} />
+            yentic
           </Link>
 
           <div className="hidden items-center gap-1 md:flex">
@@ -49,11 +50,8 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`rounded-full px-3.5 py-1.5 text-sm transition-colors ${
-                    isActive
-                      ? 'text-[var(--color-text-primary)]'
-                      : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
-                  }`}
+                  className="rounded-full px-3.5 py-1.5 text-sm transition-colors"
+                  style={{ color: isActive ? 'var(--y-fg)' : 'var(--y-muted)' }}
                 >
                   {link.label}
                 </Link>
@@ -63,7 +61,8 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
 
           <div className="flex items-center gap-3">
             <button
-              className="hidden items-center gap-2 rounded-lg border border-[var(--color-border-subtle)] px-2.5 py-1.5 text-xs text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-border-medium)] hover:text-[var(--color-text-secondary)] sm:inline-flex"
+              className="hidden items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors sm:inline-flex"
+              style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
               onClick={() =>
                 document.dispatchEvent(
                   new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })
@@ -74,10 +73,13 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
               <span>K</span>
             </button>
 
+            <ThemeToggle />
+
             {!isAuthenticated && (
               <Link
                 href="/signup"
-                className="hidden rounded-full border border-white/20 px-4 py-1.5 text-sm font-semibold text-white/90 transition hover:border-white/40 sm:inline-flex"
+                className="hidden rounded-full border px-4 py-1.5 text-sm font-semibold transition sm:inline-flex"
+                style={{ borderColor: 'var(--y-line)', color: 'var(--y-fg)' }}
               >
                 Sign up
               </Link>
@@ -85,7 +87,8 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
 
             <Link
               href="/ide"
-              className="rounded-full bg-white px-4 py-1.5 text-sm font-semibold text-black transition hover:bg-slate-200"
+              className="rounded-full px-4 py-1.5 text-sm font-semibold transition"
+              style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
             >
               Open IDE
             </Link>
@@ -93,7 +96,8 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border-subtle)] text-[var(--color-text-muted)] transition hover:border-[var(--color-border-medium)] hover:text-white md:hidden"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border transition md:hidden"
+              style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
               aria-label="Open menu"
             >
               <Menu className="h-4 w-4" />
@@ -117,16 +121,18 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="absolute right-0 top-0 h-full w-[280px] border-l border-[var(--color-border-subtle)] bg-[var(--color-bg-primary)]"
+              className="absolute right-0 top-0 h-full w-[280px] border-l"
+              style={{ background: 'var(--y-ink)', borderColor: 'var(--y-line)' }}
             >
-              <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-5 py-4">
-                <span className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--color-text-primary)]">
-                  Menu
+              <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'var(--y-line)' }}>
+                <span className="font-[family-name:var(--font-mono-code)] text-sm font-bold" style={{ color: 'var(--y-fg)' }}>
+                  menu
                 </span>
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border-subtle)] text-[var(--color-text-muted)] transition hover:text-white"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition"
+                  style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
                   aria-label="Close menu"
                 >
                   <X className="h-4 w-4" />
@@ -140,11 +146,11 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
                       key={link.href}
                       href={link.href}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                        isActive
-                          ? 'bg-white/10 text-white'
-                          : 'text-[var(--color-text-muted)] hover:bg-white/5 hover:text-white'
-                      }`}
+                      className="rounded-lg px-3 py-2.5 text-sm font-medium transition"
+                      style={{
+                        color: isActive ? 'var(--y-fg)' : 'var(--y-muted)',
+                        background: isActive ? 'var(--y-sel-tint)' : 'transparent',
+                      }}
                     >
                       {link.label}
                     </Link>
@@ -154,7 +160,8 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
                   <Link
                     href="/signup"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="mt-2 rounded-lg border border-white/20 px-3 py-2.5 text-center text-sm font-semibold text-white/90 transition hover:border-white/40"
+                    className="mt-2 rounded-lg border px-3 py-2.5 text-center text-sm font-semibold transition"
+                    style={{ borderColor: 'var(--y-line)', color: 'var(--y-fg)' }}
                   >
                     Sign up
                   </Link>
