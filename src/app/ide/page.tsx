@@ -87,7 +87,7 @@ export default function WorkspacePicker() {
         <section className="overflow-hidden rounded-[14px] border" style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}>
           <div className="mx-auto flex w-full max-w-[980px] flex-col items-center px-6 pb-14 pt-16 text-center sm:pb-16 sm:pt-20">
             <span
-              className="rounded-full border px-3 py-1 font-[family-name:var(--font-mono-code)] text-[11px] font-medium"
+              className="rounded-md border px-3 py-1 font-[family-name:var(--font-mono-code)] text-[11px] font-medium"
               style={{ borderColor: 'var(--y-line)', color: 'var(--y-brand)' }}
             >
               # launch your stack
@@ -105,7 +105,7 @@ export default function WorkspacePicker() {
               {highlights.map((highlight) => (
                 <span
                   key={highlight}
-                  className="inline-flex items-center gap-2 rounded-full border px-4 py-2 font-[family-name:var(--font-mono-code)] text-xs"
+                  className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 font-[family-name:var(--font-mono-code)] text-xs"
                   style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
                 >
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--y-brand)' }} aria-hidden />
@@ -170,6 +170,20 @@ export default function WorkspacePicker() {
                 </Link>
               );
             })}
+
+            {/* fills the trailing grid cell + a real CTA */}
+            <a
+              href="mailto:hello@yentic.com?subject=Language%20request"
+              className="group flex min-h-[210px] flex-col justify-center gap-2 px-6 py-7 text-center sm:px-8"
+              style={{ background: 'var(--y-ink)', color: 'var(--y-muted)' }}
+            >
+              <p className="font-[family-name:var(--font-display)] text-lg font-bold" style={{ color: 'var(--y-fg)' }}>
+                Need another language?
+              </p>
+              <p className="text-sm leading-[1.55]">
+                Tell us what to add — <span style={{ color: 'var(--y-brand)' }}>hello@yentic.com</span>
+              </p>
+            </a>
           </div>
         </section>
 

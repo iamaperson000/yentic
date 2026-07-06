@@ -36,7 +36,8 @@ export function Modal({ open, onClose, children, className = '' }: ModalProps) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className={`relative z-10 rounded-xl border border-[var(--color-border-medium)] bg-[var(--color-bg-overlay)] shadow-2xl ${className}`}
+            className={`relative z-10 rounded-xl border shadow-2xl ${className}`}
+            style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
           >
             {children}
           </motion.div>

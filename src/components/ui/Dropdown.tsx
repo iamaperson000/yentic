@@ -62,7 +62,8 @@ export function Dropdown({ open, onClose, children, align = 'right', className =
           exit={{ opacity: 0, scale: 0.95, y: -4 }}
           transition={{ duration: 0.12 }}
           onKeyDown={handleKeyDown}
-          className={`absolute z-50 mt-2 min-w-[180px] overflow-hidden rounded-lg border border-[var(--color-border-medium)] bg-[var(--color-bg-surface)] shadow-xl shadow-black/30 ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
+          className={`absolute z-50 mt-2 min-w-[180px] overflow-hidden rounded-lg border shadow-xl shadow-black/30 ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
+          style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
         >
           <DropdownContext.Provider value={{ onClose }}>
             <div className="py-1">{children}</div>
@@ -81,7 +82,8 @@ export function DropdownItem({ onSelect, children, destructive = false, classNam
       role="menuitem"
       tabIndex={-1}
       onClick={() => { onSelect(); onClose(); }}
-      className={`flex w-full items-center px-3 py-2 text-sm transition-colors focus:outline-none focus:bg-white/5 hover:bg-white/5 ${destructive ? 'text-red-400 hover:text-red-300' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'} ${className}`}
+      className={`flex w-full items-center px-3 py-2 text-sm transition-colors focus:outline-none hover:bg-[var(--y-sel-tint)] focus:bg-[var(--y-sel-tint)] ${className}`}
+      style={{ color: destructive ? 'var(--y-kw)' : 'var(--y-muted)' }}
     >
       {children}
     </button>

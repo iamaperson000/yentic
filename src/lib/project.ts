@@ -223,7 +223,7 @@ export const workspaceConfigs: Record<WorkspaceSlug, WorkspaceConfig> = {
   cpp: {
     slug: 'cpp',
     title: 'C++',
-    description: 'Experiment with modern C++ snippets and see output instantly.',
+    description: 'Experiment with modern C++ snippets and run them in the browser.',
     accent: 'violet',
     defaultActivePath: 'main.cpp',
     newFilePlaceholder: 'program.cpp',

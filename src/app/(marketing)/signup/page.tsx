@@ -8,8 +8,8 @@ import { AnimateIn } from '@/components/ui/AnimateIn';
 
 const benefits = [
   {
-    title: 'Kickstart instantly',
-    body: 'Pick a language and start writing code. No installs, no configuration.'
+    title: 'Start fast',
+    body: 'Pick a language and start writing code right away.'
   },
   {
     title: 'Stay in sync',
@@ -53,7 +53,7 @@ export default function SignUpPage() {
               className="mt-4 font-[family-name:var(--font-display)] text-[clamp(30px,4.5vw,48px)] font-extrabold leading-[1.03] tracking-[-0.035em]"
               style={{ color: 'var(--y-fg)' }}
             >
-              Join Yentic in under a minute.
+              Join Yentic and start building.
             </h1>
             <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.6]" style={{ color: 'var(--y-muted)' }}>
               Sign in with Google to set up your workspace and pick up your projects from any browser.

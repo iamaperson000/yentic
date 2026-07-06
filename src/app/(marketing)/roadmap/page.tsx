@@ -80,7 +80,7 @@ export default function RoadmapPage() {
             {roadmapPhases.map((bucket) => (
               <section key={bucket.phase} className="px-6 py-7 sm:px-8" style={{ background: 'var(--y-ink)' }}>
                 <h3
-                  className="font-[family-name:var(--font-mono-code)] text-sm font-semibold uppercase"
+                  className="font-[family-name:var(--font-mono-code)] text-sm font-semibold"
                   style={{ color: 'var(--y-brand)' }}
                 >
                   {bucket.phase}
@@ -88,7 +88,7 @@ export default function RoadmapPage() {
                 <ul className="mt-5 space-y-3 text-sm leading-[1.55]" style={{ color: 'var(--y-muted)' }}>
                   {bucket.highlights.map((item) => (
                     <li key={item} className="flex gap-3">
-                      <span className="mt-[8px] h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: 'var(--y-brand)' }} />
+                      <span className="mt-[8px] h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: 'var(--y-muted)' }} />
                       <span>{item}</span>
                     </li>
                   ))}

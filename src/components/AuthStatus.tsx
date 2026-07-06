@@ -21,8 +21,11 @@ export default function AuthStatus() {
 
   if (status === 'loading') {
     return (
-      <div className="flex items-center gap-3 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/70">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-[#93a8bf]" aria-hidden="true" />
+      <div
+        className="flex items-center gap-3 rounded-lg border px-4 py-2 text-sm"
+        style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-muted)' }}
+      >
+        <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--y-brand)' }} aria-hidden="true" />
         <span>Checking session…</span>
       </div>
     );
@@ -39,21 +42,25 @@ export default function AuthStatus() {
         <button
           type="button"
           onClick={() => setOpen(value => !value)}
-          className="flex items-center gap-3 rounded-full border border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] px-4 py-2 text-left text-sm text-[var(--color-text-primary)] transition hover:border-[var(--color-text-muted)] hover:text-white"
+          className="flex items-center gap-3 rounded-lg border px-4 py-2 text-left text-sm transition"
+          style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-fg)' }}
         >
           {session.user.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={session.user.image} alt={displayName} className="h-9 w-9 rounded-full border border-[var(--color-border-strong)] object-cover" />
+            <img src={session.user.image} alt={displayName} className="h-9 w-9 rounded-full border object-cover" style={{ borderColor: 'var(--y-line)' }} />
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border-strong)] bg-[#0f141d] text-xs font-semibold text-[var(--color-text-primary)]">
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-full border text-xs font-semibold"
+              style={{ borderColor: 'var(--y-line)', background: 'var(--y-ink)', color: 'var(--y-fg)' }}
+            >
               {initials}
             </div>
           )}
           <div className="flex flex-col leading-tight">
-            <span className="text-[10px] uppercase tracking-[0.4em] text-[var(--color-text-muted)]">Signed in</span>
-            <span className="font-semibold text-white">@{username}</span>
+            <span className="font-[family-name:var(--font-mono-code)] text-[10px]" style={{ color: 'var(--y-muted)' }}>signed in</span>
+            <span className="font-semibold" style={{ color: 'var(--y-fg)' }}>@{username}</span>
           </div>
-          <svg className={`h-4 w-4 text-[var(--color-text-muted)] transition ${open ? 'rotate-180 text-white' : ''}`} viewBox="0 0 24 24" aria-hidden="true">
+          <svg className={`h-4 w-4 transition ${open ? 'rotate-180' : ''}`} style={{ color: 'var(--y-muted)' }} viewBox="0 0 24 24" aria-hidden="true">
             <path
               d="m6 9 6 6 6-6"
               fill="none"
@@ -82,7 +89,8 @@ export default function AuthStatus() {
   return (
     <button
       onClick={() => signIn('google', { callbackUrl: '/' })}
-      className="group flex items-center gap-4 rounded-full border border-white/15 bg-white/5 px-5 py-2 text-left text-sm text-white/90 transition hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/10 hover:text-white"
+      className="group flex w-full items-center gap-4 rounded-lg border px-5 py-2.5 text-left text-sm transition hover:-translate-y-0.5"
+      style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-fg)' }}
     >
       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-md">
         <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
@@ -105,10 +113,10 @@ export default function AuthStatus() {
         </svg>
       </span>
       <div className="flex flex-col leading-tight">
-        <span className="text-[10px] uppercase tracking-[0.4em] text-white/55">Continue with</span>
-        <span className="font-semibold">Google</span>
+        <span className="font-[family-name:var(--font-mono-code)] text-[10px]" style={{ color: 'var(--y-muted)' }}>continue with</span>
+        <span className="font-semibold" style={{ color: 'var(--y-fg)' }}>Google</span>
       </div>
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="ml-auto h-4 w-4 text-white/55 transition group-hover:translate-x-1 group-hover:text-white">
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="ml-auto h-4 w-4 transition group-hover:translate-x-1" style={{ color: 'var(--y-muted)' }}>
         <path
           d="M5 12h14m0 0-5-5m5 5-5 5"
           fill="none"

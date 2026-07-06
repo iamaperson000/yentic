@@ -11,7 +11,7 @@
 }
 [data-theme="daylight"] {
   --y-ink:#f7f3ea; --y-panel:#efe9db; --y-panel2:#e8e1d0; --y-line:#ddd4c1;
-  --y-fg:#211e18; --y-muted:#8c8473; --y-gnum:#c3bba8;
+  --y-fg:#211e18; --y-muted:#6b6352; --y-gnum:#b3aa95;
   --y-brand:#c17615;
   --y-kw:#c0355a; --y-str:#2f8a45; --y-fn:#c17615; --y-num:#2d5bd6; --y-op:#8043c9;
   --y-sel-hl:rgba(193,118,21,.20); --y-sel-tint:rgba(193,118,21,.10);
@@ -154,16 +154,16 @@
 /* ── Base ── */
 body {
   margin: 0;
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  font-family: var(--font-sans);
+  background-color: var(--y-ink);
+  color: var(--y-fg);
+  font-family: var(--font-body), var(--font-sans);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background-color: rgba(16, 185, 129, 0.4);
-  color: var(--color-bg-surface);
+  background-color: var(--y-sel-hl);
+  color: var(--y-fg);
 }
 
 button,
