@@ -514,82 +514,29 @@ export function Preview({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2">
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] font-medium tracking-[0.02em] text-[var(--ide-text-muted)]">{label}</span>
-          {effectiveMode === 'sandpack' ? (
-            <div className="flex items-center gap-px border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-muted)]">
-              <button
-                type="button"
-                onClick={() => setActiveSandpackView('preview')}
-                className={clsx(
-                  'px-2.5 py-1 text-[10px] font-medium tracking-[0.02em] transition',
-                  activeSandpackView === 'preview'
-                    ? 'bg-[var(--ide-bg-active)] text-[var(--ide-text)]'
-                    : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]'
-                )}
-              >
-                Preview
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveSandpackView('console')}
-                className={clsx(
-                  'px-2.5 py-1 text-[10px] font-medium tracking-[0.02em] transition',
-                  activeSandpackView === 'console'
-                    ? 'bg-[var(--ide-bg-active)] text-[var(--ide-text)]'
-                    : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]'
-                )}
-              >
-                Console
-              </button>
-            </div>
-          ) : null}
-        </div>
-        {showAutorunControls ? (
-          <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)]">
-            {showRunButton ? (
-              <button
-                type="button"
-                onClick={triggerRun}
-                data-testid="preview-run-button"
-                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--ide-accent)] px-3.5 text-[11px] font-bold tracking-[0.02em] text-[var(--ide-bg-app)] transition hover:brightness-110"
-              >
-                ▶ Run
-              </button>
-            ) : null}
-            <div className="flex items-center gap-1">
-              {onRefresh ? (
-                <button
-                  type="button"
-                  onClick={onRefresh}
-                  data-testid="preview-refresh-button"
-                  className="inline-flex h-7 w-7 items-center justify-center border border-[var(--ide-border)] text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]"
-                  aria-label="Refresh preview"
-                  title="Refresh preview"
-                >
-                  <RotateCw className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={toggleAutorun}
-                aria-pressed={autorunEnabled}
-                aria-label="Toggle autorun"
-                className={clsx(
-                  'inline-flex h-7 items-center border px-2.5 text-[10px] font-medium tracking-[0.02em] transition',
-                  autorunEnabled
-                    ? 'border-[var(--ide-border-strong)] bg-[var(--ide-bg-active)] text-[var(--ide-text)]'
-                    : 'border-[var(--ide-border)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-muted)] hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]'
-                )}
-              >
-                Autorun {autorunEnabled ? 'On' : 'Off'}
-              </button>
-            </div>
-          </div>
-        ) : null}
+      <div className="ptabs">
+        {effectiveMode === 'sandpack' ? (
+          <>
+            <button type="button" className={clsx('ptab', activeSandpackView === 'preview' && 'on')} onClick={() => setActiveSandpackView('preview')}>Preview</button>
+            <button type="button" className={clsx('ptab', activeSandpackView === 'console' && 'on')} onClick={() => setActiveSandpackView('console')}>Console</button>
+          </>
+        ) : (
+          <span className="ptab on">Output</span>
+        )}
+        <span className="grow" />
+        <span className="k">{label}</span>
       </div>
-      <div className="relative flex w-full min-h-0 flex-1 bg-[var(--ide-bg-panel)]">
+      {showAutorunControls ? (
+        <div className="purl">
+          <button type="button" data-testid="preview-run-button" onClick={triggerRun} title="Run" style={{ color: 'var(--brand)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>▶ Run</button>
+          <span className="bar">preview · runs in this tab</span>
+          {onRefresh ? (
+            <button type="button" data-testid="preview-refresh-button" onClick={onRefresh} title="Reload" aria-label="Refresh preview"><RotateCw style={{ width: 14, height: 14 }} /></button>
+          ) : null}
+          <button type="button" onClick={toggleAutorun} aria-pressed={autorunEnabled} title="Toggle autorun" style={{ color: autorunEnabled ? 'var(--fg)' : 'var(--muted)' }}>{autorunEnabled ? 'auto' : 'manual'}</button>
+        </div>
+      ) : null}
+      <div className="pbody">
         {effectiveMode === 'sandpack' ? (
           <SandpackProvider
             files={files}
@@ -673,6 +620,11 @@ export function Preview({
             {disabledMessage ?? 'Preview is not available for this workspace yet.'}
           </div>
         )}
+      </div>
+      <div className="prunbar">
+        <span className="d" />
+        {autorunEnabled ? 'autorun on \u00b7 live' : 'runs in this tab'}
+        <div className="r"><span>localhost preview</span></div>
       </div>
     </div>
   );

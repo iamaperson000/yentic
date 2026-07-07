@@ -373,3 +373,17 @@ textarea {
 .yide .prunbar{display:flex;align-items:center;gap:10px;height:36px;padding:0 16px;background:var(--brand);color:var(--statfg);font-family:var(--mono);font-size:12px;font-weight:600;flex:0 0 auto;}
 .yide .prunbar .r{margin-left:auto;display:flex;gap:14px;}
 .yide .prunbar .d{width:7px;height:7px;border-radius:50%;background:var(--statfg);}
+/* chrome icons: line-style, follow currentColor (rail/topbar/files/preview) */
+.yide .topbar svg,
+.yide .rail svg,
+.yide .files svg,
+.yide .ptabs svg,
+.yide .purl svg,
+.yide .prunbar svg,
+.yide .crumbs svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
