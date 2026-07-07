@@ -380,7 +380,8 @@ textarea {
 .yide .ptabs svg,
 .yide .purl svg,
 .yide .prunbar svg,
-.yide .crumbs svg {
+.yide .crumbs svg,
+.yide .tabs svg {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;

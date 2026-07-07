@@ -1396,14 +1396,6 @@ export default function WorkspaceClient({
           ? 'border-amber-300/40 bg-amber-500/10 text-amber-100'
           : 'border-[var(--ide-border-strong)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-muted)]'
   );
-  const chromeButtonClass =
-    'inline-flex h-7 items-center border px-2.5 text-[11px] font-medium text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ide-accent)] disabled:cursor-not-allowed disabled:opacity-40';
-  const activeChromeButtonClass =
-    'border-[var(--ide-border-strong)] bg-[var(--ide-bg-active)] text-[var(--ide-text)]';
-  const shareButtonClass = clsx(
-    chromeButtonClass,
-    viewerRole === 'owner' && !shareButtonDisabled && activeChromeButtonClass
-  );
 
   const createSmartFile = useCallback(() => {
     if (viewerRole === 'viewer') {
@@ -1462,7 +1454,6 @@ export default function WorkspaceClient({
 
   const [explorerWidth, setExplorerWidth] = useState(246);
   const [previewWidth, setPreviewWidth] = useState(600);
-  const [fileFilter, setFileFilter] = useState('');
   const [runRequestId, setRunRequestId] = useState(0);
   const mainRef = useRef<HTMLDivElement>(null);
   const fileDotColor = (path: string) => {
@@ -1549,6 +1540,14 @@ export default function WorkspaceClient({
               </b>
             )}
           </span>
+          <div className="tb-ic">
+            <button type="button" title="Toggle sidebar" onClick={() => setShowExplorer(v => !v)}>
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18" /></svg>
+            </button>
+            <button type="button" title="Search files" onClick={() => setShowExplorer(true)}>
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+            </button>
+          </div>
         </div>
 
         <div className="run">
@@ -1579,6 +1578,12 @@ export default function WorkspaceClient({
             <svg viewBox="0 0 24 24"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" /><path d="M16 6l-4-4-4 4" /><path d="M12 2v13" /></svg>
             Share
           </button>
+          <button type="button" className="ic-btn" title="Toggle theme" onClick={() => { const el = document.querySelector('.yide'); if (el) el.setAttribute('data-theme', el.getAttribute('data-theme') === 'daylight' ? 'dusk' : 'daylight'); }}>
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" /></svg>
+          </button>
+          <button type="button" className="ic-btn" title="Notifications">
+            <svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10 21a2 2 0 0 0 4 0" /></svg>
+          </button>
         </div>
       </div>
 
@@ -1590,12 +1595,21 @@ export default function WorkspaceClient({
           <button type="button" title="Search" onClick={() => setShowExplorer(true)}>
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
           </button>
+          <button type="button" title="Git">
+            <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="8" r="2.5" /><path d="M6 8.5v7M18 10.5c0 4-6 2-6 5.5" /></svg>
+          </button>
+          <button type="button" title="Console" onClick={() => setShowPreview(true)}>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3M13 15h4" /></svg>
+          </button>
           <button type="button" title="Preview" aria-pressed={showPreview} className={showPreview ? 'on' : undefined} onClick={() => setShowPreview(v => !v)}>
             <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M8 21h8M12 18v3" /></svg>
           </button>
           <div className="sp" />
           <button type="button" title="Settings">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></svg>
+          </button>
+          <button type="button" title="Help">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01" /></svg>
           </button>
         </div>
 
@@ -1610,6 +1624,7 @@ export default function WorkspaceClient({
                 onDelete={onDelete}
                 onCreateFile={createSmartFile}
                 onResetWorkspace={resetWorkspace}
+                onCollapse={() => setShowExplorer(false)}
                 canReset={viewerRole === 'owner'}
                 newlyCreatedPath={recentlyCreatedPath}
                 onFeedback={pushToast}
@@ -1644,11 +1659,17 @@ export default function WorkspaceClient({
                 </button>
               </div>
             ))}
+            <button type="button" className="tab" style={{ color: 'var(--faint)', padding: '10px 12px' }} title="New file" onClick={createSmartFile}>+</button>
+            <span className="k"><svg viewBox="0 0 24 24" style={{ width: 16, height: 16 }}><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></svg></span>
           </div>
           <div className="crumbs">
             <div className="path">
               {projectMeta.name?.trim() || defaultProjectName} <span className="sep">›</span> {activePath}
             </div>
+            <button type="button" className="fmt" title="Format">
+              <svg viewBox="0 0 24 24" style={{ width: 14, height: 14 }}><path d="M4 7h16M4 12h10M4 17h13" /></svg>
+              Format
+            </button>
           </div>
           <div className="codewrap">
             <Editor
@@ -1667,6 +1688,7 @@ export default function WorkspaceClient({
             <span className="r">
               <span>Ln {cursorLine}, Col {cursorColumn}</span>
               <span>Spaces: 2</span>
+              <span className="hl" style={{ cursor: 'pointer' }} onClick={openShareModal}>⧉ share</span>
             </span>
           </div>
         </div>
@@ -1685,6 +1707,7 @@ export default function WorkspaceClient({
                 activeFileCode={code}
                 activeFileLanguage={lang}
                 onRefresh={() => setPreviewRefreshKey(key => key + 1)}
+                onCollapse={() => setShowPreview(false)}
                 runSignal={runRequestId}
               />
             </div>

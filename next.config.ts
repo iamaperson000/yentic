@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Allow LAN devices (e.g. a phone) to load /_next/* dev resources in `next dev`.
+  allowedDevOrigins: ['192.168.179.210'],
   images: {
     remotePatterns: [
       {

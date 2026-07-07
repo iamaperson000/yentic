@@ -10,7 +10,6 @@ import {
   useErrorMessage
 } from '@codesandbox/sandpack-react';
 import { clsx } from 'clsx';
-import { RotateCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { SupportedLanguage } from '@/lib/project';
@@ -27,6 +26,7 @@ type PreviewProps = {
   activeFileCode?: string;
   activeFileLanguage?: SupportedLanguage;
   onRefresh?: () => void;
+  onCollapse?: () => void;
   runSignal?: number;
 };
 
@@ -451,13 +451,10 @@ export function Preview({
   activeFileCode,
   activeFileLanguage,
   onRefresh,
+  onCollapse,
   runSignal,
 }: PreviewProps) {
   const effectiveMode: PreviewMode = template ? 'sandpack' : mode ?? 'message';
-  const label =
-    effectiveMode === 'code' && activeFileLanguage
-      ? `Live Preview · ${activeFileLanguage.toUpperCase()}`
-      : 'Live Preview';
 
   const [activeSandpackView, setActiveSandpackView] = useState<'preview' | 'console'>('preview');
   const supportsAutorun = effectiveMode === 'sandpack' || effectiveMode === 'runtime';
@@ -505,12 +502,15 @@ export function Preview({
     }
   }, [runSignal, supportsAutorun, schedulePreviewUpdate]);
 
-  const toggleAutorun = useCallback(() => {
-    setAutorunEnabled(prev => !prev);
-  }, []);
+  const openExternally = useCallback(() => {
+    if (typeof document === 'undefined') return;
+    const frame = document.querySelector('.yide .pbody iframe') as HTMLIFrameElement | null;
+    const src = frame?.src;
+    if (src) window.open(src, '_blank', 'noopener,noreferrer');
+    else onRefresh?.();
+  }, [onRefresh]);
 
   const showAutorunControls = supportsAutorun;
-  const showRunButton = showAutorunControls && !autorunEnabled;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
@@ -524,16 +524,24 @@ export function Preview({
           <span className="ptab on">Output</span>
         )}
         <span className="grow" />
-        <span className="k">{label}</span>
+        {onCollapse ? (
+          <button type="button" className="k collapse" onClick={onCollapse} title="Collapse panel" aria-label="Collapse preview" style={{ padding: '0 8px' }}>
+            <svg viewBox="0 0 24 24" style={{ width: 16, height: 16 }}><path d="m10 6 6 6-6 6" /><path d="M6 6v12" /></svg>
+          </button>
+        ) : null}
+        <button type="button" className="k" onClick={onRefresh} title="Layout options" aria-label="Layout options">
+          <svg viewBox="0 0 24 24" style={{ width: 16, height: 16 }}><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" /></svg>
+        </button>
       </div>
       {showAutorunControls ? (
         <div className="purl">
-          <button type="button" data-testid="preview-run-button" onClick={triggerRun} title="Run" style={{ color: 'var(--brand)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>▶ Run</button>
+          <button type="button" data-testid="preview-run-button" onClick={triggerRun} title="Reload" aria-label="Run preview">
+            <svg viewBox="0 0 24 24" style={{ width: 14, height: 14 }}><path d="M4 4v6h6M20 20v-6h-6" /><path d="M20 10a8 8 0 0 0-14-4M4 14a8 8 0 0 0 14 4" /></svg>
+          </button>
           <span className="bar">preview · runs in this tab</span>
-          {onRefresh ? (
-            <button type="button" data-testid="preview-refresh-button" onClick={onRefresh} title="Reload" aria-label="Refresh preview"><RotateCw style={{ width: 14, height: 14 }} /></button>
-          ) : null}
-          <button type="button" onClick={toggleAutorun} aria-pressed={autorunEnabled} title="Toggle autorun" style={{ color: autorunEnabled ? 'var(--fg)' : 'var(--muted)' }}>{autorunEnabled ? 'auto' : 'manual'}</button>
+          <button type="button" onClick={openExternally} title="Open externally" aria-label="Open externally">
+            <svg viewBox="0 0 24 24" style={{ width: 14, height: 14 }}><path d="M14 4h6v6M20 4l-9 9M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6" /></svg>
+          </button>
         </div>
       ) : null}
       <div className="pbody">

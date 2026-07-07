@@ -2,18 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { File, FileCode, Pencil, Plus, RotateCcw, Search, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 import type { ProjectFileMap } from '@/lib/project';
-
-function fileIcon(path: string) {
-  if (/\.(js|ts|jsx|tsx)$/.test(path)) return <FileCode className="h-3.5 w-3.5 text-amber-300/80" />;
-  if (path.endsWith('.py')) return <FileCode className="h-3.5 w-3.5 text-cyan-300/80" />;
-  if (path.endsWith('.html')) return <FileCode className="h-3.5 w-3.5 text-orange-300/80" />;
-  if (path.endsWith('.css')) return <FileCode className="h-3.5 w-3.5 text-sky-300/80" />;
-  if (/\.(c|cpp|java)$/.test(path)) return <FileCode className="h-3.5 w-3.5 text-emerald-300/80" />;
-  return <File className="h-3.5 w-3.5 text-[var(--ide-text-muted)]" />;
-}
 
 function splitPath(path: string) {
   const parts = path.split('/');
@@ -30,6 +21,7 @@ type FileExplorerProps = {
   onDelete: (path: string) => void;
   onCreateFile?: () => void;
   onResetWorkspace?: () => void;
+  onCollapse?: () => void;
   canReset?: boolean;
   newlyCreatedPath?: string | null;
   onFeedback?: (feedback: { kind: 'success' | 'error'; message: string }) => void;
@@ -54,6 +46,7 @@ export function FileExplorer({
   onDelete,
   onCreateFile,
   onResetWorkspace,
+  onCollapse,
   canReset = false,
   newlyCreatedPath,
   onFeedback,
@@ -139,22 +132,29 @@ export function FileExplorer({
     <div className="flex min-h-0 w-full flex-1 flex-col">
       <div className="hd">
         <span className="t">Files<span className="chk">✓ saved</span></span>
-        <span className="k">
-          {onCreateFile && !readOnly ? (
-            <button type="button" onClick={onCreateFile} data-testid="create-file-button" aria-label="Create file" title="New file">
-              <Plus className="h-4 w-4" />
+        <span style={{ display: 'flex', gap: 2 }}>
+          {onCollapse ? (
+            <button type="button" className="k collapse" onClick={onCollapse} aria-label="Collapse panel" title="Collapse panel">
+              <svg viewBox="0 0 24 24" style={{ width: 16, height: 16 }}><path d="m14 6-6 6 6 6" /><path d="M18 6v12" /></svg>
             </button>
           ) : null}
-          {onResetWorkspace ? (
-            <button type="button" onClick={onResetWorkspace} disabled={!canReset} data-testid="reset-workspace-button" aria-label="Reset workspace" title="Reset workspace" style={!canReset ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
-              <RotateCcw className="h-4 w-4" />
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="k"
+            data-testid="reset-workspace-button"
+            aria-label="Workspace actions"
+            title={canReset ? 'Reset workspace to starter files' : 'Workspace actions'}
+            onClick={() => {
+              if (onResetWorkspace && canReset && window.confirm('Reset this workspace to the starter files? Your changes will be lost.')) onResetWorkspace();
+            }}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 16, height: 16 }}><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></svg>
+          </button>
         </span>
       </div>
 
       <div className="search">
-        <Search />
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
         <input
           type="text"
           value={searchQuery}
@@ -224,7 +224,7 @@ export function FileExplorer({
 
       {readOnly ? null : (
         <div className="foot">
-          <button type="button" onClick={onCreateFile}>
+          <button type="button" onClick={onCreateFile} data-testid="create-file-button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>
             File
           </button>
