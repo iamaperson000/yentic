@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { clsx } from 'clsx';
 
-import { ChevronLeft, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
@@ -1486,6 +1486,14 @@ export default function WorkspaceClient({
     document.addEventListener('mouseup', onUp);
   };
 
+  const railBtnClass = (on: boolean) =>
+    clsx(
+      'flex h-9 w-9 items-center justify-center rounded-[9px] transition',
+      on
+        ? 'bg-[var(--ide-accent)]/15 text-[var(--ide-accent)]'
+        : 'text-[var(--ide-text-faint)] hover:bg-white/5 hover:text-[var(--ide-text)]'
+    );
+
   const content = (
     <div className="ide-shell flex min-h-screen flex-col bg-[var(--ide-bg-app)] text-[var(--ide-text)]">
       <ProjectShareModal
@@ -1510,101 +1518,83 @@ export default function WorkspaceClient({
         onCopyShareUrl={handleCopyShareLink}
         onResetShareUrl={rotateShareUrl}
       />
-      <header className="border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)]">
-        <div className="flex h-10 items-center gap-2 px-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Link
-              href="/ide"
-              data-testid="back-to-workspaces"
-              onClick={handleBackToWorkspaces}
-              className={clsx(chromeButtonClass, 'gap-1.5 px-2')}
-              aria-label="Back to workspaces"
+      <header className="flex h-[52px] items-center gap-3 border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Link
+            href="/ide"
+            data-testid="back-to-workspaces"
+            onClick={handleBackToWorkspaces}
+            className="flex items-center gap-2 font-[family-name:var(--font-mono-code)] text-[14px] font-bold tracking-[-0.02em] text-[var(--ide-text)]"
+            aria-label="Back to workspaces"
+          >
+            <span className="h-[15px] w-[15px] rounded-[4px] bg-[var(--ide-accent)]" />
+            yentic
+          </Link>
+          <span className="font-[family-name:var(--font-mono-code)] text-[13px] text-[var(--ide-text-faint)]">/</span>
+          {isRenamingProject ? (
+            <input
+              data-testid="project-name-input"
+              ref={projectNameInputRef}
+              value={projectNameDraft}
+              onChange={event => setProjectNameDraft(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') { event.preventDefault(); commitProjectRename(); }
+                if (event.key === 'Escape') { event.preventDefault(); cancelProjectRename(); }
+              }}
+              onBlur={commitProjectRename}
+              autoFocus
+              placeholder={isNameRequired ? 'Name your project' : 'Project name'}
+              className="w-[180px] rounded-md border border-[var(--ide-border-strong)] bg-[var(--ide-bg-panel)] px-2 py-1 font-[family-name:var(--font-mono-code)] text-[13px] text-[var(--ide-text)] placeholder:text-[var(--ide-text-faint)] outline-none focus:border-[var(--ide-accent)]"
+            />
+          ) : (
+            <button
+              data-testid="project-title"
+              onClick={viewerRole === 'owner' ? beginProjectRename : undefined}
+              className="truncate font-[family-name:var(--font-mono-code)] text-[13px] text-[var(--ide-text-muted)] transition hover:text-[var(--ide-text)]"
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              <span className="text-[11px]">Workspaces</span>
-            </Link>
-            <div className="flex min-w-0 items-center gap-2 text-[12px]">
-              <span className="text-[var(--ide-text-faint)]">{config.title}</span>
-              <span className="text-[var(--ide-text-faint)]">/</span>
-            {isRenamingProject ? (
-              <input
-                data-testid="project-name-input"
-                ref={projectNameInputRef}
-                value={projectNameDraft}
-                onChange={event => setProjectNameDraft(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    commitProjectRename();
-                  }
-                  if (event.key === 'Escape') {
-                    event.preventDefault();
-                    cancelProjectRename();
-                  }
-                }}
-                onBlur={commitProjectRename}
-                autoFocus
-                placeholder={isNameRequired ? 'Name your project' : 'Project name'}
-                className="w-[180px] border border-[var(--ide-border-strong)] bg-[var(--ide-bg-panel)] px-2 py-1 text-[12px] text-[var(--ide-text)] placeholder:text-[var(--ide-text-faint)] outline-none focus:border-[var(--ide-accent)]"
-              />
-            ) : (
-              <button
-                data-testid="project-title"
-                onClick={viewerRole === 'owner' ? beginProjectRename : undefined}
-                className="truncate text-[12px] text-[var(--ide-text-muted)] transition hover:text-[var(--ide-text)]"
-              >
-                {projectMeta.name?.trim() || defaultProjectName}
-              </button>
-            )}
-              <span className="text-[var(--ide-text-faint)]">/</span>
-              <span className="truncate text-[12px] text-[var(--ide-text)]">{activePath}</span>
-            </div>
-          </div>
+              {projectMeta.name?.trim() || defaultProjectName}
+            </button>
+          )}
+        </div>
 
-          <div className="flex-1" />
+        <div className="flex-1" />
 
-          <div className="flex items-center gap-2">
-            <span data-testid="save-status" className={statusBadgeClass}>
-              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-              {savedLabel}
-            </span>
-            {orderedLiveCollaborators.length ? (
-              <PresenceAvatars collaborators={orderedLiveCollaborators} />
-            ) : null}
-            {cloudError ? <span className="text-[11px] text-[#f2b8ae]">{cloudError}</span> : null}
-            <button
-              type="button"
-              onClick={() => setShowExplorer(previous => !previous)}
-              className={clsx(chromeButtonClass, showExplorer && activeChromeButtonClass)}
-            >
-              Explorer
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowPreview(previous => !previous)}
-              className={clsx(chromeButtonClass, showPreview && activeChromeButtonClass)}
-            >
-              Preview
-            </button>
-            <button
-              data-testid="share-button"
-              onClick={openShareModal}
-              className={shareButtonClass}
-              disabled={shareButtonDisabled}
-              title={
-                shareButtonDisabled
-                  ? 'Save this project to enable sharing'
-                  : viewerRole === 'owner'
-                    ? 'Invite collaborators'
-                    : 'View collaborators'
-              }
-            >
-              Share
-            </button>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <span data-testid="save-status" className={statusBadgeClass}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+            {savedLabel}
+          </span>
+          {orderedLiveCollaborators.length ? (
+            <PresenceAvatars collaborators={orderedLiveCollaborators} />
+          ) : null}
+          {cloudError ? <span className="text-[11px] text-[#f2b8ae]">{cloudError}</span> : null}
+          <button
+            data-testid="share-button"
+            onClick={openShareModal}
+            className={shareButtonClass}
+            disabled={shareButtonDisabled}
+            title={shareButtonDisabled ? 'Save this project to enable sharing' : viewerRole === 'owner' ? 'Invite collaborators' : 'View collaborators'}
+          >
+            Share
+          </button>
         </div>
       </header>
       <main ref={mainRef} className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex w-[52px] shrink-0 flex-col items-center gap-1.5 border-r border-[var(--ide-border)] bg-[var(--ide-bg-app)] py-3">
+          <button type="button" title="Files" aria-pressed={showExplorer} onClick={() => setShowExplorer(v => !v)} className={railBtnClass(showExplorer)}>
+            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          </button>
+          <button type="button" title="Search" onClick={() => setShowExplorer(true)} className={railBtnClass(false)}>
+            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <button type="button" title="Preview" aria-pressed={showPreview} onClick={() => setShowPreview(v => !v)} className={railBtnClass(showPreview)}>
+            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+          </button>
+          <div className="flex-1" />
+          <button type="button" title="Settings" className={railBtnClass(false)}>
+            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>
+          </button>
+        </div>
         {showExplorer ? (
           <>
           <aside className="flex min-h-0 shrink-0 border-r border-[var(--ide-border)]" style={{ width: explorerWidth }}>
