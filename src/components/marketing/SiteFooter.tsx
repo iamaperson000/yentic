@@ -52,18 +52,30 @@ export default function SiteFooter() {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-[family-name:var(--font-mono-code)] text-[12px]" style={{ color: 'var(--y-muted)' }}>
-proudly sponsored by
+        <div
+          className="flex flex-col items-center gap-5 rounded-2xl border px-6 py-10 text-center"
+          style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
+        >
+          <span
+            className="font-[family-name:var(--font-mono-code)] text-[13px] uppercase tracking-[0.32em]"
+            style={{ color: 'var(--y-muted)' }}
+          >
+            proudly sponsored by
           </span>
-          <a href="https://liveblocks.io" target="_blank" rel="noreferrer" className="inline-flex transition hover:opacity-90" aria-label="Liveblocks">
+          <a
+            href="https://liveblocks.io"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex transition hover:opacity-90"
+            aria-label="Liveblocks"
+          >
             <Image
               src="/liveblocks.png"
               alt="Liveblocks"
-              width={116}
-              height={26}
-              className="rounded-md"
-              style={{ height: 26, width: 'auto' }}
+              width={295}
+              height={65}
+              className="rounded-lg"
+              style={{ height: 60, width: 'auto' }}
             />
           </a>
         </div>
