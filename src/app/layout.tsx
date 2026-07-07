@@ -4,6 +4,7 @@ import { Bricolage_Grotesque, Hanken_Grotesk, JetBrains_Mono } from 'next/font/g
 import type { Metadata } from 'next';
 
 import { CommandPalette } from '@/components/CommandPalette';
+import HideLiveblocksBadge from '@/components/HideLiveblocksBadge';
 import SessionWrapper from '@/components/SessionWrapper';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], weight: ['500', '700', '800'], variable: '--font-display' });
@@ -38,6 +39,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen antialiased" style={{ fontFamily: 'var(--font-body)' }}>
         <SessionWrapper>
+          <HideLiveblocksBadge />
           <CommandPalette />
           {children}
         </SessionWrapper>
