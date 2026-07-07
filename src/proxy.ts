@@ -12,6 +12,8 @@ const PUBLIC_PATHS = [
   "/api/user/me",
   "/chat",
   "/u/", //  allow viewing user profile pages publicly
+  "/collab-demo", // public live-collaboration demo — no auth/setup required
+  "/api/liveblocks-demo-auth",
 ];
 
 function getSafeNextPath(value: string | null) {
