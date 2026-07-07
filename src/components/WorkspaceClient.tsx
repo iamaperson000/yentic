@@ -11,7 +11,6 @@ import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
 import { Preview } from '@/components/Preview';
 import CollaborativeEditor from '@/components/CollaborativeEditor';
-import PresenceAvatars from '@/components/PresenceAvatars';
 import { ProjectShareModal } from '@/components/ProjectShareModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
@@ -78,6 +77,14 @@ function colorForUser(userId: string) {
 
 function sameTabOrder(left: string[], right: string[]) {
   return left.length === right.length && left.every((path, index) => path === right[index]);
+}
+
+function avatarInitials(name: string | null): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 type WorkspaceClientProps = {
@@ -1373,6 +1380,13 @@ export default function WorkspaceClient({
       return a.userId.localeCompare(b.userId);
     });
   }, [liveCollaborators]);
+  // Avatars: live collaborators when connected, otherwise just the current user
+  // so a solo editor still sees an accurate presence chip (not the mockup's KV/AL).
+  const topbarAvatars = orderedLiveCollaborators.length
+    ? orderedLiveCollaborators.map(c => ({ key: `${c.clientId}-${c.userId}`, name: c.name, color: c.color, avatar: c.avatar, self: c.isSelf }))
+    : localCollaboratorPresence
+      ? [{ key: localCollaboratorPresence.id, name: localCollaboratorPresence.name, color: localCollaboratorPresence.color, avatar: localCollaboratorPresence.avatar, self: true }]
+      : [];
   const savedLabel = getSavedStatusLabel({
     isLoadingCloudProject,
     cloudAuthRequired,
@@ -1560,8 +1574,24 @@ export default function WorkspaceClient({
         </div>
 
         <div className="tb-right">
-          {orderedLiveCollaborators.length ? (
-            <div className="avatars"><PresenceAvatars collaborators={orderedLiveCollaborators} /></div>
+          {topbarAvatars.length ? (
+            <div className="avatars">
+              {topbarAvatars.slice(0, 5).map(a => (
+                <span
+                  key={a.key}
+                  className="av"
+                  title={a.name ?? (a.self ? 'You' : 'Collaborator')}
+                  style={{ background: a.color }}
+                >
+                  {a.avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={a.avatar} alt="" referrerPolicy="no-referrer" />
+                  ) : (
+                    avatarInitials(a.name)
+                  )}
+                </span>
+              ))}
+            </div>
           ) : null}
           <span data-testid="save-status" className={statusBadgeClass}>
             <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />

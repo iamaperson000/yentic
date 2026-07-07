@@ -631,7 +631,7 @@ export function Preview({
       </div>
       <div className="prunbar">
         <span className="d" />
-        {autorunEnabled ? 'autorun on \u00b7 live' : 'runs in this tab'}
+        {runRequestId > 0 ? 'live \u00b7 running in this tab' : 'press Run to build the preview'}
         <div className="r"><span>localhost preview</span></div>
       </div>
     </div>
