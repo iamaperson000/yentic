@@ -14,7 +14,6 @@ import { RotateCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { SupportedLanguage } from '@/lib/project';
-import { ConsoleInputPanel } from '@/components/ConsoleInputPanel';
 import { executeCode, type ExecutableLanguage } from '@/lib/runners';
 
 type PreviewMode = 'sandpack' | 'code' | 'message' | 'runtime';
@@ -31,10 +30,6 @@ type PreviewProps = {
 };
 
 const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'java']);
-
-const consoleInputLanguages = new Set<ExecutableLanguage>();
-
-const textareaInputLanguages = new Set<ExecutableLanguage>(['c', 'cpp', 'java']);
 
 type RuntimeStatus = 'idle' | 'running' | 'ready' | 'error';
 
@@ -59,170 +54,72 @@ function RuntimePreview({
   const [stderr, setStderr] = useState<string>('');
   const [status, setStatus] = useState<RuntimeStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [hasPendingChanges, setHasPendingChanges] = useState<boolean>(false);
-  const [consoleInputs, setConsoleInputs] = useState<Partial<Record<ExecutableLanguage, string>>>({});
-  const [textInputs, setTextInputs] = useState<Partial<Record<ExecutableLanguage, string>>>({});
   const runId = useRef(0);
   const lastProcessedRun = useRef<number>(0);
   const lastExecutedSource = useRef<string>('');
-  const lastExecutedInput = useRef<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const normalizedLanguage = runtimeLanguages.has(language as ExecutableLanguage)
     ? (language as ExecutableLanguage)
     : undefined;
 
-  const supportsConsoleInput =
-    normalizedLanguage !== undefined && consoleInputLanguages.has(normalizedLanguage);
-  const supportsTextareaInput =
-    normalizedLanguage !== undefined && textareaInputLanguages.has(normalizedLanguage);
-  const supportsAnyInput = supportsConsoleInput || supportsTextareaInput;
-
-  const consoleInputValue = supportsConsoleInput
-    ? (normalizedLanguage ? consoleInputs[normalizedLanguage] ?? '' : '')
-    : '';
-  const textInputValue = supportsTextareaInput
-    ? (normalizedLanguage ? textInputs[normalizedLanguage] ?? '' : '')
-    : '';
-  const effectiveInput = supportsConsoleInput
-    ? consoleInputValue
-    : supportsTextareaInput
-      ? textInputValue
-      : '';
-
-  const scheduleStateUpdate = useCallback((updater: () => void) => {
-    if (typeof queueMicrotask === 'function') {
-      queueMicrotask(updater);
-    } else {
-      window.setTimeout(updater, 0);
-    }
-  }, []);
-
   const enqueueExecution = useCallback(
-    (trimmed: string, inputSnapshot: string): (() => void) | undefined => {
-      if (!normalizedLanguage) {
-        return undefined;
-      }
-
+    (trimmed: string): (() => void) | undefined => {
+      if (!normalizedLanguage) return undefined;
       const nextId = runId.current + 1;
       runId.current = nextId;
-
       if (!trimmed) {
         lastExecutedSource.current = '';
-        lastExecutedInput.current = inputSnapshot;
-        scheduleStateUpdate(() => {
+        queueMicrotask(() => {
           setStatus('idle');
           setStdout('');
           setStderr('');
           setErrorMessage(null);
-          setHasPendingChanges(false);
         });
         return undefined;
       }
-
       lastExecutedSource.current = trimmed;
-      lastExecutedInput.current = inputSnapshot;
-
-      scheduleStateUpdate(() => {
+      queueMicrotask(() => {
         setStatus('running');
         setErrorMessage(null);
       });
-
       const timeout = window.setTimeout(async () => {
         try {
-          const result = await executeCode(normalizedLanguage, trimmed, inputSnapshot);
-          if (runId.current !== nextId) {
-            return;
-          }
+          const result = await executeCode(normalizedLanguage, trimmed, '');
+          if (runId.current !== nextId) return;
           setStdout(result.stdout);
           setStderr(result.stderr);
           setStatus(result.stderr ? 'error' : 'ready');
-          setHasPendingChanges(false);
         } catch (error) {
-          if (runId.current !== nextId) {
-            return;
-          }
+          if (runId.current !== nextId) return;
           setStatus('error');
           setStdout('');
           setStderr('');
           setErrorMessage(error instanceof Error ? error.message : String(error));
-          setHasPendingChanges(false);
         }
       }, 150);
-
-      return () => {
-        window.clearTimeout(timeout);
-      };
+      return () => window.clearTimeout(timeout);
     },
-    [normalizedLanguage, scheduleStateUpdate]
+    [normalizedLanguage]
   );
 
   useEffect(() => {
-    if (!normalizedLanguage) {
-      scheduleStateUpdate(() => {
-        setHasPendingChanges(false);
-      });
-      lastExecutedSource.current = '';
-      lastExecutedInput.current = '';
-      return;
-    }
-
-    if (autorunEnabled) {
-      scheduleStateUpdate(() => {
-        setHasPendingChanges(false);
-      });
-      return;
-    }
-
-    const trimmed = code.trim();
-    const inputSnapshot = supportsAnyInput ? effectiveInput : '';
-    scheduleStateUpdate(() => {
-      setHasPendingChanges(
-        trimmed !== lastExecutedSource.current || inputSnapshot !== lastExecutedInput.current
-      );
-    });
-  }, [autorunEnabled, code, effectiveInput, normalizedLanguage, scheduleStateUpdate, supportsAnyInput]);
-
-  useEffect(() => {
-    if (!normalizedLanguage) {
+    if (!normalizedLanguage || autorunEnabled) {
       lastProcessedRun.current = runRequestId;
       return;
     }
-
-    if (autorunEnabled) {
-      lastProcessedRun.current = runRequestId;
-      return;
-    }
-
-    if (runRequestId === 0 || runRequestId === lastProcessedRun.current) {
-      return;
-    }
-
+    if (runRequestId === 0 || runRequestId === lastProcessedRun.current) return;
     lastProcessedRun.current = runRequestId;
-
-    const trimmed = code.trim();
-    const inputSnapshot = supportsAnyInput ? effectiveInput : '';
-    return enqueueExecution(trimmed, inputSnapshot);
-  }, [autorunEnabled, code, effectiveInput, enqueueExecution, normalizedLanguage, runRequestId, supportsAnyInput]);
+    return enqueueExecution(code.trim());
+  }, [autorunEnabled, code, enqueueExecution, normalizedLanguage, runRequestId]);
 
   useEffect(() => {
-    if (!normalizedLanguage || !autorunEnabled) {
-      return;
-    }
-
+    if (!normalizedLanguage || !autorunEnabled) return;
     lastProcessedRun.current = runRequestId;
-
     const trimmed = code.trim();
-    const inputSnapshot = supportsAnyInput ? effectiveInput : '';
-    if (
-      trimmed === lastExecutedSource.current &&
-      inputSnapshot === lastExecutedInput.current
-    ) {
-      return;
-    }
-
-    return enqueueExecution(trimmed, inputSnapshot);
-  }, [autorunEnabled, code, effectiveInput, enqueueExecution, normalizedLanguage, runRequestId, supportsAnyInput]);
+    if (trimmed === lastExecutedSource.current) return;
+    return enqueueExecution(trimmed);
+  }, [autorunEnabled, code, enqueueExecution, normalizedLanguage, runRequestId]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -230,113 +127,34 @@ function RuntimePreview({
   }, [stdout, stderr, status]);
 
   const isRunnable = Boolean(normalizedLanguage);
-  const supportsStandardInput = supportsTextareaInput;
-  const runtimeLabel = normalizedLanguage ? `Live Runtime · ${normalizedLanguage.toUpperCase()}` : 'Live Runtime';
-
   const computedStatus: RuntimeStatus = !isRunnable ? 'error' : status;
-  const computedErrorMessage = !isRunnable ? 'Select a runnable file to see live output.' : errorMessage;
   const displayStdout = isRunnable ? stdout : '';
   const displayStderr = isRunnable ? stderr : '';
-
-  const idleHint = autorunEnabled
-    ? 'Waiting for code changes to run automatically.'
-    : hasPendingChanges
-      ? 'Code changed since your last run. Press Run to update the output.'
-      : 'Press Run to execute your program.';
-
-  const badgeClass =
-    computedStatus === 'running'
-      ? 'border border-[var(--ide-accent)]/40 bg-[var(--ide-accent)]/12 text-[var(--ide-accent)]'
-      : computedStatus === 'error'
-        ? 'border border-[var(--ide-danger)]/50 bg-[var(--ide-danger)]/10 text-[#f2b8ae]'
-        : computedStatus === 'ready'
-          ? 'border border-[#2f5d3a] bg-[#17301e] text-[#9ece6a]'
-          : 'border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-faint)]';
-
-  const statusLabel =
-    computedStatus === 'running'
-      ? 'Running…'
-      : computedStatus === 'ready'
-        ? 'Live'
-        : computedStatus === 'error'
-          ? 'Error'
-          : 'Waiting';
+  const hint = !isRunnable
+    ? 'Select a runnable file to see output.'
+    : computedStatus === 'running'
+      ? 'Executing\u2026'
+      : errorMessage || 'Press Run to execute your program.';
 
   return (
-    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2">
-        <span className="font-[family-name:var(--font-mono-code)] text-[11px] text-[var(--ide-text-muted)]">{runtimeLabel}</span>
-        <span className={clsx('inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-[family-name:var(--font-mono-code)] text-[10px]', badgeClass)}>
-          <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-          {statusLabel}
-        </span>
-      </div>
-      <div className="relative flex flex-1 flex-col bg-[var(--ide-bg-panel)]">
-        <div className="relative flex flex-1 flex-col gap-3 overflow-hidden p-3 text-sm text-[var(--ide-text)]">
-          {computedErrorMessage ? (
-            <div className="border border-[var(--ide-danger)]/40 bg-[var(--ide-danger)]/10 px-3 py-2 text-[#f2b8ae]">
-              {computedErrorMessage}
-            </div>
-          ) : null}
-          {supportsConsoleInput ? (
-            <ConsoleInputPanel
-              key={normalizedLanguage ?? 'runtime-console'}
-              value={consoleInputValue}
-              onChange={nextValue =>
-                normalizedLanguage
-                  ? setConsoleInputs(previous => ({ ...previous, [normalizedLanguage]: nextValue }))
-                  : void 0
-              }
-            />
-          ) : supportsStandardInput ? (
-            <div className="flex flex-col overflow-hidden border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)]">
-              <div className="border-b border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 font-[family-name:var(--font-mono-code)] text-[11px] text-[var(--ide-text-muted)]">
-                standard input
-              </div>
-              <textarea
-                value={textInputValue}
-                onChange={event =>
-                  normalizedLanguage
-                    ? setTextInputs(previous => ({ ...previous, [normalizedLanguage]: event.target.value }))
-                    : void 0
-                }
-                className="min-h-[80px] flex-1 bg-transparent px-3 py-3 font-mono text-[13px] leading-relaxed text-[var(--ide-text)] outline-none placeholder:text-[var(--ide-text-faint)]"
-                placeholder="Provide input for stdin reads…"
-              />
-              <div className="border-t border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 text-[10px] tracking-[0.02em] text-[var(--ide-text-faint)]">
-                Passed to program via stdin before execution
-              </div>
-            </div>
-          ) : null}
-          <div className="flex flex-1 flex-col overflow-hidden rounded-md border border-[var(--ide-border)] bg-[var(--ide-bg-editor)]">
-            <div className="border-b border-[var(--ide-border)] px-3 py-2 font-[family-name:var(--font-mono-code)] text-[11px] text-[var(--ide-text-muted)]">
-              output
-            </div>
-            <div
-              ref={scrollRef}
-              data-testid="runtime-output"
-              className="flex-1 overflow-auto p-3 font-mono text-[13px] leading-relaxed text-[var(--ide-text)]"
-            >
-              {displayStdout ? (
-                <pre className="whitespace-pre-wrap break-words">{displayStdout}</pre>
-              ) : (
-                <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-[var(--ide-text-faint)]">
-                  {computedStatus === 'running' ? 'Executing…' : idleHint}
-                </div>
-              )}
-            </div>
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-[var(--ide-bg-panel)]">
+      <div
+        ref={scrollRef}
+        data-testid="runtime-output"
+        className="flex-1 overflow-auto p-4 font-mono text-[13px] leading-relaxed text-[var(--ide-text)]"
+      >
+        {displayStdout || displayStderr ? (
+          <>
+            {displayStdout ? <pre className="whitespace-pre-wrap break-words">{displayStdout}</pre> : null}
+            {displayStderr ? (
+              <pre className="mt-2 whitespace-pre-wrap break-words text-[#f2b8ae]">{displayStderr}</pre>
+            ) : null}
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center px-6 text-center text-[var(--ide-text-faint)]">
+            {hint}
           </div>
-          {displayStderr ? (
-            <div className="flex flex-col overflow-hidden border border-[var(--ide-danger)]/40 bg-[var(--ide-danger)]/10">
-              <div className="border-b border-[var(--ide-danger)]/40 bg-transparent px-3 py-2 font-[family-name:var(--font-mono-code)] text-[11px] text-[#f2b8ae]">
-                errors
-              </div>
-              <div className="max-h-48 overflow-auto p-3 font-mono text-[13px] leading-relaxed text-[#f2b8ae]">
-                <pre className="whitespace-pre-wrap break-words">{displayStderr}</pre>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        )}
       </div>
     </div>
   );
