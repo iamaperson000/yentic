@@ -1,10 +1,6 @@
-'use client';
-
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
 
 import HeroCode from '@/components/marketing/HeroCode';
-import SignedInHomeShell from '@/components/home/SignedInHomeShell';
 
 function LandingHome() {
   return (
@@ -58,15 +54,7 @@ function LandingHome() {
 }
 
 export default function Home() {
-  const { data: session, status } = useSession();
-
-  if (status === 'loading') {
-    return <div className="min-h-[40vh]" aria-hidden />;
-  }
-
-  if (status === 'authenticated' && session?.user) {
-    return <SignedInHomeShell />;
-  }
-
+  // `/` always shows the marketing homepage — signed-in users get their
+  // projects at /projects (and land there after login).
   return <LandingHome />;
 }

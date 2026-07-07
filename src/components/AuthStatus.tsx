@@ -88,7 +88,7 @@ export default function AuthStatus() {
 
   return (
     <button
-      onClick={() => signIn('google', { callbackUrl: '/' })}
+      onClick={() => signIn('google', { callbackUrl: '/projects' })}
       className="group flex w-full items-center gap-4 rounded-lg border px-5 py-2.5 text-left text-sm transition hover:-translate-y-0.5"
       style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-fg)' }}
     >

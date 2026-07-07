@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 
 import { site } from '@/config/site';
@@ -49,6 +50,22 @@ export default function SiteFooter() {
               </div>
             </section>
           ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-[family-name:var(--font-mono-code)] text-[12px]" style={{ color: 'var(--y-muted)' }}>
+            sponsored by
+          </span>
+          <a href="https://liveblocks.io" target="_blank" rel="noreferrer" className="inline-flex transition hover:opacity-90" aria-label="Liveblocks">
+            <Image
+              src="/liveblocks.png"
+              alt="Liveblocks"
+              width={116}
+              height={26}
+              className="rounded-md"
+              style={{ height: 26, width: 'auto' }}
+            />
+          </a>
         </div>
 
         <div className="flex flex-col gap-2 text-sm" style={{ color: 'var(--y-muted)' }}>

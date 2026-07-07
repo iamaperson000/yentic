@@ -85,6 +85,16 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
               </Link>
             )}
 
+            {isAuthenticated && (
+              <Link
+                href="/projects"
+                className="hidden rounded-full border px-4 py-1.5 text-sm font-semibold transition sm:inline-flex"
+                style={{ borderColor: 'var(--y-line)', color: 'var(--y-fg)' }}
+              >
+                Projects
+              </Link>
+            )}
+
             <Link
               href="/ide"
               className="rounded-full px-4 py-1.5 text-sm font-semibold transition"
@@ -156,6 +166,16 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
                     </Link>
                   );
                 })}
+                {isAuthenticated && (
+                  <Link
+                    href="/projects"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="mt-2 rounded-lg border px-3 py-2.5 text-center text-sm font-semibold transition"
+                    style={{ borderColor: 'var(--y-line)', color: 'var(--y-fg)' }}
+                  >
+                    Projects
+                  </Link>
+                )}
                 {!isAuthenticated && (
                   <Link
                     href="/signup"
