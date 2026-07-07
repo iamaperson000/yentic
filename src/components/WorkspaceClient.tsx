@@ -1462,6 +1462,30 @@ export default function WorkspaceClient({
     return () => window.clearTimeout(timeout);
   }, [recentlyCreatedPath]);
 
+  const [explorerWidth, setExplorerWidth] = useState(248);
+  const [previewWidth, setPreviewWidth] = useState(440);
+  const mainRef = useRef<HTMLElement>(null);
+  const startPaneResize = (event: ReactMouseEvent, pane: 'explorer' | 'preview') => {
+    event.preventDefault();
+    const onMove = (e: MouseEvent) => {
+      const rect = mainRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      if (pane === 'explorer') {
+        setExplorerWidth(Math.min(460, Math.max(160, e.clientX - rect.left)));
+      } else {
+        setPreviewWidth(Math.min(rect.width - 480, Math.max(280, rect.right - e.clientX)));
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+    };
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   const content = (
     <div className="ide-shell flex min-h-screen flex-col bg-[var(--ide-bg-app)] text-[var(--ide-text)]">
       <ProjectShareModal
@@ -1580,9 +1604,10 @@ export default function WorkspaceClient({
           </div>
         </div>
       </header>
-      <main className="flex flex-1 min-h-0 overflow-hidden">
+      <main ref={mainRef} className="flex flex-1 min-h-0 overflow-hidden">
         {showExplorer ? (
-          <aside className="flex min-h-0 w-[248px] shrink-0 border-r border-[var(--ide-border)]">
+          <>
+          <aside className="flex min-h-0 shrink-0 border-r border-[var(--ide-border)]" style={{ width: explorerWidth }}>
             <FileExplorer
               files={files}
               activePath={activePath}
@@ -1598,6 +1623,13 @@ export default function WorkspaceClient({
               readOnly={!canEdit}
             />
           </aside>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={(e) => startPaneResize(e, 'explorer')}
+            className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--ide-accent)]/50"
+          />
+          </>
         ) : null}
 
         <section
@@ -1659,7 +1691,14 @@ export default function WorkspaceClient({
         </section>
 
         {showPreview ? (
-          <aside className="flex min-h-0 w-[min(40vw,34rem)] shrink-0 bg-[var(--ide-bg-panel)]">
+          <>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={(e) => startPaneResize(e, 'preview')}
+            className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--ide-accent)]/50"
+          />
+          <aside className="flex min-h-0 shrink-0 bg-[var(--ide-bg-panel)]" style={{ width: previewWidth }}>
             <Preview
               key={previewRefreshKey}
               files={sandpackFiles}
@@ -1672,6 +1711,7 @@ export default function WorkspaceClient({
               onRefresh={() => setPreviewRefreshKey(key => key + 1)}
             />
           </aside>
+          </>
         ) : null}
       </main>
       <StatusBar language={lang} cursorLine={cursorLine} cursorColumn={cursorColumn} />
