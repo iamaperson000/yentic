@@ -246,10 +246,12 @@ function RuntimePreview({
 
   const badgeClass =
     computedStatus === 'running'
-      ? 'border border-amber-300/40 bg-amber-500/10 text-amber-100'
+      ? 'border border-[var(--ide-accent)]/40 bg-[var(--ide-accent)]/12 text-[var(--ide-accent)]'
       : computedStatus === 'error'
         ? 'border border-[var(--ide-danger)]/50 bg-[var(--ide-danger)]/10 text-[#f2b8ae]'
-        : 'border border-[#2f5d3a] bg-[#17301e] text-[#9ece6a]';
+        : computedStatus === 'ready'
+          ? 'border border-[#2f5d3a] bg-[#17301e] text-[#9ece6a]'
+          : 'border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-faint)]';
 
   const statusLabel =
     computedStatus === 'running'
@@ -263,19 +265,14 @@ function RuntimePreview({
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex items-center justify-between border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2">
-        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">{runtimeLabel}</span>
-        <span className={clsx('inline-flex items-center gap-2 border px-2 py-1 text-[10px] uppercase tracking-[0.12em]', badgeClass)}>
+        <span className="font-[family-name:var(--font-mono-code)] text-[11px] text-[var(--ide-text-muted)]">{runtimeLabel}</span>
+        <span className={clsx('inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-[family-name:var(--font-mono-code)] text-[10px]', badgeClass)}>
           <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
           {statusLabel}
         </span>
       </div>
       <div className="relative flex flex-1 flex-col bg-[var(--ide-bg-panel)]">
         <div className="relative flex flex-1 flex-col gap-3 overflow-hidden p-3 text-sm text-[var(--ide-text)]">
-          {!autorunEnabled && hasPendingChanges ? (
-            <div className="border border-amber-300/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-              Code changed since your last run. Press Run to update the output.
-            </div>
-          ) : null}
           {computedErrorMessage ? (
             <div className="border border-[var(--ide-danger)]/40 bg-[var(--ide-danger)]/10 px-3 py-2 text-[#f2b8ae]">
               {computedErrorMessage}
@@ -293,8 +290,8 @@ function RuntimePreview({
             />
           ) : supportsStandardInput ? (
             <div className="flex flex-col overflow-hidden border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)]">
-              <div className="border-b border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">
-                Standard Input
+              <div className="border-b border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 font-[family-name:var(--font-mono-code)] text-[11px] text-[var(--ide-text-muted)]">
+                standard input
               </div>
               <textarea
                 value={textInputValue}
@@ -306,14 +303,14 @@ function RuntimePreview({
                 className="min-h-[80px] flex-1 bg-transparent px-3 py-3 font-mono text-[13px] leading-relaxed text-[var(--ide-text)] outline-none placeholder:text-[var(--ide-text-faint)]"
                 placeholder="Provide input for stdin reads…"
               />
-              <div className="border-t border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-[var(--ide-text-faint)]">
+              <div className="border-t border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 text-[10px] tracking-[0.02em] text-[var(--ide-text-faint)]">
                 Passed to program via stdin before execution
               </div>
             </div>
           ) : null}
-          <div className="flex flex-1 flex-col overflow-hidden border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)]">
-            <div className="border-b border-[var(--ide-border)] bg-[var(--ide-bg-panel)] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">
-              Output
+          <div className="flex flex-1 flex-col overflow-hidden rounded-md border border-[var(--ide-border)] bg-[var(--ide-bg-editor)]">
+            <div className="border-b border-[var(--ide-border)] px-3 py-2 font-[family-name:var(--font-mono-code)] text-[11px] text-[var(--ide-text-muted)]">
+              output
             </div>
             <div
               ref={scrollRef}
@@ -323,23 +320,20 @@ function RuntimePreview({
               {displayStdout ? (
                 <pre className="whitespace-pre-wrap break-words">{displayStdout}</pre>
               ) : (
-                <span className="text-[var(--ide-text-faint)]">{computedStatus === 'running' ? 'Executing…' : 'No output yet.'}</span>
+                <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-[var(--ide-text-faint)]">
+                  {computedStatus === 'running' ? 'Executing…' : idleHint}
+                </div>
               )}
             </div>
           </div>
           {displayStderr ? (
             <div className="flex flex-col overflow-hidden border border-[var(--ide-danger)]/40 bg-[var(--ide-danger)]/10">
-              <div className="border-b border-[var(--ide-danger)]/40 bg-transparent px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[#f2b8ae]">
-                Errors
+              <div className="border-b border-[var(--ide-danger)]/40 bg-transparent px-3 py-2 font-[family-name:var(--font-mono-code)] text-[11px] text-[#f2b8ae]">
+                errors
               </div>
               <div className="max-h-48 overflow-auto p-3 font-mono text-[13px] leading-relaxed text-[#f2b8ae]">
                 <pre className="whitespace-pre-wrap break-words">{displayStderr}</pre>
               </div>
-            </div>
-          ) : null}
-          {computedStatus === 'idle' && !displayStderr && !displayStdout ? (
-            <div className="border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2 text-sm text-[var(--ide-text-muted)]">
-              {idleHint}
             </div>
           ) : null}
         </div>
@@ -423,12 +417,12 @@ function LiveConsolePanel() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-[var(--ide-bg-panel)] text-[var(--ide-text)]">
       <div className="flex items-center justify-between border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2">
-        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">Console</span>
+        <span className="text-[11px] font-medium tracking-[0.02em] text-[var(--ide-text-muted)]">Console</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleClear}
-            className="inline-flex h-7 items-center border border-[var(--ide-border)] px-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]"
+            className="inline-flex h-7 items-center border border-[var(--ide-border)] px-2.5 text-[10px] font-medium tracking-[0.02em] text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]"
           >
             Clear
           </button>
@@ -582,7 +576,7 @@ function SandpackPreviewPane({ isVisible }: { isVisible: boolean }) {
         >
           <div className="max-h-full w-full max-w-full overflow-auto">
             <div className="mx-auto flex max-w-full flex-col gap-3 border border-[var(--ide-danger)]/40 bg-[var(--ide-danger)]/10 px-5 py-4 text-left">
-              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[#f2b8ae]">
+              <span className="text-[11px] font-medium tracking-[0.02em] text-[#f2b8ae]">
                 Preview Error
               </span>
               <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-[#f2b8ae]">
@@ -692,14 +686,14 @@ export function Preview({
     <div className="flex h-full min-h-0 w-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2">
         <div className="flex items-center gap-3">
-          <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">{label}</span>
+          <span className="text-[11px] font-medium tracking-[0.02em] text-[var(--ide-text-muted)]">{label}</span>
           {effectiveMode === 'sandpack' ? (
             <div className="flex items-center gap-px border border-[var(--ide-border)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-muted)]">
               <button
                 type="button"
                 onClick={() => setActiveSandpackView('preview')}
                 className={clsx(
-                  'px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] transition',
+                  'px-2.5 py-1 text-[10px] font-medium tracking-[0.02em] transition',
                   activeSandpackView === 'preview'
                     ? 'bg-[var(--ide-bg-active)] text-[var(--ide-text)]'
                     : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]'
@@ -711,7 +705,7 @@ export function Preview({
                 type="button"
                 onClick={() => setActiveSandpackView('console')}
                 className={clsx(
-                  'px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] transition',
+                  'px-2.5 py-1 text-[10px] font-medium tracking-[0.02em] transition',
                   activeSandpackView === 'console'
                     ? 'bg-[var(--ide-bg-active)] text-[var(--ide-text)]'
                     : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]'
@@ -729,7 +723,7 @@ export function Preview({
                 type="button"
                 onClick={triggerRun}
                 data-testid="preview-run-button"
-                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--ide-accent)] px-3.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--ide-bg-app)] transition hover:brightness-110"
+                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--ide-accent)] px-3.5 text-[11px] font-bold tracking-[0.02em] text-[var(--ide-bg-app)] transition hover:brightness-110"
               >
                 ▶ Run
               </button>
@@ -753,7 +747,7 @@ export function Preview({
                 aria-pressed={autorunEnabled}
                 aria-label="Toggle autorun"
                 className={clsx(
-                  'inline-flex h-7 items-center border px-2.5 text-[10px] font-medium uppercase tracking-[0.12em] transition',
+                  'inline-flex h-7 items-center border px-2.5 text-[10px] font-medium tracking-[0.02em] transition',
                   autorunEnabled
                     ? 'border-[var(--ide-border-strong)] bg-[var(--ide-bg-active)] text-[var(--ide-text)]'
                     : 'border-[var(--ide-border)] bg-[var(--ide-bg-panel)] text-[var(--ide-text-muted)] hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]'
@@ -834,7 +828,7 @@ export function Preview({
           <div className="relative flex h-full flex-col overflow-hidden">
             <div className="relative flex items-center justify-between border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3 py-2 text-[11px] text-[var(--ide-text-muted)]">
               <span className="truncate">{activePath.replace(/^[\/]/, '')}</span>
-              <span className="border border-[var(--ide-border)] px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-[var(--ide-text-faint)]">
+              <span className="border border-[var(--ide-border)] px-2 py-0.5 text-[10px] tracking-[0.02em] text-[var(--ide-text-faint)]">
                 Viewing
               </span>
             </div>
