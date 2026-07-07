@@ -129,8 +129,8 @@ export function FileExplorer({
   return (
     <div className="flex h-full flex-col bg-[var(--ide-bg-panel)] text-[var(--ide-text)]">
       <div className="flex h-9 items-center border-b border-[var(--ide-border)] px-3">
-        <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ide-text-muted)]">
-          Explorer
+        <p className="font-[family-name:var(--font-mono-code)] text-[12.5px] font-bold text-[var(--ide-text)]">
+          Files
         </p>
         <div className="ml-auto flex items-center gap-1">
           {onCreateFile && !readOnly ? (
@@ -168,7 +168,7 @@ export function FileExplorer({
             type="text"
             value={searchQuery}
             onChange={event => setSearchQuery(event.target.value)}
-            placeholder="Filter files"
+            placeholder="Search files"
             className="w-full bg-transparent text-[12px] text-[var(--ide-text)] placeholder:text-[var(--ide-text-faint)] outline-none"
           />
         </div>
