@@ -22,7 +22,7 @@ export function StatusBar({ language, cursorLine, cursorColumn, connected }: Sta
   const displayLang = languageLabels[language] ?? language;
 
   return (
-    <div className="flex h-6 items-center justify-between bg-[#007acc] px-3 text-[11px] text-white">
+    <div className="flex h-6 items-center justify-between bg-[var(--ide-accent)] px-3 text-[11px] text-[var(--ide-bg-app)] font-medium">
       <div className="flex items-center gap-4">
         <span>{displayLang}</span>
         <span>UTF-8</span>
@@ -35,11 +35,11 @@ export function StatusBar({ language, cursorLine, cursorColumn, connected }: Sta
       <div className="flex items-center gap-3">
         {connected != null && (
           <span className="flex items-center gap-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-300' : 'bg-rose-300'}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-[#1a4d2e]' : 'bg-[#7a1f28]'}`} />
             {connected ? 'Connected' : 'Disconnected'}
           </span>
         )}
-        <span className="hidden text-white/70 sm:inline">⌘K</span>
+        <span className="hidden opacity-70 sm:inline">⌘K</span>
       </div>
     </div>
   );

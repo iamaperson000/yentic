@@ -249,7 +249,7 @@ function RuntimePreview({
       ? 'border border-amber-300/40 bg-amber-500/10 text-amber-100'
       : computedStatus === 'error'
         ? 'border border-[var(--ide-danger)]/50 bg-[var(--ide-danger)]/10 text-[#f2b8ae]'
-        : 'border border-[#2d7d46] bg-[#1f4d2e] text-[#d4f7dc]';
+        : 'border border-[#2f5d3a] bg-[#17301e] text-[#9ece6a]';
 
   const statusLabel =
     computedStatus === 'running'
@@ -576,7 +576,7 @@ function SandpackPreviewPane({ isVisible }: { isVisible: boolean }) {
       />
       {shouldShowOverlay ? (
         <div
-          className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-[#05060f]/90 px-6"
+          className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-[var(--ide-bg-app)]/92 px-6"
           role="alert"
           aria-live="assertive"
         >
@@ -729,9 +729,9 @@ export function Preview({
                 type="button"
                 onClick={triggerRun}
                 data-testid="preview-run-button"
-                className="inline-flex h-7 items-center border border-[#2d7d46] bg-[#1f4d2e] px-3 text-[11px] font-medium uppercase tracking-[0.12em] text-[#d4f7dc] transition hover:border-[#399c58] hover:bg-[#256338]"
+                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--ide-accent)] px-3.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--ide-bg-app)] transition hover:brightness-110"
               >
-                Run
+                ▶ Run
               </button>
             ) : null}
             <div className="flex items-center gap-1">
