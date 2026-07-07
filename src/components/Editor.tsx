@@ -58,7 +58,7 @@ const DAY_RULES = [
 ] as const;
 
 let themesRegistered = false;
-function registerYenticThemes(monaco: MonacoNamespace) {
+export function registerYenticThemes(monaco: MonacoNamespace) {
   if (themesRegistered) return;
   themesRegistered = true;
   monaco.editor.defineTheme('yentic-dusk', {
