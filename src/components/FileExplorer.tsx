@@ -37,6 +37,15 @@ type FileExplorerProps = {
   readOnly?: boolean;
 };
 
+const FILE_DOT: Record<string, string> = {
+  html: '#e5896b', css: '#7aa2f7', js: '#e0af68', jsx: '#e0af68', mjs: '#e0af68',
+  ts: '#79c0ff', tsx: '#79c0ff', py: '#8ee06f', json: '#9ece6a', c: '#e0af68',
+  cpp: '#c9a2ff', h: '#8ee06f', java: '#c9a2ff', md: '#8a8478', svg: '#c9a2ff',
+};
+function dotColor(path: string) {
+  return FILE_DOT[path.split('.').pop()?.toLowerCase() ?? ''] ?? '#8a8478';
+}
+
 export function FileExplorer({
   files,
   activePath,
@@ -127,149 +136,104 @@ export function FileExplorer({
   );
 
   return (
-    <div className="flex h-full flex-col bg-[var(--ide-bg-panel)] text-[var(--ide-text)]">
-      <div className="flex h-9 items-center border-b border-[var(--ide-border)] px-3">
-        <p className="font-[family-name:var(--font-mono-code)] text-[12.5px] font-bold text-[var(--ide-text)]">
-          Files
-        </p>
-        <div className="ml-auto flex items-center gap-1">
+    <div className="flex min-h-0 w-full flex-1 flex-col">
+      <div className="hd">
+        <span className="t">Files<span className="chk">✓ saved</span></span>
+        <span className="k">
           {onCreateFile && !readOnly ? (
-            <button
-              type="button"
-              onClick={onCreateFile}
-              data-testid="create-file-button"
-              className="inline-flex h-7 w-7 items-center justify-center border border-transparent text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)]"
-              aria-label="Create file"
-              title="New file"
-            >
-              <Plus className="h-3.5 w-3.5" />
+            <button type="button" onClick={onCreateFile} data-testid="create-file-button" aria-label="Create file" title="New file">
+              <Plus className="h-4 w-4" />
             </button>
           ) : null}
           {onResetWorkspace ? (
-            <button
-              type="button"
-              onClick={onResetWorkspace}
-              disabled={!canReset}
-              data-testid="reset-workspace-button"
-              className="inline-flex h-7 w-7 items-center justify-center border border-transparent text-[var(--ide-text-muted)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)] disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="Reset workspace"
-              title="Reset workspace"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
+            <button type="button" onClick={onResetWorkspace} disabled={!canReset} data-testid="reset-workspace-button" aria-label="Reset workspace" title="Reset workspace" style={!canReset ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
+              <RotateCcw className="h-4 w-4" />
             </button>
           ) : null}
-        </div>
+        </span>
       </div>
 
-      <div className="border-b border-[var(--ide-border)] px-3 py-2">
-        <div className="flex items-center gap-2 border border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-2 py-1.5">
-          <Search className="h-3.5 w-3.5 text-[var(--ide-text-faint)]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={event => setSearchQuery(event.target.value)}
-            placeholder="Search files"
-            className="w-full bg-transparent text-[12px] text-[var(--ide-text)] placeholder:text-[var(--ide-text-faint)] outline-none"
-          />
-        </div>
+      <div className="search">
+        <Search />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={event => setSearchQuery(event.target.value)}
+          placeholder="Search files"
+        />
       </div>
 
-      <div className="custom-scrollbar flex-1 overflow-y-auto py-1">
+      <div className="tree">
         {entries.length ? (
-          <ul>
-            {entries.map(file => {
-              const isActive = activePath === file.path;
-              const isRenaming = renameTarget === file.path;
-              const { name, parent } = splitPath(file.path);
+          entries.map(file => {
+            const isActive = activePath === file.path;
+            const isRenaming = renameTarget === file.path;
+            const { name } = splitPath(file.path);
 
+            if (isRenaming) {
               return (
-                <li key={file.path}>
-                  <div
-                    className={clsx(
-                      'group flex items-center gap-2 border-l-2 px-3 py-1.5',
-                      isActive
-                        ? 'border-[var(--ide-accent)] bg-[var(--ide-bg-active)]'
-                        : 'border-transparent hover:bg-[var(--ide-bg-hover)]',
-                    )}
-                  >
-                    {isRenaming ? (
-                      <input
-                        data-testid="file-rename-input"
-                        ref={renameInputRef}
-                        value={renameDraft}
-                        onChange={event => setRenameDraft(event.target.value)}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            submitRename(file.path);
-                          }
-                          if (event.key === 'Escape') {
-                            event.preventDefault();
-                            cancelRename();
-                          }
-                        }}
-                        onBlur={() => submitRename(file.path)}
-                        placeholder={placeholder ?? ''}
-                        className="w-full border border-[var(--ide-accent)] bg-[var(--ide-bg-elevated)] px-2 py-1 text-[12px] text-[var(--ide-text)] outline-none"
-                      />
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => onSelect(file.path)}
-                          onDoubleClick={() => beginRename(file.path)}
-                          data-testid={`file-entry-${file.path}`}
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                        >
-                          <span className="shrink-0">{fileIcon(file.path)}</span>
-                          <span className="min-w-0">
-                            <span className="block truncate text-[12px] text-[var(--ide-text)]">{name}</span>
-                            {parent ? (
-                              <span className="block truncate text-[11px] text-[var(--ide-text-faint)]">
-                                {parent}
-                              </span>
-                            ) : null}
-                          </span>
-                        </button>
-                        {readOnly ? null : (
-                          <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-                            <button
-                              type="button"
-                              onClick={() => beginRename(file.path)}
-                              className="inline-flex h-6 w-6 items-center justify-center border border-transparent text-[var(--ide-text-faint)] transition hover:border-[var(--ide-border-strong)] hover:bg-[var(--ide-bg-elevated)] hover:text-[var(--ide-text)]"
-                              aria-label={`Rename ${file.path}`}
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (window.confirm(`Delete ${file.path}?`)) {
-                                  onDelete(file.path);
-                                  onFeedback?.({ kind: 'success', message: `Deleted ${file.path}` });
-                                  if (renameTarget === file.path) cancelRename();
-                                }
-                              }}
-                              className="inline-flex h-6 w-6 items-center justify-center border border-transparent text-[var(--ide-text-faint)] transition hover:border-[var(--ide-danger)]/40 hover:bg-[var(--ide-danger)]/10 hover:text-[#f2b8ae]"
-                              aria-label={`Delete ${file.path}`}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </li>
+                <div key={file.path} className="row sel">
+                  <span className="dot" style={{ background: dotColor(file.path) }} />
+                  <input
+                    data-testid="file-rename-input"
+                    ref={renameInputRef}
+                    value={renameDraft}
+                    onChange={event => setRenameDraft(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') { event.preventDefault(); submitRename(file.path); }
+                      if (event.key === 'Escape') { event.preventDefault(); cancelRename(); }
+                    }}
+                    onBlur={() => submitRename(file.path)}
+                    placeholder={placeholder ?? ''}
+                    style={{ flex: 1, minWidth: 0, background: 'var(--panel2)', border: '1px solid var(--brand)', borderRadius: 4, color: 'var(--fg)', font: 'inherit', padding: '1px 6px', outline: 'none' }}
+                  />
+                </div>
               );
-            })}
-          </ul>
+            }
+
+            return (
+              <button
+                key={file.path}
+                type="button"
+                data-testid={`file-entry-${file.path}`}
+                onClick={() => onSelect(file.path)}
+                onDoubleClick={() => beginRename(file.path)}
+                className={clsx('row', isActive && 'sel')}
+              >
+                <span className="dot" style={{ background: dotColor(file.path) }} />
+                <span className="truncate" style={{ flex: 1, minWidth: 0 }}>{name}</span>
+                {readOnly ? null : (
+                  <span className="kebab" style={{ display: 'flex', gap: 4 }}>
+                    <span role="button" tabIndex={-1} title="Rename" aria-label={`Rename ${file.path}`} onClick={event => { event.stopPropagation(); beginRename(file.path); }}>
+                      <Pencil className="h-3 w-3" />
+                    </span>
+                    <span role="button" tabIndex={-1} title="Delete" aria-label={`Delete ${file.path}`} onClick={event => { event.stopPropagation(); if (window.confirm(`Delete ${file.path}?`)) { onDelete(file.path); onFeedback?.({ kind: 'success', message: `Deleted ${file.path}` }); if (renameTarget === file.path) cancelRename(); } }}>
+                      <Trash2 className="h-3 w-3" />
+                    </span>
+                  </span>
+                )}
+              </button>
+            );
+          })
         ) : (
-          <div className="px-3 py-6 text-[12px] text-[var(--ide-text-faint)]">
+          <div style={{ padding: '18px 12px', color: 'var(--faint)', fontSize: 12 }}>
             {searchQuery ? 'No matching files' : placeholder ?? 'No files yet'}
           </div>
         )}
       </div>
+
+      {readOnly ? null : (
+        <div className="foot">
+          <button type="button" onClick={onCreateFile}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>
+            File
+          </button>
+          <button type="button" onClick={onCreateFile}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+            Folder
+          </button>
+        </div>
+      )}
     </div>
   );
 }

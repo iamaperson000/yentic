@@ -27,6 +27,7 @@ type PreviewProps = {
   activeFileCode?: string;
   activeFileLanguage?: SupportedLanguage;
   onRefresh?: () => void;
+  runSignal?: number;
 };
 
 const runtimeLanguages = new Set<ExecutableLanguage>(['python', 'c', 'cpp', 'java']);
@@ -450,6 +451,7 @@ export function Preview({
   activeFileCode,
   activeFileLanguage,
   onRefresh,
+  runSignal,
 }: PreviewProps) {
   const effectiveMode: PreviewMode = template ? 'sandpack' : mode ?? 'message';
   const label =
@@ -492,6 +494,16 @@ export function Preview({
     if (!supportsAutorun) return;
     setRunRequestId(previous => previous + 1);
   }, [supportsAutorun]);
+
+  // External Run (from the topbar) — bump the run counter when the signal changes.
+  const lastRunSignal = useRef(0);
+  useEffect(() => {
+    if (runSignal === undefined || runSignal === lastRunSignal.current) return;
+    lastRunSignal.current = runSignal;
+    if (runSignal > 0 && supportsAutorun) {
+      schedulePreviewUpdate(() => setRunRequestId(previous => previous + 1));
+    }
+  }, [runSignal, supportsAutorun, schedulePreviewUpdate]);
 
   const toggleAutorun = useCallback(() => {
     setAutorunEnabled(prev => !prev);

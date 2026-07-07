@@ -6,7 +6,6 @@ import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { clsx } from 'clsx';
 
-import { X } from 'lucide-react';
 
 import { Editor } from '@/components/Editor';
 import { FileExplorer } from '@/components/FileExplorer';
@@ -14,7 +13,6 @@ import { Preview } from '@/components/Preview';
 import CollaborativeEditor from '@/components/CollaborativeEditor';
 import PresenceAvatars from '@/components/PresenceAvatars';
 import { ProjectShareModal } from '@/components/ProjectShareModal';
-import { StatusBar } from '@/components/StatusBar';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
   type CollaboratorInfo,
@@ -1462,9 +1460,20 @@ export default function WorkspaceClient({
     return () => window.clearTimeout(timeout);
   }, [recentlyCreatedPath]);
 
-  const [explorerWidth, setExplorerWidth] = useState(248);
-  const [previewWidth, setPreviewWidth] = useState(440);
-  const mainRef = useRef<HTMLElement>(null);
+  const [explorerWidth, setExplorerWidth] = useState(246);
+  const [previewWidth, setPreviewWidth] = useState(600);
+  const [fileFilter, setFileFilter] = useState('');
+  const [runRequestId, setRunRequestId] = useState(0);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const fileDotColor = (path: string) => {
+    const ext = path.split('.').pop()?.toLowerCase() ?? '';
+    const map: Record<string, string> = {
+      html: '#e5896b', css: '#7aa2f7', js: '#e0af68', jsx: '#e0af68', mjs: '#e0af68',
+      ts: '#79c0ff', tsx: '#79c0ff', py: '#8ee06f', json: '#9ece6a', c: '#e0af68',
+      cpp: '#c9a2ff', h: '#8ee06f', java: '#c9a2ff', md: '#8a8478', svg: '#c9a2ff',
+    };
+    return map[ext] ?? '#8a8478';
+  };
   const startPaneResize = (event: ReactMouseEvent, pane: 'explorer' | 'preview') => {
     event.preventDefault();
     const onMove = (e: MouseEvent) => {
@@ -1486,16 +1495,8 @@ export default function WorkspaceClient({
     document.addEventListener('mouseup', onUp);
   };
 
-  const railBtnClass = (on: boolean) =>
-    clsx(
-      'flex h-9 w-9 items-center justify-center rounded-[9px] transition',
-      on
-        ? 'bg-[var(--ide-accent)]/15 text-[var(--ide-accent)]'
-        : 'text-[var(--ide-text-faint)] hover:bg-white/5 hover:text-[var(--ide-text)]'
-    );
-
   const content = (
-    <div className="ide-shell flex min-h-screen flex-col bg-[var(--ide-bg-app)] text-[var(--ide-text)]">
+    <div className="yide ide-shell" data-theme="dusk">
       <ProjectShareModal
         isOpen={isShareModalOpen}
         onClose={closeShareModal}
@@ -1518,203 +1519,189 @@ export default function WorkspaceClient({
         onCopyShareUrl={handleCopyShareLink}
         onResetShareUrl={rotateShareUrl}
       />
-      <header className="flex h-[52px] items-center gap-3 border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-3.5">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Link
-            href="/ide"
-            data-testid="back-to-workspaces"
-            onClick={handleBackToWorkspaces}
-            className="flex items-center gap-2 font-[family-name:var(--font-mono-code)] text-[14px] font-bold tracking-[-0.02em] text-[var(--ide-text)]"
-            aria-label="Back to workspaces"
-          >
-            <span className="h-[15px] w-[15px] rounded-[4px] bg-[var(--ide-accent)]" />
-            yentic
+
+      <div className="topbar">
+        <div className="tb-left">
+          <Link href="/ide" data-testid="back-to-workspaces" onClick={handleBackToWorkspaces} className="brand" aria-label="Back to workspaces">
+            <span className="sq" />yentic
           </Link>
-          <span className="font-[family-name:var(--font-mono-code)] text-[13px] text-[var(--ide-text-faint)]">/</span>
-          {isRenamingProject ? (
-            <input
-              data-testid="project-name-input"
-              ref={projectNameInputRef}
-              value={projectNameDraft}
-              onChange={event => setProjectNameDraft(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') { event.preventDefault(); commitProjectRename(); }
-                if (event.key === 'Escape') { event.preventDefault(); cancelProjectRename(); }
-              }}
-              onBlur={commitProjectRename}
-              autoFocus
-              placeholder={isNameRequired ? 'Name your project' : 'Project name'}
-              className="w-[180px] rounded-md border border-[var(--ide-border-strong)] bg-[var(--ide-bg-panel)] px-2 py-1 font-[family-name:var(--font-mono-code)] text-[13px] text-[var(--ide-text)] placeholder:text-[var(--ide-text-faint)] outline-none focus:border-[var(--ide-accent)]"
-            />
-          ) : (
-            <button
-              data-testid="project-title"
-              onClick={viewerRole === 'owner' ? beginProjectRename : undefined}
-              className="truncate font-[family-name:var(--font-mono-code)] text-[13px] text-[var(--ide-text-muted)] transition hover:text-[var(--ide-text)]"
-            >
-              {projectMeta.name?.trim() || defaultProjectName}
-            </button>
-          )}
+          <span className="proj">
+            {'/ '}
+            {isRenamingProject ? (
+              <input
+                data-testid="project-name-input"
+                ref={projectNameInputRef}
+                value={projectNameDraft}
+                onChange={event => setProjectNameDraft(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') { event.preventDefault(); commitProjectRename(); }
+                  if (event.key === 'Escape') { event.preventDefault(); cancelProjectRename(); }
+                }}
+                onBlur={commitProjectRename}
+                autoFocus
+                placeholder={isNameRequired ? 'Name your project' : 'Project name'}
+              />
+            ) : (
+              <b>
+                <button data-testid="project-title" onClick={viewerRole === 'owner' ? beginProjectRename : undefined}>
+                  {projectMeta.name?.trim() || defaultProjectName}
+                </button>
+              </b>
+            )}
+          </span>
         </div>
 
-        <div className="flex-1" />
+        <div className="run">
+          <button className="go" onClick={() => setRunRequestId(id => id + 1)} data-testid="topbar-run">
+            <span className="tri" />Run
+          </button>
+          <button className="chev" onClick={() => setShowPreview(true)} aria-label="Show output">
+            <svg viewBox="0 0 24 24" style={{ width: 14, height: 14 }}><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+        </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="tb-right">
+          {orderedLiveCollaborators.length ? (
+            <div className="avatars"><PresenceAvatars collaborators={orderedLiveCollaborators} /></div>
+          ) : null}
           <span data-testid="save-status" className={statusBadgeClass}>
             <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
             {savedLabel}
           </span>
-          {orderedLiveCollaborators.length ? (
-            <PresenceAvatars collaborators={orderedLiveCollaborators} />
-          ) : null}
-          {cloudError ? <span className="text-[11px] text-[#f2b8ae]">{cloudError}</span> : null}
+          {cloudError ? <span style={{ color: '#f2b8ae', fontFamily: 'var(--mono)', fontSize: 11 }}>{cloudError}</span> : null}
           <button
             data-testid="share-button"
+            className="ghost"
             onClick={openShareModal}
-            className={shareButtonClass}
             disabled={shareButtonDisabled}
             title={shareButtonDisabled ? 'Save this project to enable sharing' : viewerRole === 'owner' ? 'Invite collaborators' : 'View collaborators'}
           >
+            <svg viewBox="0 0 24 24"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" /><path d="M16 6l-4-4-4 4" /><path d="M12 2v13" /></svg>
             Share
           </button>
         </div>
-      </header>
-      <main ref={mainRef} className="flex flex-1 min-h-0 overflow-hidden">
-        <div className="flex w-[52px] shrink-0 flex-col items-center gap-1.5 border-r border-[var(--ide-border)] bg-[var(--ide-bg-app)] py-3">
-          <button type="button" title="Files" aria-pressed={showExplorer} onClick={() => setShowExplorer(v => !v)} className={railBtnClass(showExplorer)}>
-            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </div>
+
+      <div className="main" ref={mainRef}>
+        <div className="rail">
+          <button type="button" title="Files" aria-pressed={showExplorer} className={showExplorer ? 'on' : undefined} onClick={() => setShowExplorer(v => !v)}>
+            <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
           </button>
-          <button type="button" title="Search" onClick={() => setShowExplorer(true)} className={railBtnClass(false)}>
-            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <button type="button" title="Search" onClick={() => setShowExplorer(true)}>
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
           </button>
-          <button type="button" title="Preview" aria-pressed={showPreview} onClick={() => setShowPreview(v => !v)} className={railBtnClass(showPreview)}>
-            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+          <button type="button" title="Preview" aria-pressed={showPreview} className={showPreview ? 'on' : undefined} onClick={() => setShowPreview(v => !v)}>
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M8 21h8M12 18v3" /></svg>
           </button>
-          <div className="flex-1" />
-          <button type="button" title="Settings" className={railBtnClass(false)}>
-            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>
+          <div className="sp" />
+          <button type="button" title="Settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></svg>
           </button>
         </div>
+
         {showExplorer ? (
           <>
-          <aside className="flex min-h-0 shrink-0 border-r border-[var(--ide-border)]" style={{ width: explorerWidth }}>
-            <FileExplorer
-              files={files}
-              activePath={activePath}
-              onSelect={activatePath}
-              onRename={onRename}
-              onDelete={onDelete}
-              onCreateFile={createSmartFile}
-              onResetWorkspace={resetWorkspace}
-              canReset={viewerRole === 'owner'}
-              newlyCreatedPath={recentlyCreatedPath}
-              onFeedback={pushToast}
-              placeholder={config.newFilePlaceholder}
-              readOnly={!canEdit}
-            />
-          </aside>
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            onMouseDown={(e) => startPaneResize(e, 'explorer')}
-            className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--ide-accent)]/50"
-          />
+            <div className="files" style={{ width: explorerWidth }}>
+              <FileExplorer
+                files={files}
+                activePath={activePath}
+                onSelect={activatePath}
+                onRename={onRename}
+                onDelete={onDelete}
+                onCreateFile={createSmartFile}
+                onResetWorkspace={resetWorkspace}
+                canReset={viewerRole === 'owner'}
+                newlyCreatedPath={recentlyCreatedPath}
+                onFeedback={pushToast}
+                placeholder={config.newFilePlaceholder}
+                readOnly={!canEdit}
+              />
+            </div>
+            <div className="rz" role="separator" aria-orientation="vertical" onMouseDown={e => startPaneResize(e, 'explorer')} />
           </>
         ) : null}
 
-        <section
-          className={clsx(
-            'flex min-w-0 flex-1 min-h-0 flex-col bg-[var(--ide-bg-editor)]',
-            showPreview && 'border-r border-[var(--ide-border)]'
-          )}
-        >
-          <div className="custom-scrollbar flex h-9 items-stretch overflow-x-auto border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)]">
-            {visibleTabs.map(path => {
-              const isActive = path === activePath;
-
-              return (
-                <div
-                  key={path}
-                  data-testid={`editor-tab-${path}`}
-                  data-state={isActive ? 'active' : 'inactive'}
-                  className={clsx(
-                    'group flex min-w-[160px] max-w-[240px] items-center border-r border-[var(--ide-border)]',
-                    isActive
-                      ? 'bg-[var(--ide-bg-editor)] text-[var(--ide-text)]'
-                      : 'bg-[var(--ide-bg-tab)] text-[var(--ide-text-muted)] hover:bg-[var(--ide-bg-hover)]'
-                  )}
+        <div className="edcol">
+          <div className="tabs">
+            {visibleTabs.map(path => (
+              <div
+                key={path}
+                data-testid={`editor-tab-${path}`}
+                data-state={path === activePath ? 'active' : 'inactive'}
+                className={clsx('tab', path === activePath && 'on')}
+                onClick={() => activatePath(path)}
+              >
+                <span className="dot" style={{ background: fileDotColor(path) }} />
+                <span className="truncate">{path}</span>
+                <button
+                  type="button"
+                  className="x"
+                  onClick={event => { event.stopPropagation(); closeTab(path); }}
+                  disabled={visibleTabs.length === 1}
+                  aria-label={`Close ${path}`}
                 >
-                  <button
-                    type="button"
-                    onClick={() => activatePath(path)}
-                    className="flex min-w-0 flex-1 items-center gap-2 px-3 text-left text-[12px]"
-                  >
-                    <span className="truncate">{path}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => closeTab(path)}
-                    disabled={visibleTabs.length === 1}
-                    className="mr-1 inline-flex h-6 w-6 items-center justify-center text-[var(--ide-text-faint)] transition hover:bg-[var(--ide-bg-hover)] hover:text-[var(--ide-text)] disabled:opacity-0"
-                    aria-label={`Close ${path}`}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              );
-            })}
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
-
-          <div className="flex min-h-0 flex-1 bg-[var(--ide-bg-editor)]">
+          <div className="crumbs">
+            <div className="path">
+              {projectMeta.name?.trim() || defaultProjectName} <span className="sep">›</span> {activePath}
+            </div>
+          </div>
+          <div className="codewrap">
             <Editor
               value={code}
               language={lang}
               onChange={setActiveCode}
-              onCursorChange={(line, column) => {
-                setCursorLine(line);
-                setCursorColumn(column);
-              }}
+              onCursorChange={(line, column) => { setCursorLine(line); setCursorColumn(column); }}
               readOnly={!canEdit}
               path={activePath}
             />
           </div>
-        </section>
+          <div className="statusbar">
+            <span>{(lang || 'text').toString().toUpperCase()}</span>
+            <span>UTF-8</span>
+            <span>LF</span>
+            <span className="r">
+              <span>Ln {cursorLine}, Col {cursorColumn}</span>
+              <span>Spaces: 2</span>
+            </span>
+          </div>
+        </div>
 
         {showPreview ? (
           <>
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            onMouseDown={(e) => startPaneResize(e, 'preview')}
-            className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-[var(--ide-accent)]/50"
-          />
-          <aside className="flex min-h-0 shrink-0 bg-[var(--ide-bg-panel)]" style={{ width: previewWidth }}>
-            <Preview
-              key={previewRefreshKey}
-              files={sandpackFiles}
-              activePath={`/${activePath}`}
-              template={config.previewTemplate}
-              mode={config.previewMode}
-              disabledMessage={config.previewMessage}
-              activeFileCode={code}
-              activeFileLanguage={lang}
-              onRefresh={() => setPreviewRefreshKey(key => key + 1)}
-            />
-          </aside>
+            <div className="rz" role="separator" aria-orientation="vertical" onMouseDown={e => startPaneResize(e, 'preview')} />
+            <div className="prev" style={{ width: previewWidth }}>
+              <Preview
+                key={previewRefreshKey}
+                files={sandpackFiles}
+                activePath={`/${activePath}`}
+                template={config.previewTemplate}
+                mode={config.previewMode}
+                disabledMessage={config.previewMessage}
+                activeFileCode={code}
+                activeFileLanguage={lang}
+                onRefresh={() => setPreviewRefreshKey(key => key + 1)}
+                runSignal={runRequestId}
+              />
+            </div>
           </>
         ) : null}
-      </main>
-      <StatusBar language={lang} cursorLine={cursorLine} cursorColumn={cursorColumn} />
+      </div>
+
       {toast ? (
         <div className="pointer-events-none fixed bottom-4 right-4 flex justify-end">
           <div
-            className={`pointer-events-auto inline-flex items-center gap-3 border px-3 py-2 text-[12px] shadow-lg ${
+            className={`pointer-events-auto inline-flex items-center gap-3 rounded-md border px-3 py-2 text-[12px] shadow-lg ${
               toast.kind === 'success'
                 ? 'border-[var(--ide-border-strong)] bg-[var(--ide-bg-panel)] text-[var(--ide-text)]'
                 : 'border-[var(--ide-danger)]/50 bg-[var(--ide-danger)]/12 text-[#f2b8ae]'
             }`}
           >
-            <span className="inline-flex h-5 w-5 items-center justify-center border border-current text-[10px] font-semibold uppercase tracking-[0.12em]">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded border border-current text-[10px] font-semibold">
               {toast.kind === 'success' ? 'OK' : 'ERR'}
             </span>
             <span>{toast.message}</span>
