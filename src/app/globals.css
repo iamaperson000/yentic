@@ -370,6 +370,9 @@ textarea {
 .yide .ptab.on{color:var(--fg);border-top:2px solid var(--brand);padding-top:8px;}
 .yide .ptabs .grow{flex:1;} .yide .ptabs .k{color:var(--faint);padding:0 12px;}
 .yide .pbody{flex:1;position:relative;min-height:0;background:var(--panel);display:flex;flex-direction:column;}
+.yide .purl{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12px;color:var(--muted);flex:0 0 auto;}
+.yide .purl .bar{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;color:var(--muted);}
+.yide .purl button:hover{color:var(--fg);}
 .yide .prunbar{display:flex;align-items:center;gap:10px;height:36px;padding:0 16px;background:var(--brand);color:var(--statfg);font-family:var(--mono);font-size:12px;font-weight:600;flex:0 0 auto;}
 .yide .prunbar .r{margin-left:auto;display:flex;gap:14px;}
 .yide .prunbar .d{width:7px;height:7px;border-radius:50%;background:var(--statfg);}
