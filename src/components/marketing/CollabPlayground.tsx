@@ -105,6 +105,7 @@ export default function CollabPlayground() {
   const [youIndex, setYouIndex] = useState<number | null>(null);
   const youPtrRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(false);
+  const [hovering, setHovering] = useState(false);
 
   const codeRef = useRef(code);
   const activeRef = useRef(active);
@@ -199,6 +200,8 @@ export default function CollabPlayground() {
   const ana = indexToRC(code, anaIndex);
   const you = youIndex == null ? null : indexToRC(code, youIndex);
   const tokens = highlight(code);
+  // ana is always here; you count as online once you're actually in the panel.
+  const online = hovering || active ? 2 : 1;
   const caretLeft = (col: number) => `calc(${PAD_X}px + ${col}ch)`;
   const caretTop = (row: number) => PAD_Y + row * LINE;
 
@@ -209,13 +212,26 @@ export default function CollabPlayground() {
   };
 
   return (
-    <div
-      ref={wrapRef}
-      className="relative"
-      style={{ minHeight: PAD_Y * 2 + LINE * 4, cursor: 'none' }}
-      onMouseMove={onWrapMove}
-      onMouseLeave={hideYou}
-    >
+    <div className="overflow-hidden rounded-[11px] border" style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}>
+      <div
+        className="flex items-center justify-between border-b px-4 py-2 font-[family-name:var(--font-mono-code)] text-[11.5px]"
+        style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
+      >
+        <span>greet.py</span>
+        <span className="flex items-center gap-1.5" style={{ transition: 'color .2s' }}>
+          <span className="h-[7px] w-[7px] rounded-full" style={{ background: 'var(--y-str)' }} />
+          {online} online
+        </span>
+      </div>
+
+      <div
+        ref={wrapRef}
+        className="relative"
+        style={{ minHeight: PAD_Y * 2 + LINE * 4, cursor: 'none' }}
+        onMouseEnter={() => setHovering(true)}
+        onMouseMove={onWrapMove}
+        onMouseLeave={() => { setHovering(false); hideYou(); }}
+      >
       {/* hidden ruler to measure glyph width */}
       <span ref={measureRef} aria-hidden style={{ ...textStyle, position: 'absolute', visibility: 'hidden', padding: 0, whiteSpace: 'pre' }}>00000000000000000000</span>
 
@@ -258,6 +274,15 @@ export default function CollabPlayground() {
             you
           </span>
         </div>
+      </div>
+      </div>
+
+      <div
+        className="flex items-center gap-2 border-t px-4 py-2 font-[family-name:var(--font-mono-code)] text-[11px]"
+        style={{ borderColor: 'var(--y-line)', background: 'var(--y-console-bg)', color: 'var(--y-muted)' }}
+      >
+        <span className="h-[6px] w-[6px] rounded-full" style={{ background: 'var(--y-str)' }} />
+        live · synced
       </div>
     </div>
   );

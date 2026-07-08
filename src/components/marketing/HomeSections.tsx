@@ -110,24 +110,7 @@ export default function HomeSections() {
           </Body>
           <MonoLink href="/collab-demo">open the live demo</MonoLink>
         </div>
-        <Panel
-          tab="greet.py"
-          right={
-            <span className="flex items-center gap-1.5">
-              <span className="h-[7px] w-[7px] rounded-full" style={{ background: 'var(--y-str)' }} />
-              2 online
-            </span>
-          }
-        >
-          <CollabPlayground />
-          <div
-            className="flex items-center gap-2 border-t px-4 py-2 font-[family-name:var(--font-mono-code)] text-[11px]"
-            style={{ borderColor: 'var(--y-line)', background: 'var(--y-console-bg)', color: 'var(--y-muted)' }}
-          >
-            <span className="h-[6px] w-[6px] rounded-full" style={{ background: 'var(--y-str)' }} />
-            live · synced
-          </div>
-        </Panel>
+        <CollabPlayground />
       </section>
 
       {/* ── sharing (centered, echoes the hero highlight once) ──── */}
