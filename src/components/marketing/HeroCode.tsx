@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { executeCode } from '@/lib/runners';
 
@@ -13,17 +13,37 @@ const SOURCE = `def primes(limit):
 
 print(primes(30))`;
 
+// The real output of the snippet above. Shown as an on-load preview so the
+// panel isn't a dead screenshot; the Run button re-executes it for real.
+const EXPECTED = '[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]';
+
 type State =
   | { kind: 'idle' }
-  | { kind: 'loading' }
+  | { kind: 'loading'; text: string }
   | { kind: 'done'; text: string }
   | { kind: 'error'; text: string };
 
 export default function HeroCode() {
   const [state, setState] = useState<State>({ kind: 'idle' });
+  const ranForReal = useRef(false);
+
+  // Auto-play once on mount: brief "running…", then reveal the true output.
+  useEffect(() => {
+    const t1 = setTimeout(() => {
+      if (!ranForReal.current) setState({ kind: 'loading', text: 'running…' });
+    }, 650);
+    const t2 = setTimeout(() => {
+      if (!ranForReal.current) setState({ kind: 'done', text: EXPECTED });
+    }, 1450);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
 
   async function run() {
-    setState({ kind: 'loading' });
+    ranForReal.current = true;
+    setState({ kind: 'loading', text: 'loading the python runtime…' });
     try {
       const result = await executeCode('python', SOURCE);
       const out = (result.stdout || result.stderr || '').trimEnd();
@@ -103,7 +123,7 @@ export default function HeroCode() {
           <span style={{ color: 'var(--y-muted)' }}># press run to execute this in your browser</span>
         )}
         {state.kind === 'loading' && (
-          <span style={{ color: 'var(--y-muted)' }}>loading the python runtime…</span>
+          <span style={{ color: 'var(--y-muted)' }}>{state.text}</span>
         )}
         {(state.kind === 'done' || state.kind === 'error') && (
           <>

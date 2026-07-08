@@ -1,9 +1,11 @@
 import Link from 'next/link';
 
 import HeroCode from '@/components/marketing/HeroCode';
+import HomeSections from '@/components/marketing/HomeSections';
 
 function LandingHome() {
   return (
+    <>
     <div
       className="-mx-6 -mt-12 overflow-hidden sm:-mt-16"
       style={{ color: 'var(--y-fg)', background: 'var(--y-ink)', borderBottom: '1px solid var(--y-line)' }}
@@ -16,8 +18,8 @@ function LandingHome() {
             >
               Your dev environment is{' '}
               <span
-                className="rounded-[3px] px-1.5 [-webkit-box-decoration-break:clone] [box-decoration-break:clone]"
-                style={{ background: 'var(--y-sel-hl)' }}
+                className="whitespace-nowrap rounded-[5px] px-2"
+                style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
               >
                 now a URL
               </span>
@@ -50,6 +52,8 @@ function LandingHome() {
             <HeroCode />
         </div>
     </div>
+    <HomeSections />
+    </>
   );
 }
 
