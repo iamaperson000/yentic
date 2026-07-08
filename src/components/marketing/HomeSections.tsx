@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import CollabPlayground from '@/components/marketing/CollabPlayground';
+
 const languages = [
   { name: 'Python', tint: '#8ee06f' },
   { name: 'JavaScript', tint: '#e0af68' },
@@ -103,8 +105,8 @@ export default function HomeSections() {
           <Heading>Two people, one file.</Heading>
           <Body>
             Share a project and edit it together — you see each other&rsquo;s cursors and every keystroke
-            as it happens. Same file, same output, no waiting to sync. Try it yourself, no account
-            needed:
+            as it happens. Same file, same output, no waiting to sync. That&rsquo;s ana editing on the
+            right; click into the code and type alongside her, or open the full demo:
           </Body>
           <MonoLink href="/collab-demo">open the live demo</MonoLink>
         </div>
@@ -117,23 +119,7 @@ export default function HomeSections() {
             </span>
           }
         >
-          <div className="px-5 py-4 font-[family-name:var(--font-mono-code)] text-[13px] leading-[2]">
-            <div style={{ color: 'var(--y-fg)' }}>
-              <span style={{ color: 'var(--y-kw)' }}>def</span>{' '}
-              <span style={{ color: 'var(--y-fn)' }}>greet</span>(name):
-            </div>
-            <div style={{ color: 'var(--y-fg)', paddingLeft: '2ch' }}>
-              <span style={{ color: 'var(--y-kw)' }}>return</span>{' '}
-              <span style={{ color: 'var(--y-str)' }}>f&quot;welcome, {'{'}name{'}'}&quot;</span>
-              <span className="ml-0.5 inline-block h-[1.05em] w-[2px] align-[-0.2em]" style={{ background: 'var(--y-brand)' }} />
-              <span className="ml-1 rounded px-1.5 py-0.5 text-[11px]" style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}>you</span>
-            </div>
-            <div style={{ color: 'var(--y-fg)' }}>
-              <span style={{ color: 'var(--y-fn)' }}>print</span>(<span style={{ color: 'var(--y-fn)' }}>greet</span>(<span style={{ color: 'var(--y-str)' }}>&quot;team&quot;</span>))
-              <span className="ml-0.5 inline-block h-[1.05em] w-[2px] align-[-0.2em]" style={{ background: 'var(--y-str)' }} />
-              <span className="ml-1 rounded px-1.5 py-0.5 text-[11px]" style={{ background: 'var(--y-str)', color: 'var(--y-statfg)' }}>ana</span>
-            </div>
-          </div>
+          <CollabPlayground />
           <div
             className="flex items-center gap-2 border-t px-4 py-2 font-[family-name:var(--font-mono-code)] text-[11px]"
             style={{ borderColor: 'var(--y-line)', background: 'var(--y-console-bg)', color: 'var(--y-muted)' }}
