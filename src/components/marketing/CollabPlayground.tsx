@@ -103,7 +103,7 @@ export default function CollabPlayground() {
   const [anaPtr, setAnaPtr] = useState({ x: PAD_X, y: PAD_Y });
   const [anaPulse, setAnaPulse] = useState(false);
   const [youIndex, setYouIndex] = useState<number | null>(null);
-  const [youPtr, setYouPtr] = useState<{ x: number; y: number } | null>(null);
+  const youPtrRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(false);
 
   const codeRef = useRef(code);
@@ -183,10 +183,18 @@ export default function CollabPlayground() {
   }, []);
 
   const syncYou = () => { const ta = taRef.current; if (ta) setYouIndex(ta.selectionStart); };
+  // Drive the "you" pointer imperatively — no React re-render on mousemove, no
+  // transition, so it stays pinned to the cursor instead of lagging behind it.
   const onWrapMove = (e: React.MouseEvent) => {
     const rect = wrapRef.current?.getBoundingClientRect();
-    if (rect) setYouPtr({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    const el = youPtrRef.current;
+    if (rect && el) {
+      el.style.left = `${e.clientX - rect.left}px`;
+      el.style.top = `${e.clientY - rect.top}px`;
+      el.style.display = 'block';
+    }
   };
+  const hideYou = () => { if (youPtrRef.current) youPtrRef.current.style.display = 'none'; };
 
   const ana = indexToRC(code, anaIndex);
   const you = youIndex == null ? null : indexToRC(code, youIndex);
@@ -206,7 +214,7 @@ export default function CollabPlayground() {
       className="relative"
       style={{ minHeight: PAD_Y * 2 + LINE * 4, cursor: 'none' }}
       onMouseMove={onWrapMove}
-      onMouseLeave={() => setYouPtr(null)}
+      onMouseLeave={hideYou}
     >
       {/* hidden ruler to measure glyph width */}
       <span ref={measureRef} aria-hidden style={{ ...textStyle, position: 'absolute', visibility: 'hidden', padding: 0, whiteSpace: 'pre' }}>00000000000000000000</span>
@@ -237,7 +245,19 @@ export default function CollabPlayground() {
 
         {/* floating presence cursors */}
         <Pointer x={anaPtr.x} y={anaPtr.y} color="var(--y-str)" name="ana" pulse={anaPulse} />
-        {youPtr && <Pointer x={youPtr.x} y={youPtr.y} color="var(--y-brand)" name="you" />}
+
+        {/* "you" pointer: positioned imperatively for zero lag */}
+        <div ref={youPtrRef} className="absolute z-10" style={{ left: 0, top: 0, display: 'none' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" style={{ display: 'block' }}>
+            <path d="M4 3 L4 18.5 L8.2 14.4 L11 20.5 L13.4 19.4 L10.6 13.4 L16.4 13.4 Z" fill="var(--y-brand)" stroke="#0c0a10" strokeWidth="1" strokeLinejoin="round" />
+          </svg>
+          <span
+            className="absolute whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold font-[family-name:var(--font-mono-code)]"
+            style={{ left: 13, top: 13, background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
+          >
+            you
+          </span>
+        </div>
       </div>
     </div>
   );
