@@ -2,10 +2,10 @@ import Link from 'next/link';
 
 const languages = [
   { name: 'Python', tint: 'var(--color-tint-python)', note: 'real CPython, via Pyodide' },
-  { name: 'Web', tint: 'var(--color-tint-web)', note: 'HTML, CSS & JS in a live preview' },
+  { name: 'Web', tint: 'var(--color-tint-web)', note: 'HTML, CSS & JS, live preview' },
   { name: 'C', tint: 'var(--color-tint-c)', note: 'interpreted in the browser' },
   { name: 'C++', tint: 'var(--color-tint-cpp)', note: 'interpreted in the browser' },
-  { name: 'Java', tint: 'var(--color-tint-java)', note: 'interpreted in the browser' },
+  { name: 'Java', tint: 'var(--color-tint-java)', note: 'compiled to JS, in the browser' },
 ];
 
 function Eyebrow({ children }: { children: string }) {
@@ -50,7 +50,7 @@ export default function HomeSections() {
           <Body>
             No build server to wait on, nothing to install. Python runs on real CPython through
             Pyodide, web projects render in a preview that reloads as you type, and C, C++, and Java
-            run on in-browser interpreters. The tab you&rsquo;re reading this in can already do all of it.
+            run client-side too. The tab you&rsquo;re reading this in can already do all of it.
           </Body>
         </div>
         <ul
@@ -111,26 +111,29 @@ export default function HomeSections() {
         </div>
       </section>
 
-      {/* ── sharing ───────────────────────────────────────────── */}
-      <section className="grid items-center gap-10 border-t py-16 sm:py-20 lg:grid-cols-[1fr_minmax(0,440px)]" style={{ borderColor: 'var(--y-line)' }}>
-        <div>
-          <Eyebrow>share it</Eyebrow>
-          <Heading>Every project is a URL.</Heading>
-          <Body>
-            Press share and you get a link. Drop it in a message, a pull request, a class assignment —
-            whoever opens it lands in the same workspace, running code included.
-          </Body>
-        </div>
+      {/* ── sharing (centered, to break the two-column rhythm) ──── */}
+      <section className="flex flex-col items-center border-t py-16 text-center sm:py-20" style={{ borderColor: 'var(--y-line)' }}>
+        <Eyebrow>share it</Eyebrow>
+        <Heading>Every project is a URL.</Heading>
+        <p className="mt-4 max-w-[52ch] text-[16px] leading-[1.65]" style={{ color: 'var(--y-muted)' }}>
+          Press share and you get a link. Drop it in a message, a pull request, a class assignment —
+          whoever opens it lands in the same workspace, running code included.
+        </p>
         <div
-          className="flex items-center gap-3 rounded-[10px] border px-4 py-3 font-[family-name:var(--font-mono-code)] text-[13px]"
+          className="mt-8 flex w-full max-w-[420px] items-center gap-3 rounded-[10px] border px-4 py-3 text-left font-[family-name:var(--font-mono-code)] text-[13px]"
           style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel2)' }}
         >
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--y-muted)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" />
             <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
           </svg>
-          <span style={{ color: 'var(--y-fg)' }}>yentic.app/p/3f9a2c</span>
-          <span className="ml-auto" style={{ color: 'var(--y-brand)' }}>copied&nbsp;✓</span>
+          <span style={{ color: 'var(--y-fg)' }}>yentic.com/p/3f9a2c</span>
+          <span
+            className="ml-auto rounded-md px-2.5 py-1 text-[12px] font-semibold"
+            style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}
+          >
+            Copy link
+          </span>
         </div>
       </section>
     </div>

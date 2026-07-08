@@ -31,10 +31,10 @@ export default function HeroCode() {
   useEffect(() => {
     const t1 = setTimeout(() => {
       if (!ranForReal.current) setState({ kind: 'loading', text: 'running…' });
-    }, 650);
+    }, 1000);
     const t2 = setTimeout(() => {
       if (!ranForReal.current) setState({ kind: 'done', text: EXPECTED });
-    }, 1450);
+    }, 1900);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -123,7 +123,13 @@ export default function HeroCode() {
           <span style={{ color: 'var(--y-muted)' }}># press run to execute this in your browser</span>
         )}
         {state.kind === 'loading' && (
-          <span style={{ color: 'var(--y-muted)' }}>{state.text}</span>
+          <span style={{ color: 'var(--y-muted)' }}>
+            {state.text}
+            <span
+              className="ml-1 inline-block h-[1em] w-[2px] align-[-0.15em]"
+              style={{ background: 'var(--y-brand)', animation: 'yblink 1.05s steps(1) infinite' }}
+            />
+          </span>
         )}
         {(state.kind === 'done' || state.kind === 'error') && (
           <>

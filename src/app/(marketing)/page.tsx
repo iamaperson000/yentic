@@ -45,7 +45,7 @@ function LandingHome() {
                 className="rounded-[9px] border px-[22px] py-3"
                 style={{ borderColor: 'var(--y-line)', color: 'var(--y-fg)' }}
               >
-                Browse an example
+                See what it does
               </Link>
             </div>
 
