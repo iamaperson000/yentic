@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { highlightPython, PY_COLOR } from '@/lib/pyHighlight';
+
 const BASE = `def greet(name):
     return f"welcome, {name}"
 
@@ -29,38 +31,6 @@ const SCRIPT: Step[] = [
   { kind: 'edit', find: '"everyone"', to: '"team"' },
   { kind: 'pause' },
 ];
-
-const KEYWORDS = new Set(['def', 'return', 'if', 'elif', 'else', 'for', 'while', 'in', 'import', 'from', 'class', 'with', 'as', 'and', 'or', 'not', 'None', 'True', 'False', 'lambda', 'yield', 'pass', 'break', 'continue']);
-const BUILTINS = new Set(['print', 'range', 'len', 'int', 'str', 'list', 'dict']);
-const COLOR: Record<string, string> = { kw: 'var(--y-kw)', str: 'var(--y-str)', fn: 'var(--y-fn)', num: 'var(--y-num)', cm: 'var(--y-muted)', fg: 'var(--y-fg)' };
-
-function highlight(src: string): { t: string; c: string }[] {
-  const out: { t: string; c: string }[] = [];
-  let i = 0;
-  const push = (t: string, c: string) => { if (t) out.push({ t, c }); };
-  while (i < src.length) {
-    const ch = src[i];
-    if (ch === '#') { let j = i; while (j < src.length && src[j] !== '\n') j++; push(src.slice(i, j), 'cm'); i = j; continue; }
-    if (ch === '"' || ch === "'") {
-      const q = ch; let j = i + 1;
-      while (j < src.length) { if (src[j] === '\\') { j += 2; continue; } if (src[j] === q) { j++; break; } j++; }
-      push(src.slice(i, j), 'str'); i = j; continue;
-    }
-    if (ch >= '0' && ch <= '9') { let j = i; while (j < src.length && /[0-9.]/.test(src[j])) j++; push(src.slice(i, j), 'num'); i = j; continue; }
-    if (/[A-Za-z_]/.test(ch)) {
-      let j = i; while (j < src.length && /[A-Za-z0-9_]/.test(src[j])) j++;
-      const word = src.slice(i, j); const next = src[j];
-      let c = 'fg';
-      if (KEYWORDS.has(word)) c = 'kw';
-      else if (BUILTINS.has(word)) c = 'fn';
-      else if ((word === 'f' || word === 'r' || word === 'b' || word === 'rf' || word === 'fr') && (next === '"' || next === "'")) c = 'str';
-      else if (next === '(') c = 'fn';
-      push(word, c); i = j; continue;
-    }
-    push(ch, 'fg'); i++;
-  }
-  return out;
-}
 
 function indexToRC(src: string, index: number) {
   const before = src.slice(0, Math.max(0, Math.min(index, src.length)));
@@ -199,7 +169,7 @@ export default function CollabPlayground() {
 
   const ana = indexToRC(code, anaIndex);
   const you = youIndex == null ? null : indexToRC(code, youIndex);
-  const tokens = highlight(code);
+  const tokens = highlightPython(code);
   // ana is always here; you count as online once you're actually in the panel.
   const online = hovering || active ? 2 : 1;
   const caretLeft = (col: number) => `calc(${PAD_X}px + ${col}ch)`;
@@ -236,7 +206,7 @@ export default function CollabPlayground() {
       <span ref={measureRef} aria-hidden style={{ ...textStyle, position: 'absolute', visibility: 'hidden', padding: 0, whiteSpace: 'pre' }}>00000000000000000000</span>
 
       <pre aria-hidden style={{ ...textStyle, color: 'var(--y-fg)', overflow: 'hidden' }}>
-        {tokens.map((tok, idx) => (<span key={idx} style={{ color: COLOR[tok.c] }}>{tok.t}</span>))}
+        {tokens.map((tok, idx) => (<span key={idx} style={{ color: PY_COLOR[tok.c] }}>{tok.t}</span>))}
       </pre>
 
       <textarea
