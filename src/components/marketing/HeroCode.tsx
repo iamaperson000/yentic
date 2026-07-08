@@ -5,21 +5,14 @@ import { useEffect, useRef, useState } from 'react';
 import { executeCode } from '@/lib/runners';
 import { highlightPython, PY_COLOR } from '@/lib/pyHighlight';
 
-// A friendly first-look snippet: a variable, a greeting, and a small loop.
-const INTRO = `# tweak me, then hit run
+// A dead-simple first-look snippet: a variable and a greeting.
+const INTRO = `# edit me, then hit run
 name = "world"
-print("hello, " + name)
-
-for i in range(1, 5):
-    print(i, "squared is", i * i)`;
+print("hello, " + name)`;
 
 // The real output of INTRO — shown as an on-load preview so the panel isn't a
 // dead screenshot. Any edit clears it; Run executes whatever's in the editor.
-const EXPECTED = `hello, world
-1 squared is 1
-2 squared is 4
-3 squared is 9
-4 squared is 16`;
+const EXPECTED = `hello, world`;
 
 type State =
   | { kind: 'idle' }
@@ -90,7 +83,7 @@ export default function HeroCode() {
       </div>
 
       {/* editable code: transparent textarea over a highlighted layer */}
-      <div className="relative" style={{ minHeight: PAD_Y * 2 + LINE * Math.max(rows, 6) }}>
+      <div className="relative" style={{ minHeight: PAD_Y * 2 + LINE * Math.max(rows, 4) }}>
         <pre aria-hidden style={{ ...textStyle, color: 'var(--y-fg)', overflow: 'auto' }}>
           {tokens.map((tok, idx) => (<span key={idx} style={{ color: PY_COLOR[tok.c] }}>{tok.t}</span>))}
         </pre>
