@@ -11,7 +11,8 @@ function LandingHome() {
       style={{ color: 'var(--y-fg)', background: 'var(--y-ink)', borderBottom: '1px solid var(--y-line)' }}
     >
         {/* hero */}
-        <div className="min-w-0 px-6 py-10 sm:px-[52px] sm:py-[52px]">
+        <div className="grid items-center gap-10 px-6 py-10 sm:px-[52px] sm:py-[52px] lg:grid-cols-[1fr_minmax(0,520px)]">
+          <div className="min-w-0">
             <h1
               className="font-[family-name:var(--font-display)] text-[clamp(34px,6vw,60px)] font-extrabold leading-[1.0] tracking-[-0.035em]"
               style={{ maxWidth: '16ch' }}
@@ -48,8 +49,9 @@ function LandingHome() {
                 See what it does
               </Link>
             </div>
+          </div>
 
-            <HeroCode />
+          <HeroCode />
         </div>
     </div>
     <HomeSections />

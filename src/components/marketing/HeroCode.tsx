@@ -65,7 +65,7 @@ export default function HeroCode() {
   const rows = code.split('\n').length;
 
   return (
-    <div className="mt-10 min-w-0 overflow-hidden rounded-[11px] border" style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}>
+    <div className="min-w-0 overflow-hidden rounded-[11px] border" style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}>
       <div
         className="flex items-center justify-between border-b px-[15px] py-2 font-[family-name:var(--font-mono-code)] text-[11.5px]"
         style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
