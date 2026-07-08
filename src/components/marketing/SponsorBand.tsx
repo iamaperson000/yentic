@@ -15,7 +15,7 @@ export default function SponsorBand() {
           target="_blank"
           rel="noreferrer"
           className="inline-flex rounded-[12px] border px-7 py-4 transition hover:opacity-90"
-          style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
+          style={{ borderColor: 'var(--y-line)', background: '#0b0910' }}
           aria-label="Liveblocks"
         >
           <Image

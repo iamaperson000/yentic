@@ -69,9 +69,9 @@ function Panel({ tab, right, children }: { tab: string; right?: React.ReactNode;
 
 export default function HomeSections() {
   return (
-    <div>
+    <div className="mx-auto max-w-[1180px]">
       {/* ── no setup ──────────────────────────────────────────── */}
-      <section className="grid items-start gap-10 py-16 sm:py-20 lg:grid-cols-[1fr_minmax(0,440px)]">
+      <section className="grid items-center gap-10 py-16 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
         <div>
           <Eyebrow>no setup</Eyebrow>
           <Heading>It runs where you opened it.</Heading>
@@ -99,7 +99,7 @@ export default function HomeSections() {
       </section>
 
       {/* ── collaboration ─────────────────────────────────────── */}
-      <section className="grid items-start gap-10 border-t py-16 sm:py-20 lg:grid-cols-[1fr_minmax(0,440px)]" style={{ borderColor: 'var(--y-line)' }}>
+      <section className="grid items-start gap-10 border-t py-16 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]" style={{ borderColor: 'var(--y-line)' }}>
         <div>
           <Eyebrow>edit together</Eyebrow>
           <Heading>Two people, one file.</Heading>
@@ -114,7 +114,7 @@ export default function HomeSections() {
       </section>
 
       {/* ── sharing (centered, echoes the hero highlight once) ──── */}
-      <section className="flex flex-col items-center border-t py-16 text-center sm:py-20" style={{ borderColor: 'var(--y-line)' }}>
+      <section className="flex flex-col items-center border-t py-12 text-center sm:py-16" style={{ borderColor: 'var(--y-line)' }}>
         <Eyebrow>share it</Eyebrow>
         <Heading>
           Every project is a{' '}
@@ -128,7 +128,7 @@ export default function HomeSections() {
           whoever opens it lands in the same workspace, running code included.
         </p>
         <div
-          className="mt-8 flex w-full max-w-[420px] items-center gap-3 rounded-[10px] border px-4 py-3 text-left font-[family-name:var(--font-mono-code)] text-[13px]"
+          className="mt-8 flex w-full max-w-[460px] items-center gap-3 rounded-[11px] border px-4 py-3 text-left font-[family-name:var(--font-mono-code)] text-[13px]"
           style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel2)' }}
         >
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--y-muted)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">

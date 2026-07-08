@@ -21,8 +21,8 @@ type State =
   | { kind: 'error'; text: string };
 
 const PAD_X = 20;
-const PAD_Y = 18;
-const LINE = 22;
+const PAD_Y = 16;
+const LINE = 24;
 
 const textStyle: React.CSSProperties = {
   margin: 0,
@@ -67,7 +67,7 @@ export default function HeroCode() {
   return (
     <div className="min-w-0 overflow-hidden rounded-[11px] border" style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}>
       <div
-        className="flex items-center justify-between border-b px-[15px] py-2 font-[family-name:var(--font-mono-code)] text-[11.5px]"
+        className="flex items-center justify-between border-b px-4 py-2 font-[family-name:var(--font-mono-code)] text-[11.5px]"
         style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
       >
         <span>main.py</span>

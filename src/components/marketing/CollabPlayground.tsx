@@ -11,7 +11,7 @@ print(greet("team"))`;
 
 const PAD_X = 20;
 const PAD_Y = 16;
-const LINE = 26; // px, matches font-size 13 / line-height 2
+const LINE = 24; // px, shared with HeroCode so the editor panels match
 const CHAR = 7.83; // px width of one monospace glyph at 13px (measured, refined on mount)
 
 type Step =

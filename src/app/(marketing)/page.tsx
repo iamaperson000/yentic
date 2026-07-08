@@ -11,7 +11,7 @@ function LandingHome() {
       style={{ color: 'var(--y-fg)', background: 'var(--y-ink)', borderBottom: '1px solid var(--y-line)' }}
     >
         {/* hero */}
-        <div className="grid items-center gap-10 px-6 py-10 sm:px-[52px] sm:py-[52px] lg:grid-cols-[1fr_minmax(0,520px)]">
+        <div className="mx-auto grid max-w-[1180px] items-center gap-10 px-6 py-10 sm:py-[52px] lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
           <div className="min-w-0">
             <h1
               className="font-[family-name:var(--font-display)] text-[clamp(34px,6vw,60px)] font-extrabold leading-[1.0] tracking-[-0.035em]"
