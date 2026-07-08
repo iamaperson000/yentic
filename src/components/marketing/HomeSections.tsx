@@ -1,11 +1,12 @@
 import Link from 'next/link';
 
 const languages = [
-  { name: 'Python', tint: 'var(--color-tint-python)', note: 'real CPython, via Pyodide' },
-  { name: 'Web', tint: 'var(--color-tint-web)', note: 'HTML, CSS & JS, live preview' },
-  { name: 'C', tint: 'var(--color-tint-c)', note: 'interpreted in the browser' },
-  { name: 'C++', tint: 'var(--color-tint-cpp)', note: 'interpreted in the browser' },
-  { name: 'Java', tint: 'var(--color-tint-java)', note: 'compiled to JS, in the browser' },
+  { name: 'Python', tint: '#8ee06f' },
+  { name: 'JavaScript', tint: '#e0af68' },
+  { name: 'HTML / CSS', tint: '#e5896b' },
+  { name: 'C', tint: '#79c0ff' },
+  { name: 'C++', tint: '#c9a2ff' },
+  { name: 'Java', tint: '#ff8489' },
 ];
 
 function Eyebrow({ children }: { children: string }) {
@@ -45,30 +46,26 @@ export default function HomeSections() {
       {/* ── execution ─────────────────────────────────────────── */}
       <section className="grid items-center gap-10 border-t py-16 sm:py-20 lg:grid-cols-[1fr_minmax(0,440px)]" style={{ borderColor: 'var(--y-line)' }}>
         <div>
-          <Eyebrow>runs in the browser</Eyebrow>
+          <Eyebrow>no setup</Eyebrow>
           <Heading>It runs where you opened it.</Heading>
           <Body>
-            No build server to wait on, nothing to install. Python runs on real CPython through
-            Pyodide, web projects render in a preview that reloads as you type, and C, C++, and Java
-            run client-side too. The tab you&rsquo;re reading this in can already do all of it.
+            Nothing to install, nothing to configure. Open a tab and you already have an editor, a
+            live preview, and a run button — press it and the output shows up right there. The
+            languages you actually use are ready to go:
           </Body>
         </div>
-        <ul
-          className="overflow-hidden rounded-[11px] border font-[family-name:var(--font-mono-code)] text-[13px]"
-          style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
-        >
-          {languages.map((lang, i) => (
-            <li
+        <div className="flex flex-wrap gap-2.5">
+          {languages.map((lang) => (
+            <span
               key={lang.name}
-              className="flex items-center gap-3 px-4 py-3"
-              style={{ borderTop: i === 0 ? 'none' : '1px solid var(--y-line)' }}
+              className="inline-flex items-center gap-2 rounded-full border px-4 py-2 font-[family-name:var(--font-mono-code)] text-[13px]"
+              style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-fg)' }}
             >
-              <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: lang.tint }} />
-              <span style={{ color: 'var(--y-fg)' }}>{lang.name}</span>
-              <span className="ml-auto text-right" style={{ color: 'var(--y-muted)' }}>{lang.note}</span>
-            </li>
+              <span className="h-[9px] w-[9px] rounded-full" style={{ background: lang.tint }} />
+              {lang.name}
+            </span>
           ))}
-        </ul>
+        </div>
       </section>
 
       {/* ── collaboration ─────────────────────────────────────── */}
@@ -77,9 +74,9 @@ export default function HomeSections() {
           <Eyebrow>edit together</Eyebrow>
           <Heading>Two people, one file.</Heading>
           <Body>
-            Share a project and edit it at the same time — you see each other&rsquo;s cursors and every
-            keystroke as it lands. Same file, same output, no merge step. It&rsquo;s the engine behind the
-            live demo, which opens without an account.
+            Share a project and edit it together — you see each other&rsquo;s cursors and every keystroke
+            as it happens. Same file, same output, no waiting to sync. Try it yourself, no account
+            needed:
           </Body>
           <Link
             href="/collab-demo"
