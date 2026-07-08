@@ -11,17 +11,14 @@ const languages = [
 
 function Eyebrow({ children }: { children: string }) {
   return (
-    <p
-      className="font-[family-name:var(--font-mono-code)] text-[13px]"
-      style={{ color: 'var(--y-brand)' }}
-    >
+    <p className="font-[family-name:var(--font-mono-code)] text-[13px]" style={{ color: 'var(--y-brand)' }}>
       <span style={{ color: 'var(--y-muted)' }}>{'// '}</span>
       {children}
     </p>
   );
 }
 
-function Heading({ children }: { children: string }) {
+function Heading({ children }: { children: React.ReactNode }) {
   return (
     <h2
       className="mt-3 font-[family-name:var(--font-display)] text-[clamp(26px,3.6vw,38px)] font-extrabold leading-[1.05] tracking-[-0.03em]"
@@ -40,11 +37,39 @@ function Body({ children }: { children: React.ReactNode }) {
   );
 }
 
+function MonoLink({ href, children }: { href: string; children: string }) {
+  return (
+    <Link
+      href={href}
+      className="mt-6 inline-flex items-center gap-1.5 font-[family-name:var(--font-mono-code)] text-[14px] font-semibold"
+      style={{ color: 'var(--y-brand)' }}
+    >
+      {children} <span aria-hidden>→</span>
+    </Link>
+  );
+}
+
+// A framed editor-style panel: bordered, with a mono header/tab bar.
+function Panel({ tab, right, children }: { tab: string; right?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-[11px] border" style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}>
+      <div
+        className="flex items-center justify-between border-b px-4 py-2 font-[family-name:var(--font-mono-code)] text-[11.5px]"
+        style={{ borderColor: 'var(--y-line)', color: 'var(--y-muted)' }}
+      >
+        <span>{tab}</span>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function HomeSections() {
   return (
-    <div className="mt-4">
-      {/* ── execution ─────────────────────────────────────────── */}
-      <section className="grid items-center gap-10 border-t py-16 sm:py-20 lg:grid-cols-[1fr_minmax(0,440px)]" style={{ borderColor: 'var(--y-line)' }}>
+    <div>
+      {/* ── no setup ──────────────────────────────────────────── */}
+      <section className="grid items-start gap-10 py-16 sm:py-20 lg:grid-cols-[1fr_minmax(0,440px)]">
         <div>
           <Eyebrow>no setup</Eyebrow>
           <Heading>It runs where you opened it.</Heading>
@@ -53,23 +78,26 @@ export default function HomeSections() {
             live preview, and a run button — press it and the output shows up right there. The
             languages you actually use are ready to go:
           </Body>
+          <MonoLink href="/ide">try it in the IDE</MonoLink>
         </div>
-        <div className="flex flex-wrap gap-2.5">
-          {languages.map((lang) => (
-            <span
-              key={lang.name}
-              className="inline-flex items-center gap-2 rounded-full border px-4 py-2 font-[family-name:var(--font-mono-code)] text-[13px]"
-              style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)', color: 'var(--y-fg)' }}
-            >
-              <span className="h-[9px] w-[9px] rounded-full" style={{ background: lang.tint }} />
-              {lang.name}
-            </span>
-          ))}
-        </div>
+        <Panel tab="languages">
+          <div className="flex flex-wrap gap-2.5 p-5">
+            {languages.map((lang) => (
+              <span
+                key={lang.name}
+                className="inline-flex items-center gap-2 rounded-full border px-4 py-2 font-[family-name:var(--font-mono-code)] text-[13px]"
+                style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel2)', color: 'var(--y-fg)' }}
+              >
+                <span className="h-[9px] w-[9px] rounded-full" style={{ background: lang.tint }} />
+                {lang.name}
+              </span>
+            ))}
+          </div>
+        </Panel>
       </section>
 
       {/* ── collaboration ─────────────────────────────────────── */}
-      <section className="grid items-center gap-10 border-t py-16 sm:py-20 lg:grid-cols-[1fr_minmax(0,440px)]" style={{ borderColor: 'var(--y-line)' }}>
+      <section className="grid items-start gap-10 border-t py-16 sm:py-20 lg:grid-cols-[1fr_minmax(0,440px)]" style={{ borderColor: 'var(--y-line)' }}>
         <div>
           <Eyebrow>edit together</Eyebrow>
           <Heading>Two people, one file.</Heading>
@@ -78,40 +106,54 @@ export default function HomeSections() {
             as it happens. Same file, same output, no waiting to sync. Try it yourself, no account
             needed:
           </Body>
-          <Link
-            href="/collab-demo"
-            className="mt-6 inline-flex items-center gap-1.5 font-[family-name:var(--font-mono-code)] text-[14px] font-semibold"
-            style={{ color: 'var(--y-brand)' }}
-          >
-            open the live demo <span aria-hidden>→</span>
-          </Link>
+          <MonoLink href="/collab-demo">open the live demo</MonoLink>
         </div>
-        <div
-          className="rounded-[11px] border p-5 font-[family-name:var(--font-mono-code)] text-[13px] leading-[2]"
-          style={{ borderColor: 'var(--y-line)', background: 'var(--y-panel)' }}
+        <Panel
+          tab="greet.py"
+          right={
+            <span className="flex items-center gap-1.5">
+              <span className="h-[7px] w-[7px] rounded-full" style={{ background: 'var(--y-str)' }} />
+              2 online
+            </span>
+          }
         >
-          <div style={{ color: 'var(--y-fg)' }}>
-            <span style={{ color: 'var(--y-kw)' }}>def</span>{' '}
-            <span style={{ color: 'var(--y-fn)' }}>greet</span>(name):
+          <div className="px-5 py-4 font-[family-name:var(--font-mono-code)] text-[13px] leading-[2]">
+            <div style={{ color: 'var(--y-fg)' }}>
+              <span style={{ color: 'var(--y-kw)' }}>def</span>{' '}
+              <span style={{ color: 'var(--y-fn)' }}>greet</span>(name):
+            </div>
+            <div style={{ color: 'var(--y-fg)', paddingLeft: '2ch' }}>
+              <span style={{ color: 'var(--y-kw)' }}>return</span>{' '}
+              <span style={{ color: 'var(--y-str)' }}>f&quot;welcome, {'{'}name{'}'}&quot;</span>
+              <span className="ml-0.5 inline-block h-[1.05em] w-[2px] align-[-0.2em]" style={{ background: 'var(--y-brand)' }} />
+              <span className="ml-1 rounded px-1.5 py-0.5 text-[11px]" style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}>you</span>
+            </div>
+            <div style={{ color: 'var(--y-fg)' }}>
+              <span style={{ color: 'var(--y-fn)' }}>print</span>(<span style={{ color: 'var(--y-fn)' }}>greet</span>(<span style={{ color: 'var(--y-str)' }}>&quot;team&quot;</span>))
+              <span className="ml-0.5 inline-block h-[1.05em] w-[2px] align-[-0.2em]" style={{ background: 'var(--y-str)' }} />
+              <span className="ml-1 rounded px-1.5 py-0.5 text-[11px]" style={{ background: 'var(--y-str)', color: 'var(--y-statfg)' }}>ana</span>
+            </div>
           </div>
-          <div className="relative" style={{ color: 'var(--y-fg)', paddingLeft: '2ch' }}>
-            <span style={{ color: 'var(--y-kw)' }}>return</span>{' '}
-            <span style={{ color: 'var(--y-str)' }}>f&quot;welcome, {'{'}name{'}'}&quot;</span>
-            <span className="ml-0.5 inline-block h-[1.05em] w-[2px] align-[-0.2em]" style={{ background: 'var(--y-brand)' }} />
-            <span className="ml-1 rounded px-1.5 py-0.5 text-[11px]" style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}>you</span>
+          <div
+            className="flex items-center gap-2 border-t px-4 py-2 font-[family-name:var(--font-mono-code)] text-[11px]"
+            style={{ borderColor: 'var(--y-line)', background: 'var(--y-console-bg)', color: 'var(--y-muted)' }}
+          >
+            <span className="h-[6px] w-[6px] rounded-full" style={{ background: 'var(--y-str)' }} />
+            live · synced
           </div>
-          <div className="relative" style={{ color: 'var(--y-fg)' }}>
-            <span style={{ color: 'var(--y-fn)' }}>print</span>(<span style={{ color: 'var(--y-fn)' }}>greet</span>(<span style={{ color: 'var(--y-str)' }}>&quot;team&quot;</span>))
-            <span className="ml-0.5 inline-block h-[1.05em] w-[2px] align-[-0.2em]" style={{ background: 'var(--y-str)' }} />
-            <span className="ml-1 rounded px-1.5 py-0.5 text-[11px]" style={{ background: 'var(--y-str)', color: 'var(--y-statfg)' }}>ana</span>
-          </div>
-        </div>
+        </Panel>
       </section>
 
-      {/* ── sharing (centered, to break the two-column rhythm) ──── */}
+      {/* ── sharing (centered, echoes the hero highlight once) ──── */}
       <section className="flex flex-col items-center border-t py-16 text-center sm:py-20" style={{ borderColor: 'var(--y-line)' }}>
         <Eyebrow>share it</Eyebrow>
-        <Heading>Every project is a URL.</Heading>
+        <Heading>
+          Every project is a{' '}
+          <span className="whitespace-nowrap rounded-[5px] px-2" style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}>
+            URL
+          </span>
+          .
+        </Heading>
         <p className="mt-4 max-w-[52ch] text-[16px] leading-[1.65]" style={{ color: 'var(--y-muted)' }}>
           Press share and you get a link. Drop it in a message, a pull request, a class assignment —
           whoever opens it lands in the same workspace, running code included.
