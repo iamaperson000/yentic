@@ -1,8 +1,8 @@
 export const site = {
-  name: 'Yentic',
-  marketingUrl: 'https://yentic.com',
-  contactEmail: 'hello@yentic.com',
-  githubUrl: 'https://github.com/iamaperson000/yentic'
+  name: 'All in the Tab',
+  marketingUrl: 'https://allinthetab.com',
+  contactEmail: 'hello@allinthetab.com',
+  githubUrl: 'https://github.com/allinthetab/allinthetab'
 } as const;
 
 export type SiteConfig = typeof site;

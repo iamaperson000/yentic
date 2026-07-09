@@ -12,7 +12,7 @@ const body = Hanken_Grotesk({ subsets: ['latin'], weight: ['400', '500', '600'],
 const monoCode = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '500', '700'], variable: '--font-mono-code' });
 
 export const metadata: Metadata = {
-  title: 'Yentic — a real IDE that runs in your browser',
+  title: 'All in the Tab — a real IDE in your browser',
   description: 'Write, run, and share code — all in a browser tab. Python, C, C++, Java, and web, no install.',
   metadataBase: new URL(process.env.NEXTAUTH_URL ?? 'http://localhost:3000'),
 };

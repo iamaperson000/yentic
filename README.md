@@ -1,6 +1,6 @@
-# Yentic
+# All in the Tab
 
-Yentic is a browser-based IDE built with Next.js, Monaco, Prisma, NextAuth, and Yjs over Liveblocks. It includes project persistence, shareable project links, collaborative editing primitives, and a small Pusher-backed chat demo.
+All in the Tab is a browser-based IDE built with Next.js, Monaco, Prisma, NextAuth, and Yjs over Liveblocks. It includes project persistence, shareable project links, collaborative editing primitives, and a small Pusher-backed chat demo.
 
 ## Features
 
