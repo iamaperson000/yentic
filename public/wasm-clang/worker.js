@@ -446,9 +446,12 @@ class Engine {
     reportPhase('compiling');
     const input = language === 'c' ? 'main.c' : 'main.cc';
     this.memfs.addFile(input, source);
+    const langArgs = language === 'c'
+      ? ['-x', 'c', '-std=c11']
+      : ['-x', 'c++', '-std=c++17'];
     const compileExit = await this.runCommand(
       clang, 'clang', '-cc1', '-emit-obj', ...CLANG_COMMON_ARGS,
-      '-O0', '-o', 'main.o', '-x', language === 'c' ? 'c' : 'c++', input
+      '-O0', '-o', 'main.o', ...langArgs, input
     );
     if (compileExit !== 0) {
       return { stdout: '', stderr: this.stderr.trim() || `Compilation failed (exit ${compileExit}).` };
