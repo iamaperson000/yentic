@@ -76,7 +76,7 @@ export default function SiteFooter() {
         </span>
         <span>main</span>
         <span>UTF-8</span>
-        <span className="ml-auto" style={{ color: 'var(--y-brand)' }}>yentic</span>
+        <span className="ml-auto" style={{ color: 'var(--y-brand)' }}>all in the tab</span>
       </div>
     </footer>
   );

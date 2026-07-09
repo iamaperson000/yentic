@@ -53,7 +53,7 @@ export default function SignUpPage() {
               className="mt-4 font-[family-name:var(--font-display)] text-[clamp(30px,4.5vw,48px)] font-extrabold leading-[1.03] tracking-[-0.035em]"
               style={{ color: 'var(--y-fg)' }}
             >
-              Join Yentic and start building.
+              Join All in the Tab and start building.
             </h1>
             <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.6]" style={{ color: 'var(--y-muted)' }}>
               Sign in with Google to set up your workspace and pick up your projects from any browser.

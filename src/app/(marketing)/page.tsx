@@ -16,8 +16,7 @@ function LandingHome() {
         <div className="relative z-[2] mx-auto flex min-h-[94vh] max-w-[900px] flex-col items-center px-6 pt-[19vh] pb-16 text-center">
           <p className="font-[family-name:var(--font-mono-code)] text-[13px] uppercase tracking-[0.28em]" style={{ color: 'var(--y-brand)' }}>
             WRITE IT <span style={{ color: 'rgba(236,231,222,.35)' }}>·</span> RUN IT{' '}
-            <span style={{ color: 'rgba(236,231,222,.35)' }}>·</span> SHARE IT{' '}
-            <span style={{ color: 'rgba(236,231,222,.35)' }}>·</span> ALL IN THE TAB
+            <span style={{ color: 'rgba(236,231,222,.35)' }}>·</span> SHARE IT
           </p>
           <h1
             className="mt-7 font-[family-name:var(--font-display)] text-[clamp(44px,6.5vw,84px)] font-extrabold leading-[1.0] tracking-[-0.035em]"

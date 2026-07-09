@@ -55,7 +55,7 @@ export default function RoadmapPage() {
       <AnimateIn delay={0}>
         <PageHero
           eyebrow="roadmap"
-          title="Where Yentic is headed."
+          title="What's next for All in the Tab."
           lead="Autosave and multiplayer are the next milestones. After that, server-side execution for more languages."
         />
       </AnimateIn>

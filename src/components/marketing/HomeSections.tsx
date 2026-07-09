@@ -135,7 +135,7 @@ export default function HomeSections() {
             <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" />
             <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
           </svg>
-          <span style={{ color: 'var(--y-fg)' }}>yentic.com/p/3f9a2c</span>
+          <span style={{ color: 'var(--y-fg)' }}>allinthetab.com/p/3f9a2c</span>
           <span
             className="ml-auto rounded-md px-2.5 py-1 text-[12px] font-semibold"
             style={{ background: 'var(--y-brand)', color: 'var(--y-statfg)' }}

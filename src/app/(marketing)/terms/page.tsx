@@ -9,22 +9,22 @@ const sections = [
   {
     title: '1. Acceptance of terms',
     body:
-      'By creating a Yentic account or using the platform, you agree to these Terms & Conditions. If you do not agree, please discontinue use.'
+      'By creating an All in the Tab account or using the platform, you agree to these Terms & Conditions. If you do not agree, please discontinue use.'
   },
   {
     title: '2. Eligibility and accounts',
     body:
-      'You must be at least 13 years old to use Yentic. Keep login credentials secure and notify us immediately if unauthorized access is suspected.'
+      'You must be at least 13 years old to use All in the Tab. Keep login credentials secure and notify us immediately if unauthorized access is suspected.'
   },
   {
     title: '3. Acceptable use',
     body:
-      'Use Yentic responsibly. Do not deploy harmful code, infringe intellectual property, violate rights of others, or engage in illegal or malicious activity.'
+      'Use All in the Tab responsibly. Do not deploy harmful code, infringe intellectual property, violate rights of others, or engage in illegal or malicious activity.'
   },
   {
     title: '4. Intellectual property',
     body:
-      'You retain ownership of projects you build. By uploading content, you grant Yentic a limited license to host, process, and display that content to operate the service.'
+      'You retain ownership of projects you build. By uploading content, you grant All in the Tab a limited license to host, process, and display that content to operate the service.'
   },
   {
     title: '5. Termination',

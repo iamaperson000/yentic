@@ -48,7 +48,7 @@ const vign: CSSProperties = {
 };
 
 /**
- * The B4 hero atmosphere: Yentic's own syntax-highlighted code blurred into a
+ * The B4 hero atmosphere: the site's own syntax-highlighted code blurred into a
  * warm glow field (our palette, not a borrowed gradient). Purely decorative.
  * Styles are inline so they aren't affected by CSS-layer stripping in dev.
  */

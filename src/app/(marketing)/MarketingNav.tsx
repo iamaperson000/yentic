@@ -40,7 +40,7 @@ export default function MarketingNav({ links }: { links: NavLink[] }) {
             style={{ color: 'var(--y-fg)' }}
           >
             <span className="h-[15px] w-[15px] rounded-[4px]" style={{ background: 'var(--y-brand)' }} />
-            yentic
+            all in the tab
           </Link>
 
           <div className="hidden items-center gap-1 md:flex">
