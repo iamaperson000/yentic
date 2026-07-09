@@ -133,7 +133,7 @@ const webStarter: ProjectFileMap = {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Yentic Starter</title>
+    <title>All in the Tab Starter</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -152,7 +152,7 @@ button{background:#1a8b5e;color:#fff;border:0;padding:.6rem 1rem;border-radius:1
   'index.js': {
     path: 'index.js',
     language: 'javascript',
-    code: "import './styles.css';\n\nfunction mount() {\n  const app = document.getElementById('app');\n  if (!app) return;\n  app.innerHTML =\n    '<h1>Yentic</h1><p>A classic-feeling web IDE without the bloat.</p><button id=\"btn\">Click me</button><pre id=\"out\"></pre>';\n  const button = document.getElementById('btn');\n  const output = document.getElementById('out');\n  if (button && output) {\n    button.addEventListener('click', () => {\n      const now = new Date().toLocaleTimeString();\n      output.textContent += '\\nClicked at ' + now;\n    });\n  }\n}\n\nif (document.readyState === 'loading') {\n  document.addEventListener('DOMContentLoaded', mount);\n} else {\n  mount();\n}\n"
+    code: "import './styles.css';\n\nfunction mount() {\n  const app = document.getElementById('app');\n  if (!app) return;\n  app.innerHTML =\n    '<h1>All in the Tab</h1><p>Edit index.js, then click Run.</p><button id=\"btn\">Click me</button><pre id=\"out\"></pre>';\n  const button = document.getElementById('btn');\n  const output = document.getElementById('out');\n  if (button && output) {\n    button.addEventListener('click', () => {\n      const now = new Date().toLocaleTimeString();\n      output.textContent += '\\nClicked at ' + now;\n    });\n  }\n}\n\nif (document.readyState === 'loading') {\n  document.addEventListener('DOMContentLoaded', mount);\n} else {\n  mount();\n}\n"
   }
 };
 
@@ -160,7 +160,7 @@ const pythonStarter: ProjectFileMap = {
   'main.py': {
     path: 'main.py',
     language: 'python',
-    code: '# main.py\n"""Start building with Python in Yentic."""\n\nif __name__ == "__main__":\n    print("Hello from Yentic 👋")\n'
+    code: '# main.py\n"""Start building with Python."""\n\nif __name__ == "__main__":\n    print("Hello from All in the Tab!")\n'
   }
 };
 
@@ -168,7 +168,7 @@ const cStarter: ProjectFileMap = {
   'main.c': {
     path: 'main.c',
     language: 'c',
-    code: '/* main.c */\n#include <stdio.h>\n\nint main(void) {\n    printf("Hello from Yentic!\\n");\n    return 0;\n}\n'
+    code: '/* main.c */\n#include <stdio.h>\n\nint main(void) {\n    printf("Hello from All in the Tab!\\n");\n    return 0;\n}\n'
   }
 };
 
@@ -176,7 +176,7 @@ const cppStarter: ProjectFileMap = {
   'main.cpp': {
     path: 'main.cpp',
     language: 'cpp',
-    code: `// main.cpp\n#include <iostream>\n\nint main() {\n    std::cout << "Hello from Yentic!" << std::endl;\n    return 0;\n}\n`
+    code: `// main.cpp\n#include <iostream>\n\nint main() {\n    std::cout << "Hello from All in the Tab!" << std::endl;\n    return 0;\n}\n`
   }
 };
 
@@ -184,7 +184,7 @@ const javaStarter: ProjectFileMap = {
   'Main.java': {
     path: 'Main.java',
     language: 'java',
-    code: '// Main.java\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello from Yentic!");\n    }\n}\n'
+    code: '// Main.java\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello from All in the Tab!");\n    }\n}\n'
   }
 };
 

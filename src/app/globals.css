@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ── Yentic editor-identity tokens (redesign) ── */
+/* ── Editor-identity tokens (redesign) ── */
 :root {
   --y-ink:#16141a; --y-panel:#1d1a22; --y-panel2:#221e28; --y-line:#2c2833;
   --y-fg:#ece7de; --y-muted:#847e74; --y-gnum:#4a4550;
@@ -61,7 +61,7 @@
 }
 
 .ide-shell {
-  /* Yentic Dusk IDE — warm, editor is the BRIGHTEST surface, side panels recede */
+  /* Dusk IDE — warm, editor is the BRIGHTEST surface, side panels recede */
   --ide-bg-app: #110f14;      /* rail / darkest */
   --ide-bg-elevated: #1a1820; /* top bar / tab strip */
   --ide-bg-panel: #16141a;    /* file explorer / preview canvas */
@@ -284,7 +284,7 @@ textarea {
   flex: 1 !important;
 }
 
-/* ── Yentic IDE skin — lifted verbatim from the approved mockup, scoped under .yide ── */
+/* ── IDE skin — lifted verbatim from the approved mockup, scoped under .yide ── */
 .yide{
   --rail:#100e13; --panel:#16141a; --panel2:#1b1922; --editor:#201c27; --topbar:#1a1820;
   --line:#2c2833; --line2:#39333f;
