@@ -1,5 +1,7 @@
-import JSCPP from 'JSCPP';
 import type { SupportedLanguage } from './project';
+import type { ProgressCallback } from './wasmClang';
+
+export type { RunPhase, ProgressCallback } from './wasmClang';
 
 const PYODIDE_URL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js';
 
@@ -112,247 +114,6 @@ function formatCPrintf(template: unknown, args: unknown[]): string {
   });
   const remaining = args.slice(index).map(value => String(value ?? ''));
   return remaining.length ? `${formatted} ${remaining.join(' ')}` : formatted;
-}
-
-function normalizeCFunctionParameters(params: string, options: { stripTypes?: boolean } = {}): string {
-  const trimmed = params.trim();
-  if (!trimmed || /^void\s*$/.test(trimmed)) {
-    return '';
-  }
-  if (options.stripTypes) {
-    return params.replace(/\b(int|float|double|long|short|char|bool)\s+/g, '').trim();
-  }
-  return trimmed;
-}
-
-function transpileCToJavaScript(source: string): string {
-  let code = source;
-  code = code.replace(/#include[^\n]*\n/g, '\n');
-  code = code.replace(/\btypedef\b[^;]*;/g, '');
-  code = code.replace(/\bunsigned\s+/g, '');
-  code = code.replace(/\bconst\s+(?=(int|float|double|long|short|char|bool)\b)/g, 'const ');
-  code = code.replace(/\b(int|float|double|long|short|char|bool)\s+\*/g, 'let ');
-  code = code.replace(/\b(void|int|float|double|long|short|char|bool)\s+([A-Za-z_][\w]*)\s*\(([^)]*)\)/g, (_match, _type, name, params) => {
-    if (name === 'main') {
-      return `function main(${normalizeCFunctionParameters(params)})`;
-    }
-    const updatedParams = normalizeCFunctionParameters(params, { stripTypes: true });
-    return `function ${name}(${updatedParams})`;
-  });
-  code = code.replace(/\b(int|float|double|long|short|char|bool)\s+([A-Za-z_][\w]*)/g, 'let $2');
-  code = code.replace(/for\s*\(\s*int\s+/g, 'for (let ');
-  code = code.replace(/printf\s*\(([^)]*)\)\s*;/g, '__printC($1);');
-  code = code.replace(/puts\s*\(([^)]*)\)\s*;/g, "__printC($1, '\\n');");
-  code = code.replace(/putchar\s*\(([^)]*)\)\s*;/g, '__printChar($1);');
-  return code;
-}
-
-function normalizeCSourceForInterpreter(source: string): string {
-  return source.replace(/\(\s*void\s*\)/g, '()');
-}
-
-type ProcessStub = {
-  stdout?: {
-    write?: (chunk: string) => boolean;
-  };
-};
-
-function ensureProcessStdout(): () => void {
-  const globalObject = globalThis as Omit<typeof globalThis, 'process'> & {
-    process?: ProcessStub;
-  };
-  const existingProcess = globalObject.process;
-
-  if (!existingProcess) {
-    globalObject.process = { stdout: { write: () => true } };
-    return () => {
-      delete globalObject.process;
-    };
-  }
-
-  if (!existingProcess.stdout) {
-    existingProcess.stdout = { write: () => true };
-    return () => {
-      delete existingProcess.stdout;
-    };
-  }
-
-  if (typeof existingProcess.stdout.write !== 'function') {
-    const previousWrite = existingProcess.stdout.write;
-    existingProcess.stdout.write = () => true;
-    return () => {
-      if (previousWrite === undefined) {
-        delete existingProcess.stdout!.write;
-      } else {
-        existingProcess.stdout!.write = previousWrite;
-      }
-    };
-  }
-
-  return () => {};
-}
-
-function executeWithJscpp(
-  source: string,
-  stdin: string = '',
-  options: { normalizeVoid?: boolean } = {}
-): RunResult {
-  const restoreProcess = ensureProcessStdout();
-  const normalizedSource = options.normalizeVoid ? normalizeCSourceForInterpreter(source) : source;
-  let stdout = '';
-
-  try {
-    const exitCode = JSCPP.run(normalizedSource, stdin, {
-      stdio: {
-        write(chunk: string) {
-          stdout += chunk;
-          return true;
-        }
-      }
-    });
-
-    if (typeof exitCode === 'number' && exitCode !== 0) {
-      stdout += `Program exited with code ${exitCode}\n`;
-    }
-
-    return { stdout, stderr: '' };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const normalizedMessage = message.includes('Memory overflow')
-      ? 'Program terminated with a memory overflow. Provide any required stdin input or review pointer usage.'
-      : message;
-    return { stdout, stderr: normalizedMessage };
-  } finally {
-    restoreProcess();
-  }
-}
-
-function executeC(source: string, stdin: string = ''): RunResult {
-  return executeWithJscpp(source, stdin, { normalizeVoid: true });
-}
-
-function splitCppStream(body: string): string[] {
-  return body
-    .split(/<</)
-    .map(segment => segment.trim())
-    .filter(Boolean);
-}
-
-function convertCppStream(body: string, target: '__cout' | '__cerr'): string {
-  const segments = splitCppStream(body);
-  if (!segments.length) {
-    return `${target}();`;
-  }
-  const args = segments.map(segment => {
-    if (segment === '__ENDL' || segment === 'std::endl' || segment === 'endl') {
-      return '__ENDL';
-    }
-    return segment.replace(/^std::/, '');
-  });
-  return `${target}(${args.join(', ')});`;
-}
-
-function transpileCppToJavaScript(source: string): string {
-  let code = source;
-  code = code.replace(/#include[^\n]*\n/g, '\n');
-  code = code.replace(/using\s+namespace\s+std\s*;?/g, '');
-  code = code.replace(/\bconstexpr\s+/g, '');
-  code = code.replace(/\bstd::endl\b/g, '__ENDL');
-  code = code.replace(/std::cout\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cout'));
-  code = code.replace(/std::cerr\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cerr'));
-  code = code.replace(/\bcout\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cout'));
-  code = code.replace(/\bcerr\s*<<([^;]+);/g, (_match, body) => convertCppStream(body, '__cerr'));
-  code = code.replace(/\bstd::string\b/g, 'string');
-  code = code.replace(/\bstd::/g, '');
-  code = transpileCToJavaScript(code);
-  code = code.replace(/\bstring\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/\bvector<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/\barray<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/\bmap<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/\bset<[^>]+>\s+([A-Za-z_][\w]*)/g, 'let $1');
-  code = code.replace(/for\s*\(\s*(?:size_t|long\s+long)\s+/g, 'for (let ');
-  return code;
-}
-
-function executeCpp(source: string, stdin: string = ''): RunResult {
-  const interpreterResult = executeWithJscpp(source, stdin);
-  if (!interpreterResult.stderr || stdin.trim().length > 0 || /\bcin\b/.test(source)) {
-    return interpreterResult;
-  }
-
-  let transformed: string;
-  try {
-    transformed = transpileCppToJavaScript(source);
-  } catch (error) {
-    return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
-  }
-
-  const runtimeSource = [
-    `'use strict';`,
-    'const __output = [];',
-    'const __stderr = [];',
-    `const formatC = ${formatCPrintf.toString()};`,
-    'const __printC = (...args) => {',
-    '  const [first, ...rest] = args;',
-    '  const text = formatC(first, rest);',
-    '  __output.push(text);',
-    '};',
-    'const __printChar = value => {',
-    "  const character = typeof value === 'number' ? String.fromCharCode(value) : String(value ?? '');",
-    '  __output.push(character);',
-    '};',
-    'const __ENDL = Symbol.for("cpp.endl");',
-    'const __cout = (...args) => {',
-    '  args.forEach(arg => {',
-    '    if (arg === __ENDL) {',
-    "      __output.push('\\n');",
-    '      return;',
-    '    }',
-    "    __output.push(String(arg ?? ''));",
-    '  });',
-    '};',
-    'const __cerr = (...args) => {',
-    '  args.forEach(arg => {',
-    '    if (arg === __ENDL) {',
-    "      __stderr.push('\\n');",
-    '      return;',
-    '    }',
-    "    __stderr.push(String(arg ?? ''));",
-    '  });',
-    '};',
-    transformed,
-    "if (typeof main === 'function') {",
-    '  const exitCode = main();',
-    "  if (typeof exitCode === 'number' && exitCode !== 0) {",
-    "    __stderr.push(`Program exited with code ${exitCode}`);",
-    '  }',
-    '}',
-    'const __result = { stdout: __output.join(""), stderr: __stderr.join("") };',
-    'return __result;'
-  ].join('\n');
-
-  let runtime: () => unknown;
-  try {
-    runtime = new Function(runtimeSource) as () => unknown;
-  } catch (error) {
-    return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
-  }
-
-  try {
-    const outcome = runtime() as unknown;
-    if (
-      outcome &&
-      typeof outcome === 'object' &&
-      'stdout' in (outcome as Record<string, unknown>) &&
-      'stderr' in (outcome as Record<string, unknown>)
-    ) {
-      const { stdout, stderr } = outcome as { stdout: string; stderr: string };
-      return { stdout, stderr };
-    }
-    return { stdout: '', stderr: '' };
-  } catch (error) {
-    return { stdout: '', stderr: error instanceof Error ? error.message : String(error) };
-  }
 }
 
 const JAVA_SCANNER_RUNTIME = [
@@ -586,7 +347,8 @@ async function executePython(source: string): Promise<RunResult> {
 export async function executeCode(
   language: ExecutableLanguage,
   source: string,
-  stdin: string = ''
+  stdin: string = '',
+  onProgress?: ProgressCallback
 ): Promise<RunResult> {
   if (!supportedLanguages.has(language)) {
     throw new Error(`Unsupported language: ${language}`);
@@ -594,11 +356,9 @@ export async function executeCode(
   if (language === 'python') {
     return executePython(source);
   }
-  if (language === 'c') {
-    return executeC(source, stdin);
-  }
-  if (language === 'cpp') {
-    return executeCpp(source, stdin);
+  if (language === 'c' || language === 'cpp') {
+    const { compileAndRun } = await import('./wasmClang');
+    return compileAndRun(language, source, stdin, onProgress);
   }
   if (language === 'java') {
     return executeJava(source, stdin);
