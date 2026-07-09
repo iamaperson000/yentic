@@ -40,9 +40,14 @@ const nextConfig: NextConfig = {
       { source: "/ide/:path*", headers: isolationHeaders },
       { source: "/ide", headers: isolationHeaders },
       { source: "/project/:path*", headers: isolationHeaders },
-      // The SDK's worker script must itself carry COEP to join the
-      // cross-origin-isolated context and receive the shared memory.
-      { source: "/wasmer-sdk/:path*", headers: isolationHeaders },
+      // The toolchain binaries never change within a deploy (worker.js does,
+      // so it keeps default revalidation) — cache them hard.
+      {
+        source: "/wasm-clang/:file(clang|lld|memfs|sysroot\\.tar)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
       {
         source: `/:workspaceId((?!(?:${nonWorkspaceTopLevel})$).+)`,
         headers: isolationHeaders,
