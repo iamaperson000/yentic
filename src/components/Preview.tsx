@@ -13,7 +13,7 @@ import { clsx } from 'clsx';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { SupportedLanguage } from '@/lib/project';
-import { executeCode, type ExecutableLanguage } from '@/lib/runners';
+import { executeCode, type ExecutableLanguage, type RunPhase } from '@/lib/runners';
 
 type PreviewMode = 'sandpack' | 'code' | 'message' | 'runtime';
 
@@ -55,6 +55,7 @@ function RuntimePreview({
   const [stderr, setStderr] = useState<string>('');
   const [status, setStatus] = useState<RuntimeStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [phase, setPhase] = useState<RunPhase | null>(null);
   const runId = useRef(0);
   const lastProcessedRun = useRef<number>(0);
   const lastExecutedSource = useRef<string>('');
@@ -86,13 +87,17 @@ function RuntimePreview({
       });
       const timeout = window.setTimeout(async () => {
         try {
-          const result = await executeCode(normalizedLanguage, trimmed, '');
+          const result = await executeCode(normalizedLanguage, trimmed, '', nextPhase => {
+            if (runId.current === nextId) setPhase(nextPhase);
+          });
           if (runId.current !== nextId) return;
+          setPhase(null);
           setStdout(result.stdout);
           setStderr(result.stderr);
           setStatus(result.stderr ? 'error' : 'ready');
         } catch (error) {
           if (runId.current !== nextId) return;
+          setPhase(null);
           setStatus('error');
           setStdout('');
           setStderr('');
@@ -131,14 +136,25 @@ function RuntimePreview({
   const computedStatus: RuntimeStatus = !isRunnable ? 'error' : status;
   const displayStdout = isRunnable ? stdout : '';
   const displayStderr = isRunnable ? stderr : '';
+  const runningLabel =
+    phase === 'downloading'
+      ? 'Downloading the C/C++ compiler \u2014 one-time, ~30 MB\u2026'
+      : phase === 'compiling'
+        ? 'Compiling\u2026'
+        : 'Executing\u2026';
   const hint = !isRunnable
     ? 'Select a runnable file to see output.'
     : computedStatus === 'running'
-      ? 'Executing\u2026'
+      ? runningLabel
       : errorMessage || 'Press Run to execute your program.';
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-[var(--ide-bg-panel)]">
+      {computedStatus === 'running' && (displayStdout || displayStderr) ? (
+        <div className="animate-pulse border-b border-[var(--ide-border)] bg-[var(--ide-bg-elevated)] px-4 py-1.5 text-[11px] text-[var(--ide-text-muted)]">
+          {runningLabel}
+        </div>
+      ) : null}
       <div
         ref={scrollRef}
         data-testid="runtime-output"
