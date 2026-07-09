@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { site } from '@/config/site';
 import { workspaceList } from '@/lib/project';
 
 const languageIcons: Record<string, ReactNode> = {
@@ -80,7 +81,7 @@ export default function WorkspacePicker() {
           >
             ← back to home
           </Link>
-          <span className="flex items-center gap-2" style={{ color: 'var(--y-brand)' }}>yentic ide</span>
+          <span className="flex items-center gap-2" style={{ color: 'var(--y-brand)' }}>all in the tab</span>
         </nav>
 
         {/* hero */}
@@ -173,7 +174,7 @@ export default function WorkspacePicker() {
 
             {/* fills the trailing grid cell + a real CTA */}
             <a
-              href="mailto:hello@yentic.com?subject=Language%20request"
+              href={`mailto:${site.contactEmail}?subject=Language%20request`}
               className="group flex min-h-[210px] flex-col justify-center gap-2 px-6 py-7 text-center sm:px-8"
               style={{ background: 'var(--y-ink)', color: 'var(--y-muted)' }}
             >
@@ -181,7 +182,7 @@ export default function WorkspacePicker() {
                 Need another language?
               </p>
               <p className="text-sm leading-[1.55]">
-                Tell us what to add — <span style={{ color: 'var(--y-brand)' }}>hello@yentic.com</span>
+                Tell us what to add — <span style={{ color: 'var(--y-brand)' }}>{site.contactEmail}</span>
               </p>
             </a>
           </div>
@@ -193,12 +194,12 @@ export default function WorkspacePicker() {
         >
           <p>
             Need another language? Let us know at{' '}
-            <a className="underline underline-offset-4" style={{ color: 'var(--y-brand)' }} href="mailto:hello@yentic.com">
-              hello@yentic.com
+            <a className="underline underline-offset-4" style={{ color: 'var(--y-brand)' }} href={`mailto:${site.contactEmail}`}>
+              {site.contactEmail}
             </a>
             .
           </p>
-          <span style={{ color: 'var(--y-brand)' }}>yentic ide</span>
+          <span style={{ color: 'var(--y-brand)' }}>all in the tab</span>
         </footer>
       </div>
     </div>

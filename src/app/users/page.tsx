@@ -69,7 +69,7 @@ export default async function UsersPage({
               className="mt-4 font-[family-name:var(--font-display)] text-[clamp(30px,4.5vw,48px)] font-extrabold leading-[1.03] tracking-[-0.035em]"
               style={{ color: 'var(--y-fg)' }}
             >
-              Discover builders across Yentic.
+              See who&apos;s building with All in the Tab.
             </h1>
             <p className="mt-4 text-[15px] leading-[1.6]" style={{ color: 'var(--y-muted)' }}>
               Search by name, username, or bio to find collaborators and explore profile pages.

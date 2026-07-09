@@ -1528,7 +1528,7 @@ export default function WorkspaceClient({
       <div className="topbar">
         <div className="tb-left">
           <Link href="/ide" data-testid="back-to-workspaces" onClick={handleBackToWorkspaces} className="brand" aria-label="Back to workspaces">
-            <span className="sq" />yentic
+            <span className="sq" />all in the tab
           </Link>
           <span className="proj">
             {'/ '}
