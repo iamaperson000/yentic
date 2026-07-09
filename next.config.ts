@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 // signup (Google OAuth), and collab pages must keep default headers.
 const isolationHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-  { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
+  { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
 ];
 
 // Top-level pages that must NOT get isolation headers (the workspace route
@@ -40,6 +40,9 @@ const nextConfig: NextConfig = {
       { source: "/ide/:path*", headers: isolationHeaders },
       { source: "/ide", headers: isolationHeaders },
       { source: "/project/:path*", headers: isolationHeaders },
+      // The SDK's worker script must itself carry COEP to join the
+      // cross-origin-isolated context and receive the shared memory.
+      { source: "/wasmer-sdk/:path*", headers: isolationHeaders },
       {
         source: `/:workspaceId((?!(?:${nonWorkspaceTopLevel})$).+)`,
         headers: isolationHeaders,

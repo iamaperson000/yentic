@@ -4,7 +4,9 @@
   "private": true,
   "license": "GPL-3.0-only",
   "scripts": {
+    "predev": "node scripts/fetch-wasm-clang.mjs",
     "dev": "node server.js",
+    "prebuild": "node scripts/fetch-wasm-clang.mjs",
     "build": "next build",
     "start": "npm run dist && webpack serve --mode development",
     "dist": "webpack --mode production",
@@ -32,7 +34,6 @@
     "@prisma/client": "^6.19.2",
     "@tiptap/react": "^3.22.4",
     "@tiptap/starter-kit": "^3.22.4",
-    "@wasmer/sdk": "^0.10.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "express": "^5.2.1",

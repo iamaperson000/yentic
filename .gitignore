@@ -55,3 +55,9 @@ next-env.d.ts
 
 # visual brainstorming companion
 .superpowers/
+# wasm-clang toolchain binaries (fetched by scripts/fetch-wasm-clang.mjs;
+# worker.js in the same directory IS tracked)
+public/wasm-clang/clang
+public/wasm-clang/lld
+public/wasm-clang/memfs
+public/wasm-clang/sysroot.tar

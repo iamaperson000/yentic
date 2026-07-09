@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 test('local C workspace supports naming, file creation, execution, and local backup', async ({
   page,
 }) => {
+  test.setTimeout(300_000);
   await page.goto('/ide/c');
 
   const projectNameInput = page.getByTestId('project-name-input');
@@ -39,7 +40,10 @@ test('local C workspace supports naming, file creation, execution, and local bac
   await expect(page.getByTestId('editor-tab-main.c')).toHaveAttribute('data-state', 'active');
 
   await page.getByTestId('preview-run-button').click();
-  await expect(page.getByTestId('runtime-output')).toContainText('Hello from Yentic!');
+  // First C run downloads the ~30MB clang toolchain.
+  await expect(page.getByTestId('runtime-output')).toContainText('Hello from All in the Tab!', {
+    timeout: 240_000,
+  });
 
   await expect
     .poll(() =>

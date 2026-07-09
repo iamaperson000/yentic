@@ -3,6 +3,26 @@
 **Date:** 2026-07-08
 **Status:** Approved by user (browser-side, delete old runners, Java deferred)
 
+> **Implementation amendment (2026-07-09):** The Wasmer SDK path specified below
+> was implemented, then replaced during verification. Findings: `@wasmer/sdk`
+> 0.10.0 has a broken scheduler (all compiles hang; 0.8.0-beta.1 required), the
+> SDK must be self-hosted un-bundled, and — decisively — its `clang/clang`
+> package **deadlocks on any libc++ compile**: `#include <iostream>` never
+> completes (reproduced in a bare static harness; 3,353 header opens in 4s,
+> then permanent idle). C worked; C++ was unusable.
+>
+> **Shipped engine instead: wasm-clang** (github.com/binji/wasm-clang,
+> Apache-2.0) — clang 8 + lld as plain WebAssembly, ported into a self-owned
+> worker at `public/wasm-clang/worker.js`, assets (~58MB) fetched to
+> `public/wasm-clang/` by `scripts/fetch-wasm-clang.mjs` (predev/prebuild).
+> Measured: C and C++ (iostream/vector/string) compile+run in **~3-4s warm**.
+> Improvements over the spec'd design: no SharedArrayBuffer requirement,
+> timeouts are real kills (`worker.terminate()`), stdin supported by the
+> engine (`setStdinStr`) though not yet exposed in the workspace UI, and
+> compile errors surface clang diagnostics on stderr as designed. The
+> COOP/COEP headers were kept (verified harmless; useful for future runtimes).
+> Trade-off: clang 8 (C++17 era, 2019) vs the Wasmer package's clang 16.
+
 ## Problem
 
 `src/lib/runners.ts` executes C via JSCPP (a subset interpreter), C++ via JSCPP with a regex-transpile-to-JavaScript fallback, and Java via regex-transpile-to-JavaScript. The C++ fallback and Java path produce silently wrong results (e.g. JS float division where integer division is expected) — unacceptable for a beginner audience. Python (Pyodide) and web (Sandpack) are genuinely real and unaffected.

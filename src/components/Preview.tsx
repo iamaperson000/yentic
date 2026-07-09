@@ -138,7 +138,7 @@ function RuntimePreview({
   const displayStderr = isRunnable ? stderr : '';
   const runningLabel =
     phase === 'downloading'
-      ? 'Downloading the C/C++ compiler \u2014 one-time, ~30 MB\u2026'
+      ? 'Downloading the C/C++ compiler \u2014 one-time, ~60 MB\u2026'
       : phase === 'compiling'
         ? 'Compiling\u2026'
         : 'Executing\u2026';

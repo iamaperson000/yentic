@@ -13,6 +13,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "output/playwright/**",
     "public/dist/**",
+    "public/wasm-clang/**",
     "next-env.d.ts",
   ]),
 ]);
