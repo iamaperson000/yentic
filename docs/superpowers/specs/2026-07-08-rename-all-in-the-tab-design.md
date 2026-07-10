@@ -50,6 +50,30 @@ Rename the product from **Yentic** to **All in the Tab** (domain: allinthetab.co
 - Vercel: add new domains to the project; set yentic.com → 301.
 - Any hardcoded callback/env URLs (`NEXTAUTH_URL` in deployment env).
 
+## Name governance (adversarial review, 2026-07-09)
+
+The name survived two multi-agent challenges: a naming tournament (tab.new
+died on $412/yr registry pricing + Google's .new creation-flow policy;
+tab.town on bare-"Tab" collision concentration; "Just Press Run" survived as
+tagline only) and an expansion-risk trial (prosecution/defense/judge).
+Binding prescriptions from the ruling:
+
+1. **Rename tripwire (pre-committed):** if server-side execution exceeds a
+   meaningful share of runs, or a native (non-shell) client becomes the
+   primary surface, we rename. Gitpod→Ona proves this is survivable later.
+2. **Fallback domain:** register one container-neutral domain now (~$15/yr)
+   and park it, so the year-5 rename option is bought at year-0 prices.
+3. **Server-side execution ships as a labeled exception** ("for languages
+   that can't live in the tab yet"), never as a silent contradiction.
+4. **PWA install is branded "the tab, installed"** (StackBlitz precedent);
+   any future shell uses the GitHub template: "All in the Tab Desktop."
+5. **SEO: claim the exact 4-gram within 90 days of launch** (site, repo,
+   packages, launch posts use the exact phrase); monitor navigational
+   queries for tab-manager/guitar-tab bleed at 90 days.
+
+Tagline locked: "Just press Run." (justpressrun.com worth registering as
+slogan insurance). Canonical preposition: built **on** All in the Tab.
+
 ## Interaction with the copy audit (2026-07-08)
 
 The rename touches many of the same lines as the 64-finding copy audit. Do the rename **first** (mechanical, well-scoped), then the copy fixes — so audit fixes are written once, in the new voice. Exception: audit items on lines the rename rewrites anyway (hero kicker, footer tagline) are resolved as part of the rename.
